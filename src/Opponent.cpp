@@ -283,7 +283,7 @@ namespace fp
 		const char*   turn = _rules.Over() ? "over" : OpponentsTurn() ? "theirs" : "yours";
 		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : _npcPathTarget == _npcApproach ? "approach" : "old";
 		const std::string state = std::format("step {} turn {} held {} look {} path {} own pkg {} pkg {} level {} combat {} furniture {}",
-			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, Anim::InOwnPackage(a_actor) ? "yes" : "no", PackageName(a_actor),
+			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, Anim::RunningOwnPackage(a_actor) ? "running" : Anim::InOwnPackage(a_actor) ? "in alias" : "no", PackageName(a_actor),
 			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no");
 
 		_npcLogTimer += a_dt;

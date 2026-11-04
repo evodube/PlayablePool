@@ -22,6 +22,7 @@ namespace fp::Anim
 	void JoinOwnPackage(RE::Actor* a_actor);     // into the alias (ForceRefTo; takes a moment)
 	void ReleaseOwnPackage(RE::Actor* a_actor);  // out of it, no linked ref: their own AI again
 	bool InOwnPackage(RE::Actor* a_actor);       // the alias holds them
+	bool RunningOwnPackage(RE::Actor* a_actor);  // ...and fo4poolWalkToSpot is the package they're on
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.
 	bool MoveTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target);
 	// Papyrus Actor.SetRestrained: true keeps them where they are, so their sandbox package can't walk them off.
