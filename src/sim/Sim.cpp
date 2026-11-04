@@ -97,6 +97,44 @@ namespace pool
 		for (const double x : { -hl, hl }) {
 			_cushions.push_back({ { x, -hw + cj }, { x, hw - cj } });
 		}
+
+		// the jaws: from each end of an opening, into the pocket, closing in by the jaw angle
+		const double jaw = _spec.jawLength * _spec.ballRadius;
+		auto addJaws = [&](Vec2 a_p1, Vec2 a_p2, Vec2 a_inward, double a_angleDeg) {
+			if (jaw <= 1e-6) {
+				return;
+			}
+			const double close = std::tan(a_angleDeg * 3.14159265358979 / 180.0) * jaw;
+			Vec2         across = a_p2 - a_p1;
+			across = across * (1.0 / across.Length());
+			_cushions.push_back({ a_p1, a_p1 + a_inward * jaw + across * close });
+			_cushions.push_back({ a_p2, a_p2 + a_inward * jaw - across * close });
+		};
+		for (const double sx : { -1.0, 1.0 }) {
+			for (const double sy : { -1.0, 1.0 }) {
+				addJaws({ sx * (hl - cj), sy * hw }, { sx * hl, sy * (hw - cj) }, Vec2{ sx, sy } * (1.0 / kSqrt2), _spec.cornerJawAngle);
+			}
+		}
+		for (const double sy : { -1.0, 1.0 }) {
+			addJaws({ -sj, sy * hw }, { sj, sy * hw }, { 0.0, sy }, _spec.sideJawAngle);
+		}
+	}
+
+	void Sim::PocketMouth(int a_pocket, Vec2& a_middle, Vec2& a_inward) const
+	{
+		const double hl = _spec.length * 0.5;
+		const double hw = _spec.width * 0.5;
+		const double cj = _spec.cornerMouth / kSqrt2;
+		if (a_pocket < 4) {
+			const double sx = (a_pocket == 2 || a_pocket == 3) ? 1.0 : -1.0;
+			const double sy = (a_pocket == 1 || a_pocket == 3) ? 1.0 : -1.0;
+			a_middle = { sx * (hl - cj * 0.5), sy * (hw - cj * 0.5) };
+			a_inward = Vec2{ sx, sy } * (1.0 / kSqrt2);
+		} else {
+			const double sy = a_pocket == 5 ? 1.0 : -1.0;
+			a_middle = { 0.0, sy * hw };
+			a_inward = { 0.0, sy };
+		}
 	}
 
 	Vec2 Sim::PocketPos(int a_pocket) const
@@ -409,32 +447,44 @@ namespace pool
 	void Sim::CheckPockets(int a_index, std::vector<Event>& a_events)
 	{
 		auto&        b = _balls[a_index];
+		const double r = _spec.ballRadius;
 		const double hl = _spec.length * 0.5;
 		const double hw = _spec.width * 0.5;
 
-		// The cushions block everything except the pocket openings, so a ball whose centre gets past a cushion line
-		// went in. Also take one sitting deep in a corner.
-		bool in = std::abs(b.pos.x) > hl || std::abs(b.pos.y) > hw;
-		int  nearest = 0;
-		double best = 1e30;
+		// In once the centre is far enough past an opening; the jaws decide whether it gets that far.
+		int    pocket = -1;
+		double deepest = _spec.pocketDepth * r;
 		for (int p = 0; p < kPockets; ++p) {
-			const double d2 = (b.pos - PocketPos(p)).LengthSq();
-			if (d2 < best) {
-				best = d2;
-				nearest = p;
+			Vec2 middle, inward;
+			PocketMouth(p, middle, inward);
+			const Vec2   rel = b.pos - middle;
+			const double depth = rel.Dot(inward);
+			const double half = (p < 4 ? _spec.cornerMouth : _spec.sideMouth) * 0.5;
+			const Vec2   side = rel - inward * depth;
+			if (depth >= deepest && side.Length() <= half) {
+				deepest = depth;
+				pocket = p;
 			}
 		}
-		if (!in && nearest < 4 && best < _spec.ballRadius * _spec.ballRadius) {
-			in = true;
+		// Safety net: a ball well past a cushion line anywhere (it can't really get there) goes in the nearest pocket.
+		if (pocket < 0 && (std::abs(b.pos.x) > hl + r || std::abs(b.pos.y) > hw + r)) {
+			double best = 1e30;
+			for (int p = 0; p < kPockets; ++p) {
+				const double d2 = (b.pos - PocketPos(p)).LengthSq();
+				if (d2 < best) {
+					best = d2;
+					pocket = p;
+				}
+			}
 		}
-		if (!in) {
+		if (pocket < 0) {
 			return;
 		}
 
-		a_events.push_back({ Event::Type::kPocket, a_index, nearest, b.vel.Length() });
+		a_events.push_back({ Event::Type::kPocket, a_index, pocket, b.vel.Length() });
 		b.state = BallState::kPocketed;
-		b.pocket = nearest;
-		b.pos = PocketPos(nearest);
+		b.pocket = pocket;
+		b.pos = PocketPos(pocket);
 		b.vel = {};
 	}
 

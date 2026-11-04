@@ -52,6 +52,13 @@ namespace pool
 		double ballRestitution{ 0.95 };
 		double cushionRestitution{ 0.75 };
 		double stopSpeed{ 0.4 };           // below this a ball stops
+		// Pocket throats. Each opening has two jaws, angled walls running from the cushion ends into the pocket. A
+		// ball only drops once its centre is pocketDepth radii past the opening, so one that clips a jaw or comes in
+		// too fast and steep bounces off it and can rattle back out.
+		double pocketDepth{ 0.7 };         // in ball radii
+		double jawLength{ 1.3 };           // in ball radii
+		double cornerJawAngle{ 15.0 };     // degrees the corner jaws close in towards the back of the pocket
+		double sideJawAngle{ 0.0 };        // the same for the side pockets (0 = parallel)
 	};
 
 	enum class BallState : std::uint8_t
@@ -150,6 +157,8 @@ namespace pool
 		void SeparateBalls();
 		void CollideCushions(int a_index, std::vector<Event>& a_events);
 		void CheckPockets(int a_index, std::vector<Event>& a_events);
+		// a pocket's opening: its middle and the direction into the pocket
+		void PocketMouth(int a_pocket, Vec2& a_middle, Vec2& a_inward) const;
 		bool SpotFree(Vec2 a_pos, int a_ignore) const;
 
 		TableSpec                _spec;

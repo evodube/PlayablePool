@@ -95,11 +95,15 @@ namespace fp
 			.width = 112.0,
 			.ballRadius = 3.51,
 			.cornerMouth = 12.4,
-			.sideMouth = 20.8,
+			.sideMouth = 17.0,
 			.rollDecel = 17.5,
 			.ballRestitution = 0.75,
 			.cushionRestitution = 0.75,
-			.stopSpeed = 0.7
+			.stopSpeed = 0.7,
+			.pocketDepth = 0.7,
+			.jawLength = 1.3,
+			.cornerJawAngle = 15.0,
+			.sideJawAngle = 0.0
 		};
 	};
 }

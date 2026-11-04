@@ -124,6 +124,10 @@ namespace fp
 		spec.width = std::max(10.0f, ReadFloat(L"Table", L"fWidth", static_cast<float>(spec.width)));
 		spec.cornerMouth = ReadFloat(L"Table", L"fCornerMouth", static_cast<float>(spec.cornerMouth));
 		spec.sideMouth = ReadFloat(L"Table", L"fSideMouth", static_cast<float>(spec.sideMouth));
+		spec.pocketDepth = std::max(0.0f, ReadFloat(L"Table", L"fPocketDepth", static_cast<float>(spec.pocketDepth)));
+		spec.jawLength = std::max(0.0f, ReadFloat(L"Table", L"fJawLength", static_cast<float>(spec.jawLength)));
+		spec.cornerJawAngle = std::clamp(ReadFloat(L"Table", L"fCornerJawAngle", static_cast<float>(spec.cornerJawAngle)), -30.0f, 40.0f);
+		spec.sideJawAngle = std::clamp(ReadFloat(L"Table", L"fSideJawAngle", static_cast<float>(spec.sideJawAngle)), -30.0f, 40.0f);
 
 		spec.rollDecel = ReadFloat(L"Physics", L"fRollDecel", static_cast<float>(spec.rollDecel));
 		spec.ballRestitution = ReadFloat(L"Physics", L"fBallRestitution", static_cast<float>(spec.ballRestitution));

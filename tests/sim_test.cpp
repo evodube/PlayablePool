@@ -367,6 +367,85 @@ namespace
 	}
 }
 
+namespace
+{
+	// how many of a spread of shots at a pocket go in: from a_from, aimed at a_target plus offsets across the mouth
+	double PocketRate(const TableSpec& a_spec, int a_pocket, Vec2 a_from, Vec2 a_target, double a_speed)
+	{
+		int in = 0;
+		int shots = 0;
+		for (double off = -1.0; off <= 1.0001; off += 0.05) {
+			Sim sim(a_spec);
+			Vec2 mid, inward;
+			// aim across the opening: perpendicular to the line from the ball to the pocket
+			const Vec2 to = a_target - a_from;
+			const Vec2 perp{ -to.y / to.Length(), to.x / to.Length() };
+			sim.Place(1, a_from);
+			const Vec2 aim = a_target + perp * (off * 12.0) - a_from;  // the same spread for every table
+			sim.BallAt(1).vel = aim * (a_speed / aim.Length());
+			RunUntilRest(sim, 10.0);
+			in += sim.Balls()[1].state == BallState::kPocketed && sim.Balls()[1].pocket == a_pocket;
+			++shots;
+			(void)mid;
+			(void)inward;
+		}
+		return static_cast<double>(in) / shots;
+	}
+
+	void HarderPockets()
+	{
+		std::puts("pockets: jaws and depth make them pickier than before");
+		TableSpec now{ .length = 224.0, .width = 112.0, .ballRadius = 3.51, .cornerMouth = 12.4, .sideMouth = 17.0, .rollDecel = 17.5,
+			.ballRestitution = 0.75, .stopSpeed = 0.7 };
+		TableSpec before = now;
+		before.sideMouth = 20.8;
+		before.pocketDepth = 0.0;
+		before.jawLength = 0.0;
+
+		const Sim  ref(now);
+		const Vec2 corner = ref.PocketPos(3);
+		const Vec2 side = ref.PocketPos(5);
+
+		// a straight-on corner shot from up the table, and one cut in at an angle along the rail
+		const double cornerNow = PocketRate(now, 3, { 40.0, 10.0 }, corner, 250.0);
+		const double cornerBefore = PocketRate(before, 3, { 40.0, 10.0 }, corner, 250.0);
+		const double sideNow = PocketRate(now, 5, { -30.0, 0.0 }, side, 250.0);
+		const double sideBefore = PocketRate(before, 5, { -30.0, 0.0 }, side, 250.0);
+		const double steepNow = PocketRate(now, 5, { -60.0, 40.0 }, side, 400.0);
+		const double steepBefore = PocketRate(before, 5, { -60.0, 40.0 }, side, 400.0);
+		std::printf("    share of a spread of shots that went in, now vs before: corner %.0f%% vs %.0f%%, side %.0f%% vs %.0f%%, "
+					"steep fast side %.0f%% vs %.0f%%\n",
+			cornerNow * 100.0, cornerBefore * 100.0, sideNow * 100.0, sideBefore * 100.0, steepNow * 100.0, steepBefore * 100.0);
+		Check(cornerNow < cornerBefore, "corner pockets take fewer of the shots");
+		Check(sideNow < sideBefore, "side pockets take fewer of the shots");
+		Check(steepNow < steepBefore, "steep fast shots at a side pocket get rejected more");
+		Check(cornerNow > 0.3 && sideNow > 0.3, "a decent shot still goes in");
+
+		// dead centre still drops, soft or firm
+		for (double speed : { 60.0, 250.0, 600.0 }) {
+			Sim sim(now);
+			sim.Place(1, { 40.0, 10.0 });
+			sim.BallAt(1).vel = (corner - Vec2{ 40.0, 10.0 }) * (speed / (corner - Vec2{ 40.0, 10.0 }).Length());
+			RunUntilRest(sim, 10.0);
+			Check(sim.Balls()[1].state == BallState::kPocketed, Fmt("centre of the corner at %.0f goes in", speed));
+		}
+		// a ball that only clips the jaw point stays out
+		{
+			Sim  sim(now);
+			Vec2 mid, inward;
+			const Vec2 from{ 40.0, 10.0 };
+			const Vec2 jawPoint{ now.length * 0.5 - now.cornerMouth / std::sqrt(2.0), now.width * 0.5 };
+			sim.Place(1, from);
+			const Vec2 aim = jawPoint + Vec2{ -2.0, 0.0 } - from;
+			sim.BallAt(1).vel = aim * (300.0 / aim.Length());
+			RunUntilRest(sim, 10.0);
+			Check(sim.Balls()[1].state == BallState::kOnTable, "a ball clipping the jaw rattles out");
+			(void)mid;
+			(void)inward;
+		}
+	}
+}
+
 int main()
 {
 	HeadOnCollision();
@@ -393,6 +472,7 @@ int main()
 	Deterministic();
 	Predictions();
 	Respot();
+	HarderPockets();
 
 	std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
