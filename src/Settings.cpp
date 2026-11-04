@@ -107,6 +107,12 @@ namespace fp
 		stickMaxPull = ReadFloat(L"Stick", L"fMaxPull", stickMaxPull);
 		stickGap = ReadFloat(L"Stick", L"fGap", stickGap);
 
+		sound = ReadBool(L"Sound", L"bEnabled", sound);
+		soundVolume = std::clamp(ReadFloat(L"Sound", L"fVolume", soundVolume), 0.0f, 1.0f);
+		soundFullDistance = std::max(1.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));
+		soundMaxDistance = std::max(soundFullDistance + 1.0f, ReadFloat(L"Sound", L"fMaxDistance", soundMaxDistance));
+		soundReturn = ReadBool(L"Sound", L"bBallReturn", soundReturn);
+
 		useConsolePick = ReadBool(L"Table", L"bUseConsolePick", useConsolePick);
 		aimDistance = ReadFloat(L"Table", L"fAimDistance", aimDistance);
 		lengthAxis = static_cast<int>(ReadInt(L"Table", L"iLengthAxis", lengthAxis)) == 1 ? 1 : 0;

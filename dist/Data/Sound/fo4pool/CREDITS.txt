@@ -1,0 +1,3 @@
+Sounds in Data\Sound\fo4pool are from "Pool and Billiards" by Suraj Kispotta (papapleygames),
+https://papapleygames.itch.io/pool-and-billiards, released under CC0 1.0 (public domain).
+They were converted to mono and trimmed for the mod.

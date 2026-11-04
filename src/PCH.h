@@ -14,6 +14,10 @@
 #include <limits>
 #include <chrono>
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <cstdint>
 #include <format>
 #include <functional>

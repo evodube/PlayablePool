@@ -1,5 +1,7 @@
 #include "Game.h"
 
+#include "Audio.h"
+
 #include "Settings.h"
 #include "Util.h"
 
@@ -582,7 +584,9 @@ namespace fp
 		dt = std::clamp(dt, 0.0f, kMaxFrame);
 
 		if (dt > 0.0f) {
-			for (const auto& e : _sim->Step(dt)) {
+			const auto events = _sim->Step(dt);
+			PlaySounds(frame, events);
+			for (const auto& e : events) {
 				if (e.type == pool::Event::Type::kPocket) {
 					if (e.a == 0) {
 						_scratch = true;
@@ -625,6 +629,57 @@ namespace fp
 		_rolling = !_sim->AtRest();
 		if (_aiming) {
 			TickAim(frame, dt);
+		}
+	}
+
+	void Game::PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events)
+	{
+		// The loudest few per frame: a break makes dozens of contacts at once, and they'd only blur together.
+		struct Sound
+		{
+			Audio::Bank  bank;
+			RE::NiPoint3 pos;
+			float        gain;
+		};
+		std::vector<Sound> sounds;
+		const float        r = static_cast<float>(Settings::Get().spec.ballRadius);
+		auto loudness = [](double a_speed, double a_quiet, double a_loud) {
+			if (a_speed <= a_quiet) {
+				return 0.0f;
+			}
+			return static_cast<float>(std::pow(std::min(1.0, (a_speed - a_quiet) / (a_loud - a_quiet)), 0.7));
+		};
+		for (const auto& e : a_events) {
+			const auto& balls = _sim->Balls();
+			switch (e.type) {
+			case pool::Event::Type::kBallBall:
+				{
+					const pool::Vec2 mid = (balls[e.a].pos + balls[e.b].pos) * 0.5;
+					sounds.push_back({ Audio::Bank::kHit, ToWorld(a_frame, mid, r), loudness(e.speed, 2.0, 450.0) });
+				}
+				break;
+			case pool::Event::Type::kCushion:
+				sounds.push_back({ Audio::Bank::kCushion, ToWorld(a_frame, balls[e.a].pos, r), 0.8f * loudness(std::abs(e.speed), 4.0, 450.0) });
+				break;
+			case pool::Event::Type::kPocket:
+				{
+					const auto pos = ToWorld(a_frame, _sim->PocketPos(e.b), 0.0f);
+					sounds.push_back({ Audio::Bank::kPocket, pos, 0.5f + 0.5f * loudness(e.speed, 0.0, 250.0) });
+					if (Settings::Get().soundReturn) {
+						sounds.push_back({ Audio::Bank::kReturn, pos, 0.45f });
+					}
+				}
+				break;
+			}
+		}
+		std::ranges::sort(sounds, [](const Sound& a, const Sound& b) { return a.gain > b.gain; });
+		int played = 0;
+		for (const auto& snd : sounds) {
+			if (played >= 8 || snd.gain < 0.02f) {
+				break;
+			}
+			Audio::Play(snd.bank, snd.pos, snd.gain);
+			++played;
 		}
 	}
 }

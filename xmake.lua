@@ -55,7 +55,7 @@ target("fo4pool", function()
         "/wd5054"  -- enum bitwise ops
     )
 
-    add_syslinks("d3d11", "dxgi", "user32", "kernel32")
+    add_syslinks("d3d11", "dxgi", "user32", "kernel32", "ole32", "xaudio2")
 
     set_pcxxheader("src/PCH.h")
     set_runtimes("MD")

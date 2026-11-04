@@ -73,6 +73,13 @@ namespace fp
 		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
 		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest
 
+		// [Sound] Data\Sound\fo4pool\*.wav, played by the plugin itself
+		bool  sound{ true };
+		float soundVolume{ 0.8f };        // 0..1, on top of how hard each hit was
+		float soundFullDistance{ 150.0f }; // full volume within this distance of the camera
+		float soundMaxDistance{ 3000.0f }; // silent beyond this
+		bool  soundReturn{ true };         // the rolling-away sound after a ball drops
+
 		// [Table] the felt, in the table mesh's own space (before the table's scale). The defaults are measured
 		// from the vanilla SetDressing\PoolTable\PoolTable01.nif.
 		bool  useConsolePick{ true };  // the object clicked in the console wins over the crosshair

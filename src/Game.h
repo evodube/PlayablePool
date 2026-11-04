@@ -35,9 +35,18 @@ namespace fp
 		};
 		HudState Hud() const;
 
-		// Right after the game's free camera code turned the view (mouse handler or update, CameraHook.cpp): while
-		// charging the turn becomes power and the angles go back to a_before, otherwise the pitch is kept in range.
-		void OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before);
+		enum class LookSource
+		{
+			kMouse,   // the free camera's mouse handler: input in mouse counts
+			kUpdate,  // its update, applying the camera's queued look input
+		};
+		// Before the game's free camera code sees look input (CameraHook.cpp). While charging the input becomes power
+		// and true is returned: the hook then drops it, so the view can't turn.
+		bool OnFreeCameraMouse(std::int32_t a_x, std::int32_t a_y);
+		bool OnFreeCameraInput(float a_x, float a_y);
+		// Right after the game's free camera code turned the view: keeps the pitch in range and learns how far the
+		// view turns per unit of input. While charging it also puts the angles back to a_before, in case anything slipped through.
+		void OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before, float a_inX, float a_inY, LookSource a_source);
 		// Right after the game's free camera update: moves the camera, the cue stick and the guide for this frame.
 		void OnFreeCameraUpdate(RE::FreeCameraState* a_free);
 		// The camera position while aiming, from the camera's angles right now; false = leave the game's own.
@@ -64,6 +73,7 @@ namespace fp
 		void PollKeys();
 		void PollMouse();
 		void Tick();
+		void PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events);
 
 		void Rack();
 		void Clear();
@@ -85,6 +95,7 @@ namespace fp
 		void  RemoveAimObjects();
 		void  BlockControls(bool a_block);
 		float PowerNow() const;
+		void  AddPull(double a_degrees);  // _camMutex held
 		static void LogShape(RE::TESObjectREFR* a_ref, const char* a_what);
 
 		RE::TESObjectREFR*  PickTable() const;
@@ -132,6 +143,24 @@ namespace fp
 		RE::ObjectRefHandle              _stick;
 		bool                             _stickLogged{ false };
 		bool                             _stickWarned{ false };
+		// how many degrees the view tilts per unit of look input, learned while aiming (least squares: sum xy / sum xx)
+		struct Fit
+		{
+			double xy{ 0.0 };
+			double xx{ 0.0 };
+			void   Add(double a_x, double a_y)
+			{
+				xy = xy * 0.995 + a_x * a_y;  // slowly forgets, in case the sensitivity is changed
+				xx = xx * 0.995 + a_x * a_x;
+			}
+			bool   Ready() const { return xx > 1e-6; }
+			double Slope() const { return xy / xx; }
+		};
+		Fit                              _mouseFitY;    // degrees per mouse count (vertical)
+		Fit                              _inputFitX;    // degrees per unit of queued look input
+		Fit                              _inputFitY;
+		int                              _chargeMouseEvents{ 0 };
+		int                              _chargeInputs{ 0 };
 		std::size_t                      _dotsWanted{ 0 };  // guide dots the camera update needed; the tick spawns them
 		std::chrono::steady_clock::time_point _lastCamUpdate{};
 		bool                             _haveCamUpdate{ false };

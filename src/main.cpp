@@ -1,3 +1,4 @@
+#include "Audio.h"
 #include "CameraHook.h"
 #include "Game.h"
 #include "Hook.h"
@@ -22,6 +23,7 @@ namespace
 			fp::Settings::Get().Load();
 			fp::Hook::Install();
 			fp::CameraHook::Install();
+			fp::Audio::Init();
 			break;
 		case F4SE::MessagingInterface::kPreLoadGame:
 			fp::Game::Get().Forget();

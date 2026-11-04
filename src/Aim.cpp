@@ -5,6 +5,8 @@
 
 #include "Game.h"
 
+#include "Audio.h"
+
 #include "Settings.h"
 #include "Util.h"
 
@@ -69,6 +71,8 @@ namespace fp
 
 		if (lmb && !_lmbWasDown && !_rolling) {
 			_power = 0.0f;
+			_chargeMouseEvents = 0;
+			_chargeInputs = 0;
 			_charging = true;  // the main thread freezes the camera and turns mouse pulls into power
 		}
 		if (!lmb && _lmbWasDown && _charging) {
@@ -145,6 +149,7 @@ namespace fp
 		_aiming = false;
 		_charging = false;
 		_overhead = false;
+		Audio::SetListenerYaw(0.0f, false);
 		BlockControls(false);
 		if (InFreeCamera()) {
 			if (auto* camera = RE::PlayerCamera::GetSingleton()) {
@@ -182,8 +187,12 @@ namespace fp
 		const float speed = s.minSpeed + (s.maxSpeed - s.minSpeed) * std::pow(a_power, 1.5f);
 		_strikePos = _sim->Balls()[0].pos;
 		_strikeShow = kStrikeShowSeconds;
+		if (Frame frame; GetFrame(frame)) {
+			Audio::Play(Audio::Bank::kCue, ToWorld(frame, _strikePos, static_cast<float>(s.spec.ballRadius)), 0.25f + 0.75f * a_power);
+		}
 		_sim->Strike(_lastDir, speed);
-		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f})", a_power * 100.0f, speed, _lastDir.x, _lastDir.y);
+		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f}); charge input: {} mouse events, {} camera inputs; learned {:.4f} deg/count",
+			a_power * 100.0f, speed, _lastDir.x, _lastDir.y, _chargeMouseEvents, _chargeInputs, _mouseFitY.Ready() ? _mouseFitY.Slope() : 0.0);
 	}
 
 	void Game::TickAim(const Frame& a_frame, [[maybe_unused]] float a_dt)
@@ -192,6 +201,7 @@ namespace fp
 		if (!free || !InFreeCamera()) {
 			// something else took the camera back (a menu, a scene): leave aim mode quietly
 			log::info("free camera ended outside fo4pool; leaving aim mode");
+			Audio::SetListenerYaw(0.0f, false);
 			_aiming = false;
 			_charging = false;
 			_overhead = false;
@@ -265,7 +275,61 @@ namespace fp
 
 	// ---------------------------------------------------------------- the game's camera update
 
-	void Game::OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before)
+	namespace
+	{
+		// Before anything has been learned (charging straight away without having aimed): the vanilla mouse
+		// sensitivity turns the view roughly this much per count.
+		constexpr double kDefaultDegreesPerCount = 0.05;
+		constexpr double kDefaultDegreesPerInput = 57.29578;  // look input in radians
+	}
+
+	void Game::AddPull(double a_degrees)
+	{
+		const auto& s = Settings::Get();
+		const float degrees = static_cast<float>(a_degrees) * (s.invertPull ? -1.0f : 1.0f);
+		_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
+	}
+
+	bool Game::OnFreeCameraMouse(std::int32_t a_x, std::int32_t a_y)
+	{
+		if (!_aiming || !_charging) {
+			return false;
+		}
+		std::scoped_lock lock(_camMutex);
+		if (!_camMapped) {
+			return false;
+		}
+		++_chargeMouseEvents;
+		// mouse moved back = the view would tilt down = more power
+		const double perCount = _mouseFitY.Ready() ? _mouseFitY.Slope() : kDefaultDegreesPerCount;
+		AddPull(static_cast<double>(a_y) * perCount);
+		(void)a_x;
+		return true;
+	}
+
+	bool Game::OnFreeCameraInput(float a_x, float a_y)
+	{
+		if (!_aiming || !_charging) {
+			return false;
+		}
+		std::scoped_lock lock(_camMutex);
+		if (!_camMapped) {
+			return false;
+		}
+		if (a_x != 0.0f || a_y != 0.0f) {
+			++_chargeInputs;
+			double degrees;
+			if (_inputFitX.Ready() || _inputFitY.Ready()) {
+				degrees = (_inputFitX.Ready() ? a_x * _inputFitX.Slope() : 0.0) + (_inputFitY.Ready() ? a_y * _inputFitY.Slope() : 0.0);
+			} else {
+				degrees = (_yawIndex == 0 ? a_y : a_x) * kDefaultDegreesPerInput * _pitchSign;
+			}
+			AddPull(degrees);
+		}
+		return true;  // always swallow it while charging, so the view can't drift
+	}
+
+	void Game::OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before, float a_inX, float a_inY, LookSource a_source)
 	{
 		if (!_aiming || !a_free) {
 			return;
@@ -278,17 +342,26 @@ namespace fp
 		const int   pitchIndex = 1 - _yawIndex;
 
 		if (_charging) {
-			// The view stays exactly where it was. What the game just did to the angles is read as the pull: back
-			// (the view would tilt down) adds power, forward takes it away. Then the angles go back before anything
-			// reads them, so nothing on screen moves.
-			const float before = pitchIndex == 0 ? a_before.x : a_before.y;
-			const float after = Component(a_free, pitchIndex);
-			const float degrees = _pitchSign * (after - before) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
-			if (degrees != 0.0f) {
-				_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
-			}
-			a_free->rotation = a_before;
+			a_free->rotation = a_before;  // whatever got through, the view stays where it was
 			return;
+		}
+
+		// how far the view just tilted (positive = down), for converting pulls into power later
+		const float  before = pitchIndex == 0 ? a_before.x : a_before.y;
+		const double tilted = _pitchSign * (Component(a_free, pitchIndex) - before) / kDegToRad;
+		if (tilted != 0.0 && std::abs(tilted) < 30.0) {
+			if (a_source == LookSource::kMouse) {
+				if (a_inY != 0.0f) {
+					_mouseFitY.Add(a_inY, tilted);
+				}
+			} else {
+				if (a_inX != 0.0f) {
+					_inputFitX.Add(a_inX, tilted);
+				}
+				if (a_inY != 0.0f) {
+					_inputFitY.Add(a_inY, tilted);
+				}
+			}
 		}
 
 		const float pitch = _pitchSign * Component(a_free, pitchIndex);
@@ -362,6 +435,7 @@ namespace fp
 
 			yaw = Component(a_free, _yawIndex);
 			_camYaw = yaw;
+			Audio::SetListenerYaw(yaw, true);
 			RE::NiPoint3 pos;
 			if (CamTranslation(a_free, pos)) {
 				a_free->translation = pos;  // the game's own movement never gets a say
