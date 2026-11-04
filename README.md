@@ -3,8 +3,8 @@
 Playable pool tables for Fallout 4, as an F4SE plugin. The balls are real objects on the table, moved by the
 plugin's own physics (not Havok).
 
-**Status: test build 0.1.** Proves the core loop only: balls appear on a table and roll believably. No camera,
-HUD, rules or opponents yet.
+**Status: build 0.2.** Racking, physics, and aiming with a shot camera, power, guide line and cue stick. No rules
+or opponents yet.
 
 ## Requirements
 
@@ -20,9 +20,16 @@ HUD, rules or opponents yet.
    If they don't sit on the felt, edit `[Table]` in `fo4pool.ini` (length, width, height, offsets, axis), then
    press Numpad 4 twice to see the change. The INI is re-read every time.
 4. **Numpad 7**: rack.
-5. **Numpad 8**: hit the cue ball the way you're facing. Shift = soft, Ctrl = hard. Wait for the balls to stop
-   before the next shot. A scratched cue ball goes back on the head spot.
-6. **Numpad 9**: take the balls away.
+5. **Numpad 8**: aim. The camera moves behind the cue ball; turn it with the mouse and you aim where it faces.
+   Dots show the cue ball's path, where it meets the first ball, and where both go next.
+   - Hold the **left mouse button** to charge (the cue draws back, a power bar fills), release to shoot.
+   - **Right mouse button**: overhead view and back.
+   - **Numpad 8** again stops aiming and gives you the normal camera back.
+   A scratched cue ball goes back on the head spot.
+6. **Numpad 9**: take the balls away (also stops aiming).
+
+The power bar needs [F4SE Menu Framework](https://www.nexusmods.com/fallout4/mods/105090); everything else works
+without it.
 
 Balls are removed automatically before the game saves.
 

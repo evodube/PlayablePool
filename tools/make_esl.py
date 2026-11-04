@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Writes fo4pool.esl: a light plugin with the 16 ball statics.
 
-    python tools/make_esl.py [out.esl]
+    python tools/make_esl.py [out.esl] [--stick]
 
 Form IDs (what fo4pool.ini expects by default):
     xx000800        cue ball   Meshes\\fo4pool\\Ball_Cue.nif
     xx000801..80F   balls 1-15 Meshes\\fo4pool\\Ball_01.nif .. Ball_15.nif
+    xx000810        cue stick  Meshes\\fo4pool\\CueStick.nif   (only with --stick)
 
 The meshes are collision-free copies of the vanilla pool balls (tools/strip_collision.py).
 """
@@ -39,24 +40,26 @@ def group(label: bytes, contents: bytes) -> bytes:
     return b"GRUP" + struct.pack("<I", 24 + len(contents)) + label + struct.pack("<iHHI", 0, 0, 0, 0) + contents
 
 
-def stat(form_id: int, editor_id: str, mesh: str) -> bytes:
+def stat(form_id: int, editor_id: str, mesh: str, bound: int = 4) -> bytes:
     return record(
         b"STAT",
         0,
         form_id,
         subrecord(b"EDID", zstring(editor_id))
-        + subrecord(b"OBND", struct.pack("<6h", -4, -4, -4, 4, 4, 4))
+        + subrecord(b"OBND", struct.pack("<6h", -bound, -bound, -bound, bound, bound, bound))
         + subrecord(b"MODL", zstring(mesh))
         # max angle, material (none), leaf amplitude, leaf frequency
         + subrecord(b"DNAM", struct.pack("<fIff", 90.0, 0, 1.0, 1.0)),
     )
 
 
-def build() -> bytes:
+def build(with_stick: bool) -> bytes:
     own = 0x01000000  # our records come after the one master
     stats = [stat(own | FIRST_ID, "fo4poolBallCue", "fo4pool\\Ball_Cue.nif")]
     for n in range(1, 16):
         stats.append(stat(own | (FIRST_ID + n), f"fo4poolBall{n:02}", f"fo4pool\\Ball_{n:02}.nif"))
+    if with_stick:
+        stats.append(stat(own | (FIRST_ID + 16), "fo4poolCueStick", "fo4pool\\CueStick.nif", bound=80))
 
     header = record(
         b"TES4",
@@ -72,11 +75,13 @@ def build() -> bytes:
 
 
 def main() -> int:
-    out = sys.argv[1] if len(sys.argv) > 1 else "fo4pool.esl"
-    data = build()
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    with_stick = "--stick" in sys.argv[1:]
+    out = args[0] if args else "fo4pool.esl"
+    data = build(with_stick)
     with open(out, "wb") as f:
         f.write(data)
-    print(f"wrote {out} ({len(data)} bytes, 16 statics)")
+    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics)")
     return 0
 
 
