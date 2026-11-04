@@ -229,12 +229,86 @@ namespace fp::Anim
 			std::uint32_t _formID;
 		};
 
+		// a Papyrus method call by script object handle
+		template <class... Args>
+		bool CallHandle(std::size_t a_handle, const char* a_script, const char* a_function, const std::string& a_what,
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback, Args... a_args)
+		{
+			auto* game = RE::GameVM::GetSingleton();
+			auto  vm = game ? game->GetVM() : nullptr;
+			if (!vm || !a_handle) {
+				return false;
+			}
+			const RE::BSFixedString script{ a_script };
+			const RE::BSFixedString function{ a_function };
+			const bool              ok = vm->DispatchMethodCall(
+                a_handle, script, function,
+                [&](RE::BSScrapArray<RE::BSScript::Variable>& a_out) {
+                    a_out = RE::BSScript::detail::PackVariables(a_args...);
+                    return true;
+                },
+                a_callback);
+			log::info("{} {}", a_what, ok ? "sent" : "failed");
+			return ok;
+		}
+
+		std::atomic<std::size_t> g_aliasHandle{ 0 };  // the Opponent alias's own script object, from Quest.GetAlias(0)
+
 		std::size_t ActorHandle(RE::Actor* a_actor)
 		{
 			auto* game = RE::GameVM::GetSingleton();
 			auto  vm = game ? game->GetVM() : nullptr;
 			return vm && a_actor ? vm->GetObjectHandlePolicy().GetHandleForObject(RE::BSScript::kActor, a_actor) : 0;
 		}
+
+		std::string WhatID(std::uint32_t a_formID, const char* a_function)
+		{
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(a_formID);
+			return actor ? std::format("{} ({:08X}).{}", actor->GetDisplayFullName(), a_formID, a_function) : std::format("{:08X}.{}", a_formID, a_function);
+		}
+
+		// ForceRefTo, then GetReference to see that it took, on the alias's own script object
+		void ForceIntoAlias(std::size_t a_alias, std::uint32_t a_formID)
+		{
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(a_formID);
+			if (!actor || !a_alias) {
+				return;
+			}
+			const std::string force = WhatID(a_formID, "into the Opponent alias (ForceRefTo)");
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(force) };
+			CallHandle(a_alias, "ReferenceAlias", "ForceRefTo", force, logged, static_cast<RE::TESObjectREFR*>(actor));
+			const std::string what = WhatID(a_formID, "in the Opponent alias? (GetReference)");
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> check{ new AliasCheck(what, ActorHandle(actor), a_formID) };
+			CallHandle(a_alias, "ReferenceAlias", "GetReference", what, check);
+		}
+
+		// Quest.GetAlias(0): the alias's script object (its handle is kept), then into it
+		class AliasFound final : public RE::BSScript::IStackCallbackFunctor
+		{
+		public:
+			explicit AliasFound(std::uint32_t a_formID) :
+				_formID(a_formID)
+			{}
+
+			void CallQueued() override {}
+			void CallCanceled() override { log::info("papyrus quest fo4poolOpponent.GetAlias(0): canceled"); }
+			void StartMultiDispatch() override {}
+			void EndMultiDispatch() override {}
+			void operator()(RE::BSScript::Variable a_result) override
+			{
+				const auto object = a_result.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(a_result) : nullptr;
+				if (!object) {
+					log::warn("papyrus quest fo4poolOpponent.GetAlias(0) -> none (the quest isn't running?)");
+					return;
+				}
+				g_aliasHandle = object->GetHandle();
+				log::info("papyrus quest fo4poolOpponent.GetAlias(0) -> handle {:X}", g_aliasHandle.load());
+				ForceIntoAlias(g_aliasHandle, _formID);
+			}
+
+		private:
+			std::uint32_t _formID;
+		};
 
 		std::string What(RE::Actor* a_actor, const char* a_function)
 		{
@@ -290,11 +364,14 @@ namespace fp::Anim
 			CallOn(quest, "Quest", "Start", std::string("quest fo4poolOpponent.Start"));
 		}
 		if (g_joined != a_actor->GetFormID()) {
-			// into the alias, then ask the alias who it holds (the answer decides whether walks use the package)
-			CallOn(alias, "ReferenceAlias", "ForceRefTo", What(a_actor, "into the Opponent alias (ForceRefTo)"), static_cast<RE::TESObjectREFR*>(a_actor));
-			const std::string what = What(a_actor, "in the Opponent alias? (GetReference)");
-			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> check{ new AliasCheck(what, ActorHandle(a_actor), a_actor->GetFormID()) };
-			CallOnWith(alias, "ReferenceAlias", "GetReference", what, check);
+			// into the alias, then ask the alias who it holds (the answer decides whether walks use the package). The
+			// alias's script object comes from the quest (Quest.GetAlias), not made up here
+			if (const auto handle = g_aliasHandle.load()) {
+				ForceIntoAlias(handle, a_actor->GetFormID());
+			} else {
+				const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> found{ new AliasFound(a_actor->GetFormID()) };
+				CallOnWith(quest, "Quest", "GetAlias", std::string("quest fo4poolOpponent.GetAlias(0)"), found, 0);
+			}
 		}
 	}
 
@@ -312,12 +389,14 @@ namespace fp::Anim
 
 	void ReleaseOwnPackage(RE::Actor* a_actor)
 	{
-		auto* alias = a_actor ? OwnAlias() : nullptr;
-		if (!alias || g_joined != a_actor->GetFormID()) {
+		const auto handle = g_aliasHandle.load();
+		if (!a_actor || !handle || g_joined != a_actor->GetFormID()) {
 			return;
 		}
 		g_joined = 0;
-		CallOn(alias, "ReferenceAlias", "Clear", What(a_actor, "out of the Opponent alias (Clear)"));
+		const std::string what = What(a_actor, "out of the Opponent alias (Clear)");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallHandle(handle, "ReferenceAlias", "Clear", what, logged);
 		if (auto* keyword = LinkKeyword()) {
 			a_actor->SetLinkedRef(nullptr, keyword);
 		}
