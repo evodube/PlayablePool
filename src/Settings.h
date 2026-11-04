@@ -96,6 +96,7 @@ namespace fp
 		std::string   animPlugin{ "fo4pool.esl" };
 		std::uint32_t animAimFormID{ 0x811 };     // PoolAim: lined up, practice strokes, loops
 		std::uint32_t animStrikeFormID{ 0x812 };  // PoolStrike: the shot
+		std::uint32_t animWaitFormID{ 0x813 };    // PoolWait: standing at the table with the cue, between shots
 
 		// [HUD] the terminal HUD (needs F4SE Menu Framework)
 		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)

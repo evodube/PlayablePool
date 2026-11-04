@@ -125,6 +125,7 @@ namespace fp
 		animPlugin = Narrow(ReadString(L"Anim", L"sPlugin", std::wstring(animPlugin.begin(), animPlugin.end())));
 		animAimFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAimFormID", animAimFormID));
 		animStrikeFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrikeFormID", animStrikeFormID));
+		animWaitFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iWaitFormID", animWaitFormID));
 
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);

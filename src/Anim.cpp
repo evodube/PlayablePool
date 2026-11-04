@@ -105,6 +105,11 @@ namespace fp::Anim
 		return Play(a_actor, Settings::Get().animStrikeFormID, "PoolStrike");
 	}
 
+	bool PlayWait(RE::Actor* a_actor)
+	{
+		return Play(a_actor, Settings::Get().animWaitFormID, "PoolWait");
+	}
+
 	void Stop(RE::Actor* a_actor)
 	{
 		if (a_actor && a_actor->currentProcess) {

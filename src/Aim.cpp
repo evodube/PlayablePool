@@ -624,15 +624,7 @@ namespace fp
 		if (!_stickLogged && ref->Get3D()) {
 			_stickLogged = true;
 			LogShape(ref.get(), "cue stick");
-			// weapon meshes carry a blood overlay shape for when they've hit someone; a pool cue doesn't need it
-			RE::BSVisit::TraverseScenegraphGeometries(ref->Get3D(), [](RE::BSGeometry* a_geom) {
-				std::string name = a_geom->name.c_str();
-				std::ranges::transform(name, name.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
-				if (name.find("blood") != std::string::npos) {
-					a_geom->SetAppCulled(true);
-				}
-				return RE::BSVisitControl::kContinue;
-			});
+			PrepareStick(ref.get());
 		}
 		if (!a_show) {
 			PlaceNode(ref.get(), {}, {}, 1.0f, true);
@@ -645,13 +637,26 @@ namespace fp
 		const RE::NiPoint3 aimWorld = a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(a_dir.x), static_cast<float>(a_dir.y), 0.0f };
 		const float        e = s.stickElevation * kDegToRad;
 		const RE::NiPoint3 toTip = Normalized(RE::NiPoint3{ aimWorld.x * std::cos(e), aimWorld.y * std::cos(e), -std::sin(e) });
-		PlaceStickAlong(tip, toTip, a_frame.scale);
+		PlaceStickAlong(ref.get(), tip, toTip, a_frame.scale);
 	}
 
-	void Game::PlaceStickAlong(const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale)
+	void Game::PrepareStick(RE::TESObjectREFR* a_ref)
+	{
+		// weapon meshes carry a blood overlay shape for when they've hit someone; a pool cue doesn't need it
+		RE::BSVisit::TraverseScenegraphGeometries(a_ref->Get3D(), [](RE::BSGeometry* a_geom) {
+			std::string name = a_geom->name.c_str();
+			std::ranges::transform(name, name.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+			if (name.find("blood") != std::string::npos) {
+				a_geom->SetAppCulled(true);
+			}
+			return RE::BSVisitControl::kContinue;
+		});
+	}
+
+	void Game::PlaceStickAlong(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale)
 	{
 		const auto& s = Settings::Get();
-		auto        ref = _stick.get();
+		auto*       ref = a_ref;
 		if (!ref) {
 			return;
 		}
@@ -680,7 +685,7 @@ namespace fp
 			break;
 		}
 		const RE::NiPoint3 origin = tip - axis * (s.stickTip * a_scale);
-		PlaceNode(ref.get(), origin, util::FromAxes(x, y, z), a_scale, false);
+		PlaceNode(ref, origin, util::FromAxes(x, y, z), a_scale, false);
 	}
 
 	void Game::HideAimObjects()

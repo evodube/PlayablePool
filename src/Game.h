@@ -39,6 +39,7 @@ namespace fp
 			// the 8-ball game, while a table is racked
 			bool                    game{ false };
 			bool                    solo{ false };     // Solo Play
+			std::string             opponent;          // the NPC playing you (empty: "Player 2")
 			int                     shooter{ 0 };
 			std::array<int, 2>      group{};        // 0 open table, 1 solids, 2 stripes
 			std::array<int, 2>      remaining{};
@@ -157,9 +158,14 @@ namespace fp
 		bool  CamTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out) const;  // _camMutex held
 		void  PlaceGuide(const Frame& a_frame, pool::Vec2 a_dir);
 		void  PlaceStick(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float a_pull, bool a_show);
-		// the stick with its tip at a_tip pointing along a_toTip (world, unit), mesh scale a_scale
-		void  PlaceStickAlong(const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale);
-		bool  PlaceStickInHands(RE::Actor* a_actor);  // butt in the right hand, shaft over the left: false = no hands found
+		// a stick object with its tip at a_tip pointing along a_toTip (world, unit), mesh scale a_scale
+		void  PlaceStickAlong(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale);
+		static void PrepareStick(RE::TESObjectREFR* a_ref);  // once its 3D is in: hides the blood overlay
+		// the opponent's own cue: in their hands on a shot (butt in the right, shaft over the left bridge), upright with
+		// its butt on the floor while they wait (in the right hand); false = no hands found
+		bool  PlaceStickInHands(RE::Actor* a_actor);
+		bool  PlaceStickUpright(RE::Actor* a_actor);
+		void  HideOpponentStick();
 		void  HideAimObjects();
 		void  RemoveAimObjects();
 		void  BlockControls(bool a_block);
@@ -277,6 +283,9 @@ namespace fp
 		RE::NiPoint3        _npcHeldAt;           // where they were when the hold went on
 		RE::NiPoint3        _npcLastPos;          // for their speed
 		bool                _npcMovedWarned{ false };
+		RE::ObjectRefHandle _npcStick;            // their own cue (yours is _stick), so you can both hold one
+		bool                _npcStickReady{ false };
+		bool                _npcWaitIdle{ false }; // PoolWait is playing
 		float               _npcWaitWalk{ 0.0f };  // seconds they've been on their way to the wait spot
 		float               _npcBestDist{ 0.0f };  // closest they've got to where they're walking
 		float               _npcStall{ 0.0f };     // seconds without getting closer

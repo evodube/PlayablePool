@@ -14,16 +14,16 @@ namespace fp
 {
 	namespace
 	{
-		// The pool clips' shot geometry, in the actor's own space (root midway between the feet, facing +Y): the
-		// cue runs along x = 13 and the cue ball sits 89 ahead of the root (tools/anim/README.md).
-		constexpr float kStanceBack = 89.0f;
-		constexpr float kStanceSide = 13.0f;
+		// The pool clips' shot geometry, in the actor's own space (root at the origin, facing +Y): the cue runs
+		// along x = 8.5 and the cue ball sits 66.1 ahead of the root (tools/anim/README.md).
+		constexpr float kStanceBack = 66.1f;
+		constexpr float kStanceSide = 8.5f;
 		constexpr float kContactSeconds = 35.0f / 30.0f;  // PoolStrike: the cue reaches the ball on frame 35
 		constexpr float kStrikeLength = 60.0f / 30.0f;
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
 		constexpr float kThinkSeconds = 0.8f;    // after the balls stop, before they set off
 		constexpr float kArrivedDistance = 30.0f;
-		constexpr float kTableMargin = 30.0f;    // the rails and room for the hips and front foot, beyond the felt
+		constexpr float kTableMargin = 22.0f;    // the rails and some room for the body, beyond the felt
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
@@ -259,6 +259,10 @@ namespace fp
 			_npcBestDist = Distance2D(a_actor->data.location, target->data.location);
 			_npcStall = 0.0f;
 		}
+		if (_npcWaitIdle) {
+			_npcWaitIdle = false;
+			Anim::Stop(a_actor);  // out of PoolWait before walking off
+		}
 		HoldOpponent(a_actor, false);  // a restrained actor can't walk
 		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : "shot",
 			Distance2D(a_actor->data.location, target->data.location), a_target == _npcPathTarget ? ", again" : "");
@@ -294,6 +298,11 @@ namespace fp
 		OpponentLooksAtPlayer(actor, false);
 		Anim::SetHeadTracking(actor, true);
 		_npcFacing = false;
+		if (_npcWaitIdle) {
+			_npcWaitIdle = false;
+			Anim::Stop(actor);
+		}
+		HideOpponentStick();
 	}
 
 	void Game::EndChallenge(const std::string& a_why)
@@ -301,6 +310,8 @@ namespace fp
 		ReleaseOpponent();
 		RemoveRef(_npcMarker);
 		RemoveRef(_npcWaitMarker);
+		RemoveRef(_npcStick);
+		_npcStickReady = false;
 		_autoAim = false;
 		_opponent = {};
 		_npcStep = NpcStep::kNone;
@@ -419,14 +430,20 @@ namespace fp
 			_npcFacing = true;
 			a_actor->SetHeading(_npcWaitHeading);
 			HoldOpponent(a_actor, true);
+			_npcWaitIdle = Anim::PlayWait(a_actor);  // standing with the cue until their turn
 		}
 	}
 
 	bool Game::PlaceStickInHands(RE::Actor* a_actor)
 	{
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
-		if (!root || !_stick.get()) {
+		auto  stick = _npcStick.get();
+		if (!root || !stick || !stick->Get3D()) {
 			return false;
+		}
+		if (!_npcStickReady) {
+			_npcStickReady = true;
+			PrepareStick(stick.get());
 		}
 		auto node = [&](const char* a_name) -> RE::NiAVObject* {
 			return root->GetObjectByName(RE::BSFixedString{ a_name });
@@ -454,8 +471,44 @@ namespace fp
 		const auto&        s = Settings::Get();
 		const float        length = std::abs(s.stickTip - s.stickButt);
 		const RE::NiPoint3 tip = grip + dir * (length - kGripFromButt);
-		PlaceStickAlong(tip, dir, 1.0f);
+		PlaceStickAlong(stick.get(), tip, dir, 1.0f);
 		return true;
+	}
+
+	bool Game::PlaceStickUpright(RE::Actor* a_actor)
+	{
+		auto* root = a_actor ? a_actor->Get3D() : nullptr;
+		auto  stick = _npcStick.get();
+		if (!root || !stick || !stick->Get3D()) {
+			return false;
+		}
+		if (!_npcStickReady) {
+			_npcStickReady = true;
+			PrepareStick(stick.get());
+		}
+		auto* rHand = root->GetObjectByName(RE::BSFixedString{ "RArm_Hand" });
+		auto* rMid = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger31" });
+		if (!rHand) {
+			return false;
+		}
+		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
+		// PoolWait has the butt on the floor at (11, 7) in their own space, by the right foot
+		const float        h = a_actor->data.angle.z;
+		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
+		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
+		RE::NiPoint3       butt = a_actor->data.location + right * 11.0f + fwd * 7.0f;
+		butt.z = a_actor->data.location.z + 0.6f;
+		const RE::NiPoint3 dir = util::Normalized(palm - butt);
+		const auto&        s = Settings::Get();
+		PlaceStickAlong(stick.get(), butt + dir * std::abs(s.stickTip - s.stickButt), dir, 1.0f);
+		return true;
+	}
+
+	void Game::HideOpponentStick()
+	{
+		if (auto stick = _npcStick.get()) {
+			PlaceNode(stick.get(), {}, {}, 1.0f, true);
+		}
 	}
 
 	void Game::PlanOpponentShot(const Frame& a_frame)
@@ -566,6 +619,11 @@ namespace fp
 			_npcReleasedForOver = true;
 			HoldOpponent(actor, false);
 			OpponentLooksAtPlayer(actor, false);
+			if (_npcWaitIdle) {
+				_npcWaitIdle = false;
+				Anim::Stop(actor);
+			}
+			HideOpponentStick();
 			log::info("{}: game over, released", _opponentName);
 		}
 		switch (_npcStep) {
@@ -607,7 +665,7 @@ namespace fp
 				Anim::PlayAim(actor);
 			}
 			if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
-				PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+				HideOpponentStick();
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
 				Anim::PlayStrike(actor);
@@ -618,7 +676,7 @@ namespace fp
 
 		case NpcStep::kStriking:
 			if (!PlaceStickInHands(actor)) {
-				PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+				HideOpponentStick();
 			}
 			if (_npcTimer >= kContactSeconds) {
 				OpponentStrike(a_frame);
@@ -629,10 +687,9 @@ namespace fp
 
 		case NpcStep::kFollow:
 			if (!PlaceStickInHands(actor)) {
-				PlaceStick(a_frame, _strikePos, _npcShot.dir, 0.0f, _npcTimer < 0.6f);
+				HideOpponentStick();
 			}
 			if (_npcTimer >= kStrikeLength - kContactSeconds) {
-				PlaceStick(a_frame, _strikePos, _npcShot.dir, 0.0f, false);
 				Anim::Stop(actor);
 				Anim::SetHeadTracking(actor, true);
 				_npcStep = NpcStep::kNone;
@@ -642,11 +699,20 @@ namespace fp
 			break;
 		}
 
-		// the cue stick, made here when nobody's aiming (aim mode makes its own)
-		if (_npcStep == NpcStep::kAiming && !_stick && table) {
+		// their cue: made when first needed; upright while PoolWait plays, put away while they walk
+		const bool wantStick = _npcWaitIdle || _npcStep == NpcStep::kAiming || _npcStep == NpcStep::kStriking || _npcStep == NpcStep::kFollow;
+		if (wantStick && !_npcStick && table) {
 			if (auto* form = StickForm()) {
-				_stick = Spawn(form, table, ToWorld(a_frame, _sim->Balls()[0].pos, static_cast<float>(s.spec.ballRadius)));
+				_npcStick = Spawn(form, table, actor->data.location);
+				_npcStickReady = false;
 			}
+		}
+		if (_npcStep == NpcStep::kNone) {
+			if (!_npcWaitIdle || !PlaceStickUpright(actor)) {
+				HideOpponentStick();
+			}
+		} else if (_npcStep == NpcStep::kWalking) {
+			HideOpponentStick();
 		}
 	}
 }

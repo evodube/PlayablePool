@@ -114,6 +114,7 @@ namespace fp::SettingsMenu
 						{ L"Anim", L"sPlugin", "Idle plugin", Kind::kText, &s.animPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Anim", L"iAimFormID", "Aim idle form ID", Kind::kHex, &s.animAimFormID, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Anim", L"iStrikeFormID", "Strike idle form ID", Kind::kHex, &s.animStrikeFormID, 0, 0, nullptr, nullptr, {}, true },
+						{ L"Anim", L"iWaitFormID", "Waiting idle form ID", Kind::kHex, &s.animWaitFormID, 0, 0, nullptr, nullptr, {}, true },
 					} },
 				{ "Rules", "The game mode is used from the next rack.",
 					{

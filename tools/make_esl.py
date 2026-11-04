@@ -9,6 +9,7 @@ Form IDs (what fo4pool.ini expects by default):
     xx000810        cue stick  Meshes\\fo4pool\\CueStick.nif   (only with --stick)
     xx000811        idle fo4poolAim     Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolAim.hkx
     xx000812        idle fo4poolStrike  Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike.hkx
+    xx000813        idle fo4poolWait    Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolWait.hkx
 
 The idles are "dynamic idles": the human behaviour graph's dyn_ActivationLoop event plays whatever HKX the idle
 names, so no behaviour file is edited. The plugin plays them on the player with AIProcess::PlayIdle.
@@ -89,13 +90,14 @@ def build(with_stick: bool) -> bytes:
     idles = [
         idle(own | (FIRST_ID + 17), "fo4poolAim", ANIM_DIR + "PoolAim.hkx"),
         idle(own | (FIRST_ID + 18), "fo4poolStrike", ANIM_DIR + "PoolStrike.hkx"),
+        idle(own | (FIRST_ID + 19), "fo4poolWait", ANIM_DIR + "PoolWait.hkx"),
     ]
 
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, len(stats) + len(idles), FIRST_ID + 19))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, len(stats) + len(idles), FIRST_ID + 20))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
@@ -111,7 +113,7 @@ def main() -> int:
     data = build(with_stick)
     with open(out, "wb") as f:
         f.write(data)
-    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics, 2 idles)")
+    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics, 3 idles)")
     return 0
 
 

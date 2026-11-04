@@ -249,6 +249,19 @@ namespace fp::Hud
 			return name;
 		}
 
+		// the opponent's name in capitals, cut to fit the panel ("PLAYER 2" when nobody's challenged)
+		std::string OpponentLabel(const Game::HudState& a_st, std::size_t a_max)
+		{
+			if (a_st.opponent.empty()) {
+				return "PLAYER 2";
+			}
+			std::string n = Upper(a_st.opponent);
+			if (n.size() > a_max) {
+				n = n.substr(0, a_max - 1) + ".";
+			}
+			return n;
+		}
+
 		void Scoreboard(const View& a_v, const Game::HudState& a_st)
 		{
 			constexpr float x0 = 28.0f, y0 = 28.0f;
@@ -279,7 +292,7 @@ namespace fp::Hud
 				const float row = y0 + 25.0f + p * 92.0f;
 				const bool  up = !a_st.over && a_st.shooter == p;
 				const char* group = a_st.group[p] == 1 ? "SOLIDS" : a_st.group[p] == 2 ? "STRIPES" : "OPEN";
-				const std::string name = std::format("{} · {}", p == 0 ? "YOU" : "PLAYER 2", group);
+				const std::string name = std::format("{} · {}", p == 0 ? std::string("YOU") : OpponentLabel(a_st, 14), group);
 				if (up) {
 					DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
 				}
@@ -308,7 +321,8 @@ namespace fp::Hud
 				title = "SOLO PLAY";
 				sub = a_st.breakShot ? "BREAK" : a_st.ballInHand ? "BALL IN HAND" : a_st.onEight ? "SHOOTING THE 8" : std::format("{} TO GO", a_st.remaining[0]);
 			} else {
-				title = a_st.shooter == 0 ? "YOUR SHOT" : "THEIR SHOT";
+				title = a_st.shooter == 0 ? std::string("YOUR SHOT")
+				                          : a_st.opponent.empty() ? std::string("THEIR SHOT") : OpponentLabel(a_st, 10) + "'S SHOT";
 				const char* group = a_st.group[a_st.shooter] == 1 ? "SOLIDS" : a_st.group[a_st.shooter] == 2 ? "STRIPES" : "";
 				if (a_st.breakShot) {
 					sub = "BREAK";
@@ -503,7 +517,7 @@ namespace fp::Hud
 			if (Begin("##fo4pool_score", nullptr, kFlags)) {
 				for (int p = 0; p < 2; ++p) {
 					const char* g = a_st.group[p] == 1 ? "solids" : a_st.group[p] == 2 ? "stripes" : "open table";
-					Text("%s %s   %s, %d left", !a_st.over && a_st.shooter == p ? ">" : " ", p == 0 ? "You" : "Player 2", g, a_st.remaining[p]);
+					Text("%s %s   %s, %d left", !a_st.over && a_st.shooter == p ? ">" : " ", p == 0 ? "You" : (a_st.opponent.empty() ? "Player 2" : a_st.opponent.c_str()), g, a_st.remaining[p]);
 				}
 				if (!a_st.message.empty()) {
 					Separator();

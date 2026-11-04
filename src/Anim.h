@@ -6,6 +6,7 @@ namespace fp::Anim
 {
 	bool PlayAim(RE::Actor* a_actor);     // PoolAim: lined up over the table, loops
 	bool PlayStrike(RE::Actor* a_actor);  // PoolStrike: the cue reaches the ball on frame 35
+	bool PlayWait(RE::Actor* a_actor);    // PoolWait: standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
 
 	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once; the walk goes on.

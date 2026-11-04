@@ -141,7 +141,9 @@ namespace fp
 		}
 		if (r.end != pool::GameEnd::kNone) {
 			const bool won = r.winner == 0;
-			Banner(won ? 2 : 3, won ? "YOU WIN" : (solo ? "YOU LOSE" : "THEY WIN"), why);
+			std::string theyWin = _opponent ? _opponentName + " WINS" : std::string("THEY WIN");
+			std::ranges::transform(theyWin, theyWin.begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
+			Banner(won ? 2 : 3, won ? "YOU WIN" : (solo ? "YOU LOSE" : theyWin), why);
 			Say(std::format("{}. {} racks again", line, rack));
 			log::info("game over: {}", line);
 			return;
@@ -286,6 +288,7 @@ namespace fp
 		if (_sim) {
 			h.game = true;
 			h.solo = _rules.GameMode() == pool::Mode::kSolo;
+			h.opponent = _opponent ? _opponentName : std::string();
 			h.shooter = _rules.Shooter();
 			for (int p = 0; p < 2; ++p) {
 				const auto g = _rules.GroupOf(p);

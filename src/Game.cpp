@@ -164,6 +164,9 @@ namespace fp
 		_autoAim = false;
 		_npcHeld = false;
 		_npcLooking = false;
+		_npcStick = {};
+		_npcStickReady = false;
+		_npcWaitIdle = false;
 		_npcPathTarget = {};
 		_npcReleasedForOver = false;
 		_watching = false;
@@ -198,7 +201,7 @@ namespace fp
 				return true;
 			}
 		}
-		return _stick && _stick.get().get() == a_ref;
+		return (_stick && _stick.get().get() == a_ref) || (_npcStick && _npcStick.get().get() == a_ref);
 	}
 
 	RE::TESObjectREFR* Game::PickTable() const
@@ -527,9 +530,12 @@ namespace fp
 	void Game::Clear()
 	{
 		ExitAim();
-		if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
-			Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table
+		if (auto* actor = Opponent(); actor && (_npcStep != NpcStep::kNone || _npcWaitIdle)) {
+			Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table or waiting with a cue
 		}
+		_npcWaitIdle = false;
+		_npcFacing = false;  // the next game's wait spot holds them again (and starts PoolWait)
+		HideOpponentStick();
 		_npcStep = NpcStep::kNone;
 		if (auto marker = _npcMarker.get()) {
 			marker->Disable();
