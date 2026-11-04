@@ -119,9 +119,13 @@ namespace fp
 		}
 		_entryYaw = player->data.angle.z;
 		_entryPitch = player->data.angle.x;
-		_camMapped = false;
-		_mapFrames = 0;
-		_haveCamTarget = false;
+		{
+			std::scoped_lock lock(_camMutex);
+			_camMapped = false;
+			_mapFrames = 0;
+			_haveCamTarget = false;
+			_haveCamTranslation = false;
+		}
 		_overhead = false;
 		_charging = false;
 		_strikeShow = 0.0f;
@@ -156,6 +160,7 @@ namespace fp
 			return;
 		}
 		_overhead = !_overhead;
+		std::scoped_lock lock(_camMutex);
 		if (!_overhead && _camMapped) {
 			if (auto* free = FreeCamera()) {
 				Component(free, 1 - _yawIndex) = _pitchSign * Settings::Get().camPitch * kDegToRad;
@@ -197,69 +202,26 @@ namespace fp
 		const auto& s = Settings::Get();
 		const float r = static_cast<float>(s.spec.ballRadius);
 
-		// The free camera keeps two angles; work out once which one is yaw by comparing with where the player
-		// faced when aiming started (the free camera starts there).
-		if (!_camMapped) {
-			const float a = free->rotation.x;
-			const float b = free->rotation.y;
-			if (a == 0.0f && b == 0.0f && ++_mapFrames < 10) {
-				return;  // not set up yet
-			}
-			const float errA = std::abs(util::AngleDiff(a, _entryYaw));
-			const float errB = std::abs(util::AngleDiff(b, _entryYaw));
-			_yawIndex = errA <= errB ? 0 : 1;
-			const float pitchValue = _yawIndex == 0 ? b : a;
-			_pitchSign = 1.0f;
-			if (std::abs(_entryPitch) > 0.05f && std::abs(pitchValue) > 0.05f && (pitchValue > 0.0f) != (_entryPitch > 0.0f)) {
-				_pitchSign = -1.0f;
-			}
-			log::info("free camera rotation ({:.3f}, {:.3f}) vs player yaw {:.3f} pitch {:.3f}: yaw is value {}, pitch sign {}", a, b,
-				_entryYaw, _entryPitch, _yawIndex, _pitchSign);
-			Component(free, 1 - _yawIndex) = _pitchSign * s.camPitch * kDegToRad;
-			_camMapped = true;
-		}
-
-		float yaw = Component(free, _yawIndex);
-		float pitch = _pitchSign * Component(free, 1 - _yawIndex);
-
-		if (_charging) {
-			// The camera holds still while charging. Whatever the mouse did to the view since last frame is read as
-			// the pull: back (view tilts down) adds power, forward takes it away. Then the view is put back.
-			if (!_chargeLocked) {
-				_lockYaw = yaw;
-				_lockPitch = pitch;
-				_chargeLocked = true;
-			} else {
-				const float degrees = (pitch - _lockPitch) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
-				_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
-			}
-			yaw = _lockYaw;
-			pitch = _lockPitch;
-			Component(free, _yawIndex) = yaw;
-			Component(free, 1 - _yawIndex) = _pitchSign * pitch;
-		} else {
-			_chargeLocked = false;
-			const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
-			if (wanted != pitch) {
-				pitch = wanted;
-				Component(free, 1 - _yawIndex) = _pitchSign * pitch;
-			}
-		}
-
-		// what the camera looks at
+		// What the camera looks at. The camera itself is moved in OnFreeCameraUpdate, inside the game's own camera
+		// update, so its position and angle always come from the same frame.
 		const bool   atRest = _sim->AtRest();
 		const auto&  cue = _sim->Balls()[0];
-		RE::NiPoint3 desired = _overhead ? ToWorld(a_frame, { 0.0, 0.0 }, 0.0f) : ToWorld(a_frame, cue.pos, r);
-		if (!_haveCamTarget) {
-			_camTarget = desired;
-			_haveCamTarget = true;
-		} else if (atRest || _overhead) {
-			const float k = std::min(1.0f, a_dt * 5.0f);
-			_camTarget = _camTarget + (desired - _camTarget) * k;
+		const RE::NiPoint3 desired = _overhead ? ToWorld(a_frame, { 0.0, 0.0 }, 0.0f) : ToWorld(a_frame, cue.pos, r);
+		float yaw;
+		{
+			std::scoped_lock lock(_camMutex);
+			if (!_haveCamTarget) {
+				_camTarget = desired;
+				_haveCamTarget = true;
+			} else if (atRest || _overhead) {
+				const float k = std::min(1.0f, a_dt * 5.0f);
+				_camTarget = _camTarget + (desired - _camTarget) * k;
+			}
+			yaw = _camYaw;
 		}
-		const float        distance = _overhead ? s.overheadHeight : s.camDistance;
-		const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
-		free->translation = _camTarget - forward * distance;
+		if (!_camMapped) {
+			return;
+		}
 
 		// aim along where the camera faces, flattened onto the table
 		const RE::NiPoint3 world{ std::sin(yaw), std::cos(yaw), 0.0f };
@@ -283,6 +245,88 @@ namespace fp
 			_strikeShow = std::max(0.0f, _strikeShow - a_dt);
 			PlaceStick(a_frame, _strikePos, _lastDir, 0.0f, striking);
 		}
+	}
+
+	// ---------------------------------------------------------------- the game's camera update
+
+	void Game::OnFreeCameraUpdate(RE::FreeCameraState* a_free)
+	{
+		if (!_aiming || !a_free) {
+			return;
+		}
+		std::scoped_lock lock(_camMutex);
+		const auto& s = Settings::Get();
+
+		// The free camera keeps two angles; work out once which one is yaw by comparing with where the player
+		// faced when aiming started (the free camera starts there).
+		if (!_camMapped) {
+			const float a = a_free->rotation.x;
+			const float b = a_free->rotation.y;
+			if (a == 0.0f && b == 0.0f && ++_mapFrames < 10) {
+				return;  // not set up yet
+			}
+			const float errA = std::abs(util::AngleDiff(a, _entryYaw));
+			const float errB = std::abs(util::AngleDiff(b, _entryYaw));
+			_yawIndex = errA <= errB ? 0 : 1;
+			const float pitchValue = _yawIndex == 0 ? b : a;
+			_pitchSign = 1.0f;
+			if (std::abs(_entryPitch) > 0.05f && std::abs(pitchValue) > 0.05f && (pitchValue > 0.0f) != (_entryPitch > 0.0f)) {
+				_pitchSign = -1.0f;
+			}
+			log::info("free camera rotation ({:.3f}, {:.3f}) vs player yaw {:.3f} pitch {:.3f}: yaw is value {}, pitch sign {}", a, b,
+				_entryYaw, _entryPitch, _yawIndex, _pitchSign);
+			Component(a_free, 1 - _yawIndex) = _pitchSign * s.camPitch * kDegToRad;
+			_camMapped = true;
+		}
+
+		float yaw = Component(a_free, _yawIndex);
+		float pitch = _pitchSign * Component(a_free, 1 - _yawIndex);
+
+		if (_charging) {
+			// The view holds still while charging. Whatever the mouse just did to it is read as the pull: back (view
+			// tilts down) adds power, forward takes it away. Then the view is put back, before the frame is drawn.
+			if (!_chargeLocked) {
+				_lockYaw = yaw;
+				_lockPitch = pitch;
+				_chargeLocked = true;
+			} else {
+				const float degrees = (pitch - _lockPitch) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
+				_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
+			}
+			yaw = _lockYaw;
+			pitch = _lockPitch;
+			Component(a_free, _yawIndex) = yaw;
+			Component(a_free, 1 - _yawIndex) = _pitchSign * pitch;
+		} else {
+			_chargeLocked = false;
+			const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
+			if (wanted != pitch) {
+				pitch = wanted;
+				Component(a_free, 1 - _yawIndex) = _pitchSign * pitch;
+			}
+		}
+		_camYaw = yaw;
+
+		if (_haveCamTarget) {
+			const float        distance = _overhead ? s.overheadHeight : s.camDistance;
+			const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
+			_camTranslation = _camTarget - forward * distance;
+			a_free->translation = _camTranslation;
+			_haveCamTranslation = true;
+		}
+	}
+
+	bool Game::FreeCameraTranslation(RE::NiPoint3& a_out)
+	{
+		if (!_aiming) {
+			return false;
+		}
+		std::scoped_lock lock(_camMutex);
+		if (!_haveCamTranslation) {
+			return false;
+		}
+		a_out = _camTranslation;
+		return true;
 	}
 
 	void Game::PlaceGuide(const Frame& a_frame, pool::Vec2 a_dir)
@@ -343,6 +387,11 @@ namespace fp
 	{
 		auto* form = StickForm();
 		if (!form) {
+			if (!_stickWarned && Settings::Get().stickFormID != 0) {
+				_stickWarned = true;
+				const auto& st = Settings::Get();
+				Notify(std::format("Pool: no cue stick: {}|{:X} not found. Is the new fo4pool.esl installed?", st.stickPlugin, st.stickFormID));
+			}
 			return;
 		}
 		const auto& s = Settings::Get();

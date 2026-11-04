@@ -1,3 +1,4 @@
+#include "CameraHook.h"
 #include "Game.h"
 #include "Hook.h"
 #include "Hud.h"
@@ -20,6 +21,7 @@ namespace
 			fp::log::info("game data ready");
 			fp::Settings::Get().Load();
 			fp::Hook::Install();
+			fp::CameraHook::Install();
 			break;
 		case F4SE::MessagingInterface::kPreLoadGame:
 			fp::Game::Get().Forget();

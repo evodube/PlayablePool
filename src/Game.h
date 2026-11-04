@@ -35,6 +35,12 @@ namespace fp
 		};
 		HudState Hud() const;
 
+		// Called from inside the game's free camera update (CameraHook.cpp): applies the mouse to aim or power and
+		// moves the camera to orbit the cue ball, before the frame is drawn.
+		void OnFreeCameraUpdate(RE::FreeCameraState* a_free);
+		// The camera position to use this frame while aiming; false = leave the game's own.
+		bool FreeCameraTranslation(RE::NiPoint3& a_out);
+
 	private:
 		// The game stores a node's rotation with the object's axes as the ROWS of the matrix: a point p in the
 		// object's own space is at translate + scale * (rotate.Transpose() * p) in the world, and rotate * v turns a
@@ -121,9 +127,14 @@ namespace fp
 		std::vector<RE::ObjectRefHandle> _dots;
 		RE::ObjectRefHandle              _stick;
 		bool                             _stickLogged{ false };
+		bool                             _stickWarned{ false };
 		bool                             _chargeLocked{ false };  // camera angles frozen for this charge
 		float                            _lockYaw{ 0.0f };
 		float                            _lockPitch{ 0.0f };
+		std::mutex                       _camMutex;  // camera update thread vs the tick
+		float                            _camYaw{ 0.0f };
+		RE::NiPoint3                     _camTranslation;
+		bool                             _haveCamTranslation{ false };
 		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
 		bool                             _controlsBlocked{ false };
 

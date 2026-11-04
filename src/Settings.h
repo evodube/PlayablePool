@@ -43,8 +43,8 @@ namespace fp
 		float         ballZOffset{ 0.0f };    // if the mesh's centre isn't the ball's centre
 
 		// [Shot] hold the left mouse button (the camera freezes), pull the mouse back for power, release to shoot
-		float minSpeed{ 40.0f };      // cue ball speed at the smallest power, units per second
-		float maxSpeed{ 1400.0f };    // at 100%
+		float minSpeed{ 28.0f };      // cue ball speed at the smallest power, units per second
+		float maxSpeed{ 980.0f };     // at 100%
 		float pullPerDegree{ 0.04f }; // power gained per degree the mouse tries to tilt the view (0.04 = full at 25)
 		bool  invertPull{ false };    // true: push the mouse forward for power instead
 
