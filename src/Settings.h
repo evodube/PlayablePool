@@ -25,6 +25,7 @@ namespace fp
 		int keyClear{ 0x69 };      // Numpad 9
 		int keyCalibrate{ 0x64 };  // Numpad 4
 		int keyCallPocket{ 0x65 }; // Numpad 5: pick the pocket for the 8
+		int keyChallenge{ 0x66 };  // Numpad 6: challenge the NPC you're looking at (again: they stop playing)
 
 		// [Rules] 8-ball
 		int   gameMode{ 0 };        // 0 = 8-Ball (two players), 1 = Solo Play
@@ -82,12 +83,18 @@ namespace fp
 		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
 		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest
 
-		// [Anim] the player plays the pool idles (fo4pool.esl) while aiming and shooting
+		// [Opponent] an NPC playing you at 8-ball
+		float opponentSkill{ 0.6f };        // 0 = hopeless, 1 = never misses its aim
+		float opponentAimSeconds{ 2.5f };   // how long they line the shot up (PoolAim) before striking
+		float opponentPickDistance{ 600.0f }; // how far away the NPC you challenge can be
+		float opponentWalkTimeout{ 20.0f }; // seconds to reach the shot before they're put there
+		bool  opponentRun{ false };         // run to the shot instead of walking
+
+		// [Anim] the pool idles (fo4pool.esl) the opponent plays
 		bool          anim{ true };
 		std::string   animPlugin{ "fo4pool.esl" };
 		std::uint32_t animAimFormID{ 0x811 };     // PoolAim: lined up, practice strokes, loops
 		std::uint32_t animStrikeFormID{ 0x812 };  // PoolStrike: the shot
-		float         animStrikeSeconds{ 2.0f };  // how long the strike plays before going back to the aim loop
 
 		// [HUD] the terminal HUD (needs F4SE Menu Framework)
 		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)

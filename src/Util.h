@@ -78,4 +78,44 @@ namespace fp::util
 		}
 		return d;
 	}
+
+	// every loaded cell: the player's, or the attached exterior grid
+	template <class F>
+	void ForEachLoadedCell(F&& a_fn)
+	{
+		std::vector<RE::TESObjectCELL*> seen;
+		auto visit = [&](RE::TESObjectCELL* a_cell) {
+			if (a_cell && std::ranges::find(seen, a_cell) == seen.end()) {
+				seen.push_back(a_cell);
+				a_fn(a_cell);
+			}
+		};
+		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+			visit(player->GetParentCell());
+		}
+		auto* tes = RE::TES::GetSingleton();
+		if (!tes) {
+			return;
+		}
+		if (tes->interiorCell) {
+			visit(tes->interiorCell);
+			return;
+		}
+		if (auto* grid = tes->gridCells; grid && grid->gridCell) {
+			const auto dim = std::min<std::uint32_t>(grid->dimension, 15);
+			for (std::uint32_t i = 0; i < dim * dim; ++i) {
+				auto* cell = grid->gridCell[i].cell;
+				if (cell && cell->IsAttached()) {
+					visit(cell);
+				}
+			}
+		}
+	}
+
+
+	inline RE::NiPoint3 Normalized(const RE::NiPoint3& a_v)
+	{
+		const float l = std::sqrt(a_v.x * a_v.x + a_v.y * a_v.y + a_v.z * a_v.z);
+		return l > 1e-6f ? RE::NiPoint3{ a_v.x / l, a_v.y / l, a_v.z / l } : RE::NiPoint3{ 0.0f, 0.0f, 0.0f };
+	}
 }

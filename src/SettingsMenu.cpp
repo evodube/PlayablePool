@@ -101,10 +101,14 @@ namespace fp::SettingsMenu
 						{ L"Stick", L"sPlugin", "Stick plugin", Kind::kText, &s.stickPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Stick", L"iFormID", "Stick form ID", Kind::kHex, &s.stickFormID, 0, 0, nullptr, "0 = no stick", {}, true },
 					} },
-				{ "Animations", "Your character plays the pool idles while you aim and shoot (needs fo4pool.esl).",
+				{ "Opponent", "Look at a settler or companion near a racked table and press the challenge key to play them at 8-ball.",
 					{
-						{ L"Anim", L"bEnabled", "Play pool animations", Kind::kBool, &s.anim, 0, 0, nullptr, "lean over the table while aiming, strike on the shot" },
-						{ L"Anim", L"fStrikeSeconds", "Strike length", Kind::kFloat, &s.animStrikeSeconds, 0.5f, 5.0f, "%.1f", "seconds before going back to the aim loop" },
+						{ L"Opponent", L"fSkill", "Skill", Kind::kFloat, &s.opponentSkill, 0.0f, 1.0f, "%.2f", "0 = hopeless, 1 = never misses its aim" },
+						{ L"Opponent", L"fAimSeconds", "Time to line up", Kind::kFloat, &s.opponentAimSeconds, 0.0f, 10.0f, "%.1f", "seconds they aim before striking" },
+						{ L"Opponent", L"bRun", "Run to the shot", Kind::kBool, &s.opponentRun, 0, 0, nullptr, "off = walk" },
+						{ L"Opponent", L"fWalkTimeout", "Walk time limit", Kind::kFloat, &s.opponentWalkTimeout, 1.0f, 60.0f, "%.0f", "seconds before they're put at the shot" },
+						{ L"Opponent", L"fPickDistance", "Challenge distance", Kind::kFloat, &s.opponentPickDistance, 50.0f, 3000.0f, "%.0f", "how far away the NPC can be" },
+						{ L"Anim", L"bEnabled", "Pool animations", Kind::kBool, &s.anim, 0, 0, nullptr, "they lean over the table and strike" },
 						{ L"Anim", L"sPlugin", "Idle plugin", Kind::kText, &s.animPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Anim", L"iAimFormID", "Aim idle form ID", Kind::kHex, &s.animAimFormID, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Anim", L"iStrikeFormID", "Strike idle form ID", Kind::kHex, &s.animStrikeFormID, 0, 0, nullptr, nullptr, {}, true },
@@ -173,6 +177,7 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iClear", "Clear the table", Kind::kKey, &s.keyClear },
 						{ L"Keys", L"iCalibrate", "Calibration markers", Kind::kKey, &s.keyCalibrate },
 						{ L"Keys", L"iCallPocket", "Change the called pocket", Kind::kKey, &s.keyCallPocket },
+						{ L"Keys", L"iChallenge", "Challenge an NPC", Kind::kKey, &s.keyChallenge },
 					} },
 			};
 			static bool added = false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sim/Ai.h"
 #include "sim/Rules.h"
 #include "sim/Sim.h"
 
@@ -29,6 +30,7 @@ namespace fp
 		struct HudState
 		{
 			bool  aiming{ false };
+			bool  watching{ false };  // playing an NPC and near the table, not aiming: the HUD shows anyway
 			bool  charging{ false };
 			bool  rolling{ false };
 			bool  overhead{ false };
@@ -107,7 +109,26 @@ namespace fp
 		void StartPlacement();
 		void ConfirmPlacement();
 		void TickPlacement(const Frame& a_frame);
-		static std::string PlayerName(int a_player) { return a_player == 0 ? "Player 1" : "Player 2"; }
+		std::string PlayerName(int a_player) const;  // "Player 1", "Player 2", or the opponent's name
+
+		// the NPC opponent (Opponent.cpp)
+		enum class NpcStep
+		{
+			kNone,      // not their turn, or waiting for the balls to stop
+			kWalking,   // on the way to the shot
+			kAiming,    // PoolAim
+			kStriking,  // PoolStrike, up to the cue reaching the ball
+			kFollow,    // the rest of the strike clip
+		};
+		void        Challenge();
+		void        EndChallenge(const std::string& a_why);
+		RE::Actor*  Opponent() const;
+		bool        OpponentsTurn() const;  // Player 2 is the NPC and it's their shot
+		RE::Actor*  PickActor() const;
+		void        TickOpponent(const Frame& a_frame, float a_dt);
+		void        PlanOpponentShot(const Frame& a_frame);
+		void        OpponentStrike(const Frame& a_frame);
+		RE::NiPoint3 StanceFor(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float& a_heading) const;
 
 		void Rack();
 		bool RerackInPlace();  // a new game on the table already in use, keeping the balls and aim mode
@@ -220,10 +241,22 @@ namespace fp
 		std::mutex                       _camMutex;  // camera update thread vs the tick
 		float                            _camYaw{ 0.0f };
 		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
+
+		// the NPC opponent, main thread
+		RE::ObjectRefHandle _opponent;     // empty: two players at one keyboard (or Solo Play)
+		std::string         _opponentName;
+		NpcStep             _npcStep{ NpcStep::kNone };
+		float               _npcTimer{ 0.0f };
+		pool::AiShot        _npcShot;
+		RE::NiPoint3        _npcStance;
+		float               _npcHeading{ 0.0f };
+		RE::ObjectRefHandle _npcMarker;    // an XMarkerHeading at the shot, for PathToReference / MoveTo
+		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
 
 		// shared with the render and UI threads
 		std::atomic<bool>          _aiming{ false };
+		std::atomic<bool>          _watching{ false };
 		std::atomic<bool>          _charging{ false };
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _rolling{ false };
@@ -231,7 +264,7 @@ namespace fp
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
 
 		// render thread
-		std::array<bool, 5> _keyWasDown{};
+		std::array<bool, 6> _keyWasDown{};
 		bool                _lmbWasDown{ false };
 		bool                _rmbWasDown{ false };
 		std::atomic<bool>   _tickPending{ false };

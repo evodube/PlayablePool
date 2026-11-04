@@ -1,6 +1,6 @@
 #include "Game.h"
-#include "Anim.h"
 
+#include "Anim.h"
 #include "Audio.h"
 #include "Hud.h"
 
@@ -19,37 +19,7 @@ namespace fp
 		using util::FromRows;
 		using util::GameWindow;
 
-		template <class F>
-		void ForEachLoadedCell(F&& a_fn)
-		{
-			std::vector<RE::TESObjectCELL*> seen;
-			auto visit = [&](RE::TESObjectCELL* a_cell) {
-				if (a_cell && std::ranges::find(seen, a_cell) == seen.end()) {
-					seen.push_back(a_cell);
-					a_fn(a_cell);
-				}
-			};
-			if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-				visit(player->GetParentCell());
-			}
-			auto* tes = RE::TES::GetSingleton();
-			if (!tes) {
-				return;
-			}
-			if (tes->interiorCell) {
-				visit(tes->interiorCell);
-				return;
-			}
-			if (auto* grid = tes->gridCells; grid && grid->gridCell) {
-				const auto dim = std::min<std::uint32_t>(grid->dimension, 15);
-				for (std::uint32_t i = 0; i < dim * dim; ++i) {
-					auto* cell = grid->gridCell[i].cell;
-					if (cell && cell->IsAttached()) {
-						visit(cell);
-					}
-				}
-			}
-		}
+		using util::ForEachLoadedCell;
 
 		// Table x/y -> mesh x/y. With iLengthAxis=1 the table's length runs along the mesh's Y axis.
 		RE::NiMatrix3 AxisSwap(int a_lengthAxis)
@@ -106,7 +76,7 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 5> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket };
+		const std::array<int, 6> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -121,9 +91,15 @@ namespace fp
 						switch (i) {
 						case 0: Rack(); break;
 						case 1: ToggleAim(); break;
-						case 2: Clear(); break;
+						case 2:
+							if (_opponent) {
+								EndChallenge("");
+							}
+							Clear();
+							break;
 						case 3: ToggleCalibrate(); break;
-						default: CyclePocket(); break;
+						case 4: CyclePocket(); break;
+						default: Challenge(); break;
 						}
 					});
 				}
@@ -180,6 +156,11 @@ namespace fp
 		_rolling = false;
 		_dots.clear();
 		_stick = {};
+		// a load: the opponent's still in the world, but the game's gone
+		_opponent = {};
+		_npcMarker = {};
+		_npcStep = NpcStep::kNone;
+		_watching = false;
 	}
 
 	void Game::ClearForSave()
@@ -539,6 +520,15 @@ namespace fp
 	void Game::Clear()
 	{
 		ExitAim();
+		if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
+			Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table
+		}
+		_npcStep = NpcStep::kNone;
+		if (auto marker = _npcMarker.get()) {
+			marker->Disable();
+			marker->SetWantsDelete(true);
+		}
+		_npcMarker = {};
 		RemoveAimObjects();
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {
@@ -656,7 +646,6 @@ namespace fp
 			dt = 0.0f;
 		}
 		dt = std::clamp(dt, 0.0f, kMaxFrame);
-		Anim::Tick(dt, _aiming);
 
 		if (dt > 0.0f) {
 			const auto events = _sim->Step(dt);
@@ -689,6 +678,7 @@ namespace fp
 		if (_shotLive && _sim->AtRest()) {
 			JudgeShot();
 		}
+		TickOpponent(frame, dt);
 
 		for (int i = 0; i < pool::Sim::kBalls; ++i) {
 			auto ref = _balls[i].get();

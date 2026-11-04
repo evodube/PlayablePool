@@ -25,7 +25,10 @@ Exports are checked by re-importing them: within 0.05 units and 0.1 degrees of t
 
 The clips ship at `Data\Meshes\Actors\Character\Animations\fo4pool\` and `fo4pool.esl` has two dynamic idles that
 point at them (`tools/make_esl.py`): `fo4poolAim` (0x811) and `fo4poolStrike` (0x812), both on
-`RaiderRootBehavior.hkx` with the `dyn_ActivationLoop` event, so no behaviour file is touched. `src/Anim.cpp` plays
-them on the player with `AIProcess::PlayIdle`: PoolAim when aiming starts, PoolStrike on the shot (back to PoolAim
-after `[Anim] fStrikeSeconds`), and stops the idle when aiming ends. For now the player isn't moved to the shot line
-and the ball isn't delayed to frame 35; this is a first look at the clips on a real character.
+`RaiderRootBehavior.hkx` with the `dyn_ActivationLoop` event, so no behaviour file is touched.
+
+They're played by the NPC opponent (`src/Opponent.cpp`, `src/Anim.cpp`): on their turn the NPC walks
+(Papyrus `PathToReference`) to an XMarkerHeading placed at the stance above, is snapped onto it (`MoveTo`), plays
+PoolAim for `[Opponent] fAimSeconds`, then PoolStrike, and the cue ball is struck 35 frames into it. When the cue
+ball is far from the rail the stance would be over the table, so they stand back at the rail instead and the clip's
+reach falls short of the ball.

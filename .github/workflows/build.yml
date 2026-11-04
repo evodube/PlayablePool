@@ -18,6 +18,8 @@ jobs:
           ./sim_test
           g++ -std=c++20 -O2 -Wall -Wextra -Isrc tests/rules_test.cpp src/sim/Rules.cpp src/sim/Sim.cpp -o rules_test
           ./rules_test
+          g++ -std=c++20 -O2 -Wall -Wextra -Isrc tests/ai_test.cpp src/sim/Ai.cpp src/sim/Rules.cpp src/sim/Sim.cpp -o ai_test
+          ./ai_test
 
   build:
     runs-on: windows-latest

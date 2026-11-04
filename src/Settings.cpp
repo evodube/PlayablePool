@@ -70,6 +70,7 @@ namespace fp
 		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
 		keyCallPocket = static_cast<int>(ReadInt(L"Keys", L"iCallPocket", keyCallPocket));
+		keyChallenge = static_cast<int>(ReadInt(L"Keys", L"iChallenge", keyChallenge));
 		gameMode = ReadInt(L"Rules", L"iGameMode", gameMode) == 1 ? 1 : 0;
 		callEight = ReadBool(L"Rules", L"bCallEight", callEight);
 		placeSpeed = std::clamp(ReadFloat(L"Rules", L"fPlaceSpeed", placeSpeed), 0.005f, 1.0f);
@@ -113,11 +114,16 @@ namespace fp
 		stickMaxPull = ReadFloat(L"Stick", L"fMaxPull", stickMaxPull);
 		stickGap = ReadFloat(L"Stick", L"fGap", stickGap);
 
+		opponentSkill = std::clamp(ReadFloat(L"Opponent", L"fSkill", opponentSkill), 0.0f, 1.0f);
+		opponentAimSeconds = std::max(0.0f, ReadFloat(L"Opponent", L"fAimSeconds", opponentAimSeconds));
+		opponentPickDistance = std::max(50.0f, ReadFloat(L"Opponent", L"fPickDistance", opponentPickDistance));
+		opponentWalkTimeout = std::max(1.0f, ReadFloat(L"Opponent", L"fWalkTimeout", opponentWalkTimeout));
+		opponentRun = ReadBool(L"Opponent", L"bRun", opponentRun);
+
 		anim = ReadBool(L"Anim", L"bEnabled", anim);
 		animPlugin = Narrow(ReadString(L"Anim", L"sPlugin", std::wstring(animPlugin.begin(), animPlugin.end())));
 		animAimFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAimFormID", animAimFormID));
 		animStrikeFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrikeFormID", animStrikeFormID));
-		animStrikeSeconds = std::max(0.1f, ReadFloat(L"Anim", L"fStrikeSeconds", animStrikeSeconds));
 
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);

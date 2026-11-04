@@ -524,7 +524,7 @@ namespace fp::Hud
 		{
 			const auto st = Game::Get().Hud();
 			auto*      viewport = GetMainViewport();
-			if (!viewport || !st.game || !st.aiming) {
+			if (!viewport || !st.game || !(st.aiming || st.watching)) {
 				return;  // only at the table: leaving aim mode puts the normal HUD back
 			}
 			if (g_artMissing) {

@@ -3,6 +3,7 @@
 
 #include "Game.h"
 
+#include "Anim.h"
 #include "Audio.h"
 #include "Settings.h"
 
@@ -26,7 +27,15 @@ namespace fp
 	void Game::StartGame()
 	{
 		const auto& s = Settings::Get();
-		const auto  mode = s.gameMode == 1 ? pool::Mode::kSolo : pool::Mode::kEightBall;
+		// against an NPC it's always 8-ball
+		const auto mode = s.gameMode == 1 && !_opponent ? pool::Mode::kSolo : pool::Mode::kEightBall;
+		if (_opponent) {
+			if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
+				Anim::Stop(actor);
+			}
+			_npcStep = NpcStep::kNone;
+			_npcTimer = 0.0f;
+		}
 		_rules.NewGame(_nextBreaker, mode);
 		if (mode == pool::Mode::kEightBall) {
 			_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
@@ -187,6 +196,9 @@ namespace fp
 		log::info("shot judged: foul {} continues {} groups {} potted {} -> {}", static_cast<int>(r.foul), r.turnContinues, r.groupsSet,
 			r.pocketed.size(), line);
 
+		if (OpponentsTurn() && _aiming) {
+			ExitAim();  // their shot: the table's theirs until the balls stop
+		}
 		if (r.ballInHand && _aiming) {
 			StartPlacement();
 		}
