@@ -27,6 +27,7 @@ namespace fp
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
+		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
 		constexpr float kRepathSeconds = 3.0f;
 		constexpr float kWaitFromCentre = 170.0f; // the first wait spot: this far from the table's middle, towards them
@@ -157,11 +158,46 @@ namespace fp
 		Say(std::format("{} plays you at 8-ball. You break", _opponentName));
 	}
 
+	void Game::HoldOpponent(RE::Actor* a_actor, bool a_hold)
+	{
+		if (a_actor && a_hold != _npcHeld) {
+			_npcHeld = a_hold;
+			Anim::SetDontMove(a_actor, a_hold);
+		}
+	}
+
+	void Game::OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look)
+	{
+		if (!a_actor || a_look == _npcLooking) {
+			return;
+		}
+		_npcLooking = a_look;
+		if (a_look) {
+			Anim::LookAt(a_actor, RE::PlayerCharacter::GetSingleton());
+		} else {
+			Anim::ClearLookAt(a_actor);
+		}
+	}
+
+	void Game::ReleaseOpponent()
+	{
+		auto* actor = Opponent();
+		if (!actor) {
+			return;
+		}
+		if (_npcStep != NpcStep::kNone) {
+			Anim::Stop(actor);
+			_npcStep = NpcStep::kNone;
+		}
+		HoldOpponent(actor, false);
+		OpponentLooksAtPlayer(actor, false);
+		Anim::SetHeadTracking(actor, true);
+		_npcFacing = false;
+	}
+
 	void Game::EndChallenge(const std::string& a_why)
 	{
-		if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
-			Anim::Stop(actor);
-		}
+		ReleaseOpponent();
 		RemoveRef(_npcMarker);
 		RemoveRef(_npcWaitMarker);
 		_autoAim = false;
@@ -238,6 +274,9 @@ namespace fp
 
 	void Game::TickWaiting(RE::Actor* a_actor, [[maybe_unused]] const Frame& a_frame, float a_dt)
 	{
+		// while it's your shot they watch you
+		OpponentLooksAtPlayer(a_actor, !OpponentsTurn() && !_rules.Over());
+
 		auto marker = _npcWaitMarker.get();
 		if (!marker) {
 			return;
@@ -245,15 +284,55 @@ namespace fp
 		_npcRepath += a_dt;
 		const float away = Distance2D(a_actor->data.location, marker->data.location);
 		if (away > kWaitRadius) {
+			// pushed or pulled off the spot: walk back (they can't walk while held)
 			_npcFacing = false;
+			HoldOpponent(a_actor, false);
 			if (_npcRepath >= kRepathSeconds) {
 				_npcRepath = 0.0f;
-				Anim::PathTo(a_actor, marker.get(), 0.0f);  // their sandbox package keeps pulling them off: back to the table
+				Anim::PathTo(a_actor, marker.get(), 0.0f);
 			}
 		} else if (!_npcFacing && away < kWaitRadius * 0.5f) {
+			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
 			a_actor->SetHeading(_npcWaitHeading);
+			HoldOpponent(a_actor, true);
 		}
+	}
+
+	bool Game::PlaceStickInHands(RE::Actor* a_actor)
+	{
+		auto* root = a_actor ? a_actor->Get3D() : nullptr;
+		if (!root || !_stick.get()) {
+			return false;
+		}
+		auto node = [&](const char* a_name) -> RE::NiAVObject* {
+			return root->GetObjectByName(RE::BSFixedString{ a_name });
+		};
+		auto* rHand = node("RArm_Hand");
+		auto* lHand = node("LArm_Hand");
+		if (!rHand || !lHand) {
+			return false;
+		}
+		// grip: the right palm (between the wrist and the middle finger's base); bridge: the left hand's V between
+		// thumb and index finger
+		auto mid = [&](RE::NiAVObject* a_a, RE::NiAVObject* a_b) {
+			return a_b ? (a_a->world.translate + a_b->world.translate) * 0.5f : a_a->world.translate;
+		};
+		const RE::NiPoint3 grip = mid(rHand, node("RArm_Finger31"));
+		auto*              thumb = node("LArm_Finger11");
+		auto*              index = node("LArm_Finger21");
+		const RE::NiPoint3 bridge = thumb && index ? (thumb->world.translate + index->world.translate) * 0.5f : lHand->world.translate;
+		const RE::NiPoint3 along = bridge - grip;
+		if (along.Length() < 10.0f) {
+			return false;  // hands together: not a pool pose
+		}
+		const RE::NiPoint3 dir = util::Normalized(along);
+		// the cue (Weapons\PoolCue) is 94 long; the grip hand holds it about 12 from the butt
+		const auto&        s = Settings::Get();
+		const float        length = std::abs(s.stickTip - s.stickButt);
+		const RE::NiPoint3 tip = grip + dir * (length - kGripFromButt);
+		PlaceStickAlong(tip, dir, 1.0f);
+		return true;
 	}
 
 	void Game::PlanOpponentShot(const Frame& a_frame)
@@ -289,6 +368,9 @@ namespace fp
 			marker->data.angle = { 0.0f, 0.0f, _npcHeading };
 		}
 		_npcTimer = 0.0f;
+		OpponentLooksAtPlayer(actor, false);
+		HoldOpponent(actor, false);  // free to walk to the shot
+		_npcFacing = false;
 		if (actor && marker && Anim::PathTo(actor, marker.get(), s.opponentRun ? 1.0f : 0.0f)) {
 			_npcStep = NpcStep::kWalking;
 		} else {
@@ -379,6 +461,8 @@ namespace fp
 				if (marker) {
 					Anim::MoveTo(actor, marker.get());  // exactly on the spot, facing the shot
 				}
+				HoldOpponent(actor, true);
+				Anim::SetHeadTracking(actor, false);  // eyes on the shot, not on whoever walks by
 				_npcStep = NpcStep::kAiming;
 				_npcTimer = 0.0f;
 			}
@@ -389,7 +473,9 @@ namespace fp
 				actor->SetHeading(_npcHeading);
 				Anim::PlayAim(actor);
 			}
-			PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+			if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
+				PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
 				Anim::PlayStrike(actor);
 				_npcStep = NpcStep::kStriking;
@@ -398,7 +484,9 @@ namespace fp
 			break;
 
 		case NpcStep::kStriking:
-			PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+			if (!PlaceStickInHands(actor)) {
+				PlaceStick(a_frame, _sim->Balls()[0].pos, _npcShot.dir, 0.0f, true);
+			}
 			if (_npcTimer >= kContactSeconds) {
 				OpponentStrike(a_frame);
 				_npcStep = NpcStep::kFollow;
@@ -407,10 +495,13 @@ namespace fp
 			break;
 
 		case NpcStep::kFollow:
-			PlaceStick(a_frame, _strikePos, _npcShot.dir, 0.0f, _npcTimer < 0.6f);
+			if (!PlaceStickInHands(actor)) {
+				PlaceStick(a_frame, _strikePos, _npcShot.dir, 0.0f, _npcTimer < 0.6f);
+			}
 			if (_npcTimer >= kStrikeLength - kContactSeconds) {
 				PlaceStick(a_frame, _strikePos, _npcShot.dir, 0.0f, false);
 				Anim::Stop(actor);
+				Anim::SetHeadTracking(actor, true);
 				_npcStep = NpcStep::kNone;
 				_npcTimer = 0.0f;
 				SetWaitSpot(a_frame, actor->data.location);  // stay where they shot from

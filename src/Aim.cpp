@@ -645,6 +645,18 @@ namespace fp
 		const RE::NiPoint3 aimWorld = a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(a_dir.x), static_cast<float>(a_dir.y), 0.0f };
 		const float        e = s.stickElevation * kDegToRad;
 		const RE::NiPoint3 toTip = Normalized(RE::NiPoint3{ aimWorld.x * std::cos(e), aimWorld.y * std::cos(e), -std::sin(e) });
+		PlaceStickAlong(tip, toTip, a_frame.scale);
+	}
+
+	void Game::PlaceStickAlong(const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale)
+	{
+		const auto& s = Settings::Get();
+		auto        ref = _stick.get();
+		if (!ref) {
+			return;
+		}
+		const RE::NiPoint3 toTip = a_toTip;
+		const RE::NiPoint3 tip = a_tip;
 
 		// the mesh axis the stick runs along, pointing to whichever end its +direction reaches
 		const RE::NiPoint3 axis = s.stickTip >= s.stickButt ? toTip : toTip * -1.0f;
@@ -667,8 +679,8 @@ namespace fp
 			z = x.Cross(y);
 			break;
 		}
-		const RE::NiPoint3 origin = tip - axis * (s.stickTip * a_frame.scale);
-		PlaceNode(ref.get(), origin, util::FromAxes(x, y, z), a_frame.scale, false);
+		const RE::NiPoint3 origin = tip - axis * (s.stickTip * a_scale);
+		PlaceNode(ref.get(), origin, util::FromAxes(x, y, z), a_scale, false);
 	}
 
 	void Game::HideAimObjects()

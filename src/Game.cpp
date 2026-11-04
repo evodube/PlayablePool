@@ -162,11 +162,14 @@ namespace fp
 		_npcWaitMarker = {};
 		_npcStep = NpcStep::kNone;
 		_autoAim = false;
+		_npcHeld = false;
+		_npcLooking = false;
 		_watching = false;
 	}
 
 	void Game::ClearForSave()
 	{
+		ReleaseOpponent();  // SetDontMove is saved with the game: never leave it on in a save
 		if (_sim || !_markers.empty()) {
 			Clear();
 			Tell("Pool: balls cleared before saving");

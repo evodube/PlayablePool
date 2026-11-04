@@ -130,6 +130,9 @@ namespace fp
 		void        OpponentStrike(const Frame& a_frame);
 		void        SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos);
 		void        WaitByTable();  // a wait spot at the table on the side they're on
+		void        HoldOpponent(RE::Actor* a_actor, bool a_hold);       // SetDontMove, only when it changes
+		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
+		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
 		void        TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt);
 		RE::NiPoint3 StanceFor(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float& a_heading) const;
 
@@ -150,6 +153,9 @@ namespace fp
 		bool  CamTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out) const;  // _camMutex held
 		void  PlaceGuide(const Frame& a_frame, pool::Vec2 a_dir);
 		void  PlaceStick(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float a_pull, bool a_show);
+		// the stick with its tip at a_tip pointing along a_toTip (world, unit), mesh scale a_scale
+		void  PlaceStickAlong(const RE::NiPoint3& a_tip, const RE::NiPoint3& a_toTip, float a_scale);
+		bool  PlaceStickInHands(RE::Actor* a_actor);  // butt in the right hand, shaft over the left: false = no hands found
 		void  HideAimObjects();
 		void  RemoveAimObjects();
 		void  BlockControls(bool a_block);
@@ -259,6 +265,8 @@ namespace fp
 		float               _npcRepath{ 0.0f }; // seconds since they were last sent back to the wait spot
 		bool                _npcFacing{ false }; // turned to the table since arriving at the wait spot
 		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
+		bool                _npcHeld{ false };   // SetDontMove(true) is on them
+		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
 

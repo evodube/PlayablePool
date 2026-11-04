@@ -93,4 +93,25 @@ namespace fp::Anim
 		// bool abMatchRotation)
 		return CallActor(a_actor, "MoveTo", a_target, 0.0f, 0.0f, 0.0f, true);
 	}
+
+	bool SetDontMove(RE::Actor* a_actor, bool a_dontMove)
+	{
+		return CallActor(a_actor, "SetDontMove", a_dontMove);
+	}
+
+	bool LookAt(RE::Actor* a_actor, RE::TESObjectREFR* a_target)
+	{
+		// Actor.SetLookAt(ObjectReference akTarget, bool abPathingLookAt)
+		return CallActor(a_actor, "SetLookAt", a_target, false);
+	}
+
+	bool ClearLookAt(RE::Actor* a_actor)
+	{
+		return CallActor(a_actor, "ClearLookAt");
+	}
+
+	bool SetHeadTracking(RE::Actor* a_actor, bool a_on)
+	{
+		return CallActor(a_actor, "SetHeadTracking", a_on);
+	}
 }
