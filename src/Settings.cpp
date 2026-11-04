@@ -141,12 +141,4 @@ namespace fp
 			ballPlugin, ballFormID, spec.ballRadius, ballAutoScale, spec.length, spec.width, surfaceZ, lengthAxis, offsetX, offsetY,
 			maxSpeed);
 	}
-
-	void Settings::SaveHudScale() const
-	{
-		const auto value = std::format(L"{:.2f}", hudScale);
-		if (!::WritePrivateProfileStringW(L"HUD", L"fScale", value.c_str(), kIniPath)) {
-			log::warn("could not write [HUD] fScale to the INI");
-		}
-	}
 }

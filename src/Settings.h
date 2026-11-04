@@ -15,8 +15,6 @@ namespace fp
 		}
 
 		void Load();
-		// Writes [HUD] fScale back to the INI (the in-game settings page).
-		void SaveHudScale() const;
 
 		// [Keys] virtual-key codes
 		int keyRack{ 0x67 };       // Numpad 7
