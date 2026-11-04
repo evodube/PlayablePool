@@ -181,6 +181,7 @@ namespace fp
 
 		ExitAim();
 		_opponent = actor->GetHandle();
+		Anim::JoinOwnPackage(actor);  // their walks go by fo4pool.esl's package from here on
 		_opponentName = actor->GetDisplayFullName();
 		if (_opponentName.empty()) {
 			_opponentName = "Player 2";
@@ -281,8 +282,8 @@ namespace fp
 		const auto    shot = _npcMarker.get();
 		const char*   turn = _rules.Over() ? "over" : OpponentsTurn() ? "theirs" : "yours";
 		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : _npcPathTarget == _npcApproach ? "approach" : "old";
-		const std::string state = std::format("step {} turn {} held {} look {} path {} pkg {} level {} combat {} furniture {}",
-			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, PackageName(a_actor),
+		const std::string state = std::format("step {} turn {} held {} look {} path {} own pkg {} pkg {} level {} combat {} furniture {}",
+			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, Anim::InOwnPackage(a_actor) ? "yes" : "no", PackageName(a_actor),
 			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no");
 
 		_npcLogTimer += a_dt;
@@ -333,6 +334,7 @@ namespace fp
 		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : a_target == _npcApproach ? "shot (clear of the table)" : "shot",
 			Distance2D(a_actor->data.location, target->data.location), again ? ", again" : "");
 		_npcPathAge = 0.0f;
+		Anim::JoinOwnPackage(a_actor);  // if they aren't in the Opponent alias yet; this walk may still be PathToReference
 		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun);
 	}
 
@@ -362,6 +364,7 @@ namespace fp
 		HoldOpponent(actor, false);
 		OpponentLooksAtPlayer(actor, false);
 		Anim::SetHeadTracking(actor, true);
+		Anim::ReleaseOwnPackage(actor);
 		_npcFacing = false;
 		if (_npcWaitIdle) {
 			_npcWaitIdle = false;
@@ -746,6 +749,7 @@ namespace fp
 				Anim::Stop(actor);
 			}
 			HideOpponentStick();
+			Anim::ReleaseOwnPackage(actor);
 			log::info("{}: game over, released", _opponentName);
 		}
 		switch (_npcStep) {

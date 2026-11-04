@@ -10,6 +10,10 @@ Form IDs (what fo4pool.ini expects by default):
     xx000811        idle fo4poolAim     Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolAim.hkx
     xx000812        idle fo4poolStrike  Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike.hkx
     xx000813        idle fo4poolWait    Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolWait.hkx
+    xx000814        keyword fo4poolLinkPoolSpot  (the opponent's linked ref: where they're to walk)
+    xx000815        package fo4poolWalkToSpot    (Travel to that linked ref, walking, facing the marker at the end)
+    xx000816        quest fo4poolOpponent        (priority 100, start game enabled; alias 0 "Opponent" carries the
+                                                 package, so it outranks settler sandboxes from other mods)
 
 The idles are "dynamic idles": the human behaviour graph's dyn_ActivationLoop event plays whatever HKX the idle
 names, so no behaviour file is edited. The plugin plays them on the player with AIProcess::PlayIdle.
@@ -79,6 +83,64 @@ def idle(form_id: int, editor_id: str, anim_file: str, event: str = "dyn_Activat
     )
 
 
+def keyword(form_id: int, editor_id: str) -> bytes:
+    # colour (white), type 0 (none): as vanilla link keywords (RELinkTravel)
+    return record(
+        b"KYWD", 0, form_id,
+        subrecord(b"EDID", zstring(editor_id)) + subrecord(b"CNAM", bytes.fromhex("ffffff00")) + subrecord(b"TNAM", struct.pack("<I", 0)),
+    )
+
+
+TRAVEL_TEMPLATE = 0x00002CB0  # Fallout4.esm "Travel"
+
+
+def travel_package(form_id: int, editor_id: str, link_keyword: int, radius: int = 10) -> bytes:
+    """A Travel package to the actor's linked ref (with link_keyword), like vanilla
+    VRWorkshopShared_WorkshopSummonedByBellPackage: same template, data inputs and event blocks."""
+    no_event = subrecord(b"INAM", struct.pack("<I", 0)) + subrecord(b"PDTO", bytes(8))
+    body = (
+        subrecord(b"EDID", zstring(editor_id))
+        # general flags (0x2000: use the preferred speed), type 18 (package), interrupt override 0, preferred speed
+        # 0 (walk), unknown 0x4D, interrupt flags 0xFD, unknown: as the vanilla bell package, but walking
+        + subrecord(b"PKDT", struct.pack("<IBBBBHH", 0x00002000, 18, 0, 0, 0x4D, 0x00FD, 0))
+        # schedule: any time
+        + subrecord(b"PSDT", bytes.fromhex("00ff00ffff000000") + struct.pack("<i", 0))
+        # data inputs: 4, from the Travel template, version 1
+        + subrecord(b"PKCU", struct.pack("<III", 4, TRAVEL_TEMPLATE, 1))
+        # Place to Travel: near linked reference (type 6) with the keyword, radius
+        + subrecord(b"ANAM", zstring("Location")) + subrecord(b"PLDT", struct.pack("<IIiI", 6, link_keyword, radius, 0))
+        + subrecord(b"ANAM", zstring("Bool")) + subrecord(b"CNAM", b"\x00")  # Prefer Preferred Path?
+        + subrecord(b"ANAM", zstring("Bool")) + subrecord(b"CNAM", b"\x00")  # Use "soft radius"?
+        + subrecord(b"ANAM", zstring("Bool")) + subrecord(b"CNAM", b"\x00")  # Ignore marker orientation? (no: face it)
+        + subrecord(b"UNAM", b"\x01") + subrecord(b"UNAM", b"\x03") + subrecord(b"UNAM", b"\x05") + subrecord(b"UNAM", b"\x07")
+        + subrecord(b"XNAM", b"\x08")
+        + subrecord(b"POBA", b"") + no_event
+        + subrecord(b"POEA", b"") + no_event
+        + subrecord(b"POCA", b"") + no_event
+    )
+    return record(b"PACK", 0, form_id, body)
+
+
+def quest(form_id: int, editor_id: str, alias_name: str, package: int, priority: int = 100) -> bytes:
+    """A start-game-enabled quest with one optional reference alias (filled from the plugin with ForceRefTo) that
+    carries `package`. Alias packages go by quest priority: 100 is the highest the Creation Kit allows."""
+    body = (
+        subrecord(b"EDID", zstring(editor_id))
+        # flags (0x10 start game enabled, 0x1 as saved by the CK for those), priority, unknown, delay 0, type 0 (none)
+        + subrecord(b"DNAM", struct.pack("<HBBfI", 0x0011, priority, 0, 0.0, 0))
+        + subrecord(b"NEXT", b"")
+        + subrecord(b"ANAM", struct.pack("<I", 1))  # next alias id
+        + subrecord(b"ALST", struct.pack("<I", 0))
+        + subrecord(b"ALID", zstring(alias_name))
+        # optional, allow reuse in quest, allow reserved (settlers are often reserved by workshop quests)
+        + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
+        + subrecord(b"ALPC", struct.pack("<I", package))
+        + subrecord(b"VTCK", struct.pack("<I", 0))
+        + subrecord(b"ALED", b"")
+    )
+    return record(b"QUST", 0, form_id, body)
+
+
 def build(with_stick: bool) -> bytes:
     own = 0x01000000  # our records come after the one master
     stats = [stat(own | FIRST_ID, "fo4poolBallCue", "fo4pool\\Ball_Cue.nif")]
@@ -93,17 +155,32 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 19), "fo4poolWait", ANIM_DIR + "PoolWait.hkx"),
     ]
 
+    link = own | (FIRST_ID + 20)
+    walk = own | (FIRST_ID + 21)
+    keywords = [keyword(link, "fo4poolLinkPoolSpot")]
+    packages = [travel_package(walk, "fo4poolWalkToSpot", link)]
+    quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", "Opponent", walk)]
+
+    count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests)
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, len(stats) + len(idles), FIRST_ID + 20))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 23))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
         + subrecord(b"DATA", struct.pack("<Q", 0)),
     )
-    return header + group(b"STAT", b"".join(stats)) + group(b"IDLE", b"".join(idles))
+    # groups in the order the game's own master has them
+    return (
+        header
+        + group(b"KYWD", b"".join(keywords))
+        + group(b"STAT", b"".join(stats))
+        + group(b"QUST", b"".join(quests))
+        + group(b"IDLE", b"".join(idles))
+        + group(b"PACK", b"".join(packages))
+    )
 
 
 def main() -> int:
@@ -113,7 +190,7 @@ def main() -> int:
     data = build(with_stick)
     with open(out, "wb") as f:
         f.write(data)
-    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics, 3 idles)")
+    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics, 3 idles, a keyword, a package and a quest)")
     return 0
 
 

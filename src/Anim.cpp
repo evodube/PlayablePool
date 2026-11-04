@@ -73,6 +73,32 @@ namespace fp::Anim
 			std::uint32_t _id;
 		};
 
+		// fo4pool.esl: the opponent's own walk (make_esl.py)
+		constexpr std::uint32_t kLinkKeywordID = 0x814;
+		constexpr std::uint32_t kQuestID = 0x816;
+
+		RE::BGSKeyword* LinkKeyword()
+		{
+			auto* form = util::ResolveAnyForm(Settings::Get().animPlugin, kLinkKeywordID);
+			return form ? form->As<RE::BGSKeyword>() : nullptr;
+		}
+
+		RE::TESQuest* OwnQuest()
+		{
+			auto* form = util::ResolveAnyForm(Settings::Get().animPlugin, kQuestID);
+			return form ? form->As<RE::TESQuest>() : nullptr;
+		}
+
+		RE::BGSRefAlias* OwnAlias()
+		{
+			auto* quest = OwnQuest();
+			if (!quest || quest->aliases.empty()) {
+				return nullptr;
+			}
+			auto* alias = quest->aliases[0];
+			return alias && alias->GetVMTypeID() == RE::BGSRefAlias::TYPE_ID ? static_cast<RE::BGSRefAlias*>(alias) : nullptr;
+		}
+
 		RE::TESIdleForm* Idle(std::uint32_t a_rawID)
 		{
 			const auto& s = Settings::Get();
@@ -128,6 +154,39 @@ namespace fp::Anim
 			return ok;
 		}
 
+		// Calls a Papyrus method on a form or alias (a script object is bound to it first if it has none)
+		template <class T, class... Args>
+		bool CallOn(T* a_object, const char* a_script, const char* a_function, const std::string& a_what, Args... a_args)
+		{
+			auto* game = RE::GameVM::GetSingleton();
+			auto  vm = game ? game->GetVM() : nullptr;
+			if (!vm || !a_object) {
+				return false;
+			}
+			RE::BSScript::Variable self;
+			RE::BSScript::PackVariable(self, a_object);
+			const auto object = self.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(self) : nullptr;
+			if (!object) {
+				log::warn("{}: no script object", a_what);
+				return false;
+			}
+			const RE::BSFixedString script{ a_script };
+			const RE::BSFixedString function{ a_function };
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(a_what) };
+			const bool ok = vm->DispatchMethodCall(
+				object->GetHandle(), script, function,
+				[&](RE::BSScrapArray<RE::BSScript::Variable>& a_out) {
+					a_out = RE::BSScript::detail::PackVariables(a_args...);
+					return true;
+				},
+				callback);
+			log::info("{} {}", a_what, ok ? "sent" : "failed");
+			return ok;
+		}
+
+		bool g_questStarted{ false };
+		bool g_ownWarned{ false };
+
 		std::string What(RE::Actor* a_actor, const char* a_function)
 		{
 			return a_actor ? std::format("{} ({:08X}).{}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function) : std::string(a_function);
@@ -163,14 +222,67 @@ namespace fp::Anim
 		}
 	}
 
+	void JoinOwnPackage(RE::Actor* a_actor)
+	{
+		if (!a_actor || !Settings::Get().opponentOwnPackage) {
+			return;
+		}
+		auto* quest = OwnQuest();
+		auto* alias = OwnAlias();
+		if (!quest || !alias || !LinkKeyword()) {
+			if (!g_ownWarned) {
+				g_ownWarned = true;
+				log::warn("fo4pool.esl has no opponent quest/package (an old one?): walks use PathToReference");
+			}
+			return;
+		}
+		if (!g_questStarted) {
+			g_questStarted = true;  // start game enabled, but a save from before it was added may not have it running
+			CallOn(quest, "Quest", "Start", std::string("quest fo4poolOpponent.Start"));
+		}
+		if (alias->GetActorReference() != a_actor) {
+			CallOn(alias, "ReferenceAlias", "ForceRefTo", What(a_actor, "into the Opponent alias (ForceRefTo)"), static_cast<RE::TESObjectREFR*>(a_actor));
+		}
+	}
+
+	bool InOwnPackage(RE::Actor* a_actor)
+	{
+		auto* alias = a_actor && Settings::Get().opponentOwnPackage ? OwnAlias() : nullptr;
+		return alias && alias->GetActorReference() == a_actor;
+	}
+
+	void ReleaseOwnPackage(RE::Actor* a_actor)
+	{
+		auto* alias = a_actor ? OwnAlias() : nullptr;
+		if (!alias || alias->GetActorReference() != a_actor) {
+			return;
+		}
+		CallOn(alias, "ReferenceAlias", "Clear", What(a_actor, "out of the Opponent alias (Clear)"));
+		if (auto* keyword = LinkKeyword()) {
+			a_actor->SetLinkedRef(nullptr, keyword);
+		}
+		CallActor(a_actor, "EvaluatePackage", false);
+	}
+
 	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun)
 	{
-		// Actor.PathToReference(ObjectReference aTarget, float afWalkRunFactor)
 		std::uint32_t id = ++g_pathId;
 		if (id == 0) {
 			id = ++g_pathId;
 		}
 		g_paths[id % kPaths].store(0);
+		// in the Opponent alias: point the package at the target (their linked ref) and have them look at their
+		// packages again; it walks them there and keeps them there. No result comes back: the plugin watches the
+		// distance
+		if (InOwnPackage(a_actor)) {
+			if (auto* keyword = LinkKeyword(); keyword && a_target) {
+				a_actor->SetLinkedRef(a_target, keyword);
+				log::info("{}: fo4poolWalkToSpot to {:08X} (walk {})", What(a_actor, "package"), a_target->GetFormID(), id);
+				CallActor(a_actor, "EvaluatePackage", false);
+				return id;
+			}
+		}
+		// Actor.PathToReference(ObjectReference aTarget, float afWalkRunFactor)
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new PathDone(What(a_actor, "PathToReference"), id) };
 		return CallActorWith(a_actor, "PathToReference", callback, a_target, a_walkRun) ? id : 0;
 	}

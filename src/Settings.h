@@ -92,6 +92,7 @@ namespace fp
 		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
+		bool  opponentOwnPackage{ true };   // walk them with fo4pool.esl's own AI package (outranks settler sandboxes); off = PathToReference
 
 		// [Anim] the pool idles (fo4pool.esl) the opponent plays
 		bool          anim{ true };

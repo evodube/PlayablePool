@@ -14,6 +14,14 @@ namespace fp::Anim
 	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun);
 	// How that walk ended: -1 not yet (or unknown), 0 it failed (no path, or it was cut short), 1 they got there.
 	int PathResult(std::uint32_t a_id);
+
+	// fo4pool.esl's own walk: quest fo4poolOpponent (priority 100) has an alias whose package (fo4poolWalkToSpot)
+	// walks the actor to their linked ref (keyword fo4poolLinkPoolSpot) and keeps them there, facing it. Alias
+	// packages go by quest priority, so it outranks settler sandboxes from other mods, where PathToReference gets
+	// cut short. PathTo uses it for an actor in the alias ([Opponent] bOwnPackage); otherwise PathToReference.
+	void JoinOwnPackage(RE::Actor* a_actor);     // into the alias (ForceRefTo; takes a moment)
+	void ReleaseOwnPackage(RE::Actor* a_actor);  // out of it, no linked ref: their own AI again
+	bool InOwnPackage(RE::Actor* a_actor);       // the alias holds them
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.
 	bool MoveTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target);
 	// Papyrus Actor.SetRestrained: true keeps them where they are, so their sandbox package can't walk them off.

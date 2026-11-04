@@ -122,6 +122,7 @@ namespace fp
 		opponentWalkTimeout = std::max(1.0f, ReadFloat(L"Opponent", L"fWalkTimeout", opponentWalkTimeout));
 		opponentRun = ReadBool(L"Opponent", L"bRun", opponentRun);
 		opponentLog = ReadBool(L"Opponent", L"bLog", opponentLog);
+		opponentOwnPackage = ReadBool(L"Opponent", L"bOwnPackage", opponentOwnPackage);
 
 		anim = ReadBool(L"Anim", L"bEnabled", anim);
 		animPlugin = Narrow(ReadString(L"Anim", L"sPlugin", std::wstring(animPlugin.begin(), animPlugin.end())));
