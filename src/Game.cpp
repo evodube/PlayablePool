@@ -749,7 +749,7 @@ namespace fp
 	{
 		static const RE::NiColor kGreen{ 0.35f, 1.0f, 0.45f };  // the HUD's green
 		RE::BSVisit::TraverseScenegraphGeometries(a_root, [&](RE::BSGeometry* a_geom) {
-			auto* prop = RE::netimmerse_cast<RE::BSLightingShaderProperty*>(a_geom->properties[1].get());
+			auto* prop = netimmerse_cast<RE::BSLightingShaderProperty*>(a_geom->properties[1].get());
 			if (!prop) {
 				return RE::BSVisitControl::kContinue;
 			}
