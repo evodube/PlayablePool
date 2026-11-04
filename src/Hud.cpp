@@ -524,6 +524,27 @@ namespace fp::Hud
 			}
 		}
 
+		// the fo4pool page in F4SE Menu Framework's menu
+		void __stdcall SettingsPage()
+		{
+			auto& settings = fp::Settings::Get();
+			TextWrapped("The HUD sizes itself to your screen height. This makes it bigger or smaller on top of that.");
+			Spacing();
+			float scale = settings.hudScale;
+			if (SliderFloat("HUD scale", &scale, 0.3f, 3.0f, "%.2fx")) {
+				settings.hudScale = std::clamp(scale, 0.3f, 3.0f);  // live while dragging
+			}
+			if (IsItemDeactivatedAfterEdit()) {
+				settings.SaveHudScale();  // written once, when the slider is let go
+			}
+			if (Button("Reset to 1.00x")) {
+				settings.hudScale = 1.0f;
+				settings.SaveHudScale();
+			}
+			Spacing();
+			TextWrapped("Saved to Data\\F4SE\\Plugins\\fo4pool.ini, [HUD] fScale. Rack a table (Numpad 7) to see the HUD while you change it.");
+		}
+
 		F4SEMenuFramework::Model::HudElement* g_element{ nullptr };
 	}
 
@@ -537,6 +558,8 @@ namespace fp::Hud
 			return;
 		}
 		g_element = F4SEMenuFramework::AddHudElement(Draw);
-		log::info("HUD element registered");
+		F4SEMenuFramework::SetSection("fo4pool");
+		F4SEMenuFramework::AddSectionItem("HUD", SettingsPage);
+		log::info("HUD element and settings page registered");
 	}
 }
