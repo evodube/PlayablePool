@@ -48,13 +48,16 @@ namespace fp
 		void ClearMarkers();
 
 		RE::TESObjectREFR*  PickTable() const;
-		RE::TESBoundObject* BallForm() const;
+		RE::TESBoundObject* BallForm(int a_number) const;
+		void                FreezePhysics(RE::TESObjectREFR* a_ref);
 		bool                GetFrame(Frame& a_out) const;
 		RE::NiPoint3        ToWorld(const Frame& a_frame, pool::Vec2 a_pos, float a_height) const;
 		RE::ObjectRefHandle Spawn(RE::TESBoundObject* a_form, RE::TESObjectREFR* a_table, const RE::NiPoint3& a_pos) const;
 		float               BallScale(RE::NiAVObject* a_root);
 		void                PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden);
 		bool                IsOurs(const RE::TESObjectREFR* a_ref) const;
+		static std::string  ModelPath(const RE::TESObjectREFR* a_ref);
+		static bool         IsPoolTable(const RE::TESObjectREFR* a_ref);
 		static bool         IsGamePaused();
 		static void         Notify(const std::string& a_message);
 
@@ -69,6 +72,7 @@ namespace fp
 		bool                                       _haveLast{ false };
 		bool                                       _scratch{ false };
 		bool                                       _warned3D{ false };
+		std::vector<RE::NiAVObject*>               _frozen;  // ball 3D roots whose Havok we already switched off
 
 		// render thread
 		std::array<bool, 4> _keyWasDown{};

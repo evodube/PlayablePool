@@ -210,10 +210,10 @@ namespace
 		Check(std::abs(moved - expected) < 1.0, Fmt("travelled %.2f, expected about %.2f", moved, expected));
 	}
 
-	void Break(std::uint32_t a_seed, double a_speed)
+	void Break(std::uint32_t a_seed, double a_speed, const TableSpec& a_spec = {}, const char* a_table = "default")
 	{
-		std::printf("break (seed %u, speed %.0f): everything stays sane\n", a_seed, a_speed);
-		Sim sim;
+		std::printf("break (%s table, seed %u, speed %.0f): everything stays sane\n", a_table, a_seed, a_speed);
+		Sim sim(a_spec);
 		sim.Rack(a_seed);
 
 		// the rack itself: 16 balls, no overlaps
@@ -265,7 +265,8 @@ namespace
 		int pocketed = 0;
 		for (const auto& b : sim.Balls()) {
 			pocketed += b.state == BallState::kPocketed;
-			moved += b.state == BallState::kPocketed || std::abs(b.pos.x - sim.FootSpot().x) > 15.0 || std::abs(b.pos.y) > 15.0;
+			const double away = 7.5 * spec.ballRadius;
+			moved += b.state == BallState::kPocketed || std::abs(b.pos.x - sim.FootSpot().x) > away || std::abs(b.pos.y) > away;
 		}
 		std::printf("    %d balls pocketed, %d moved well away from the rack, %d ball-ball contacts\n", pocketed, moved,
 			Count(ev, Event::Type::kBallBall));
@@ -320,6 +321,14 @@ int main()
 	}
 	Break(5, 300.0);
 	Break(6, 1400.0);
+
+	// the vanilla PoolTable01 with the vanilla balls (fo4pool.ini defaults)
+	const TableSpec vanilla{ .length = 224.0, .width = 112.0, .ballRadius = 3.51, .cornerMouth = 12.4, .sideMouth = 20.8, .rollDecel = 17.5, .stopSpeed = 0.7 };
+	for (std::uint32_t seed : { 2u, 99u, 4242u }) {
+		Break(seed, 880.0, vanilla, "PoolTable01");
+	}
+	Break(7, 1408.0, vanilla, "PoolTable01");
+	Break(8, 352.0, vanilla, "PoolTable01");
 	Deterministic();
 	Respot();
 

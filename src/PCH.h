@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
+#include <limits>
 #include <chrono>
 #include <cmath>
 #include <cstdint>

@@ -69,7 +69,12 @@ namespace fp
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
 
 		ballPlugin = Narrow(ReadString(L"Ball", L"sPlugin", std::wstring(ballPlugin.begin(), ballPlugin.end())));
+		cueFormID = static_cast<std::uint32_t>(ReadInt(L"Ball", L"iCueFormID", cueFormID));
 		ballFormID = static_cast<std::uint32_t>(ReadInt(L"Ball", L"iFormID", ballFormID));
+		for (int n = 1; n < 16; ++n) {
+			const auto key = std::format(L"iFormID{}", n);
+			numberFormIDs[n] = static_cast<std::uint32_t>(ReadInt(L"Ball", key.c_str(), 0));
+		}
 		ballAutoScale = ReadBool(L"Ball", L"bAutoScale", ballAutoScale);
 		ballScale = ReadFloat(L"Ball", L"fScale", ballScale);
 		ballZOffset = ReadFloat(L"Ball", L"fZOffset", ballZOffset);

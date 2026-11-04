@@ -10,11 +10,11 @@ HUD, rules or opponents yet.
 
 - Fallout 4 1.10.163 ("Old Gen"). The plugin is also built for Next-Gen and Anniversary, but only OG is targeted.
 - F4SE and Address Library for F4SE Plugins for your game version.
-- A ball object: `fo4pool.esl` with one static (see below).
+- `fo4pool.esl` and the collision-free ball meshes (see below).
 
 ## Trying it
 
-1. Install `Data/F4SE/Plugins/fo4pool.dll` and `fo4pool.ini`, plus `fo4pool.esl`.
+1. Install `Data/F4SE/Plugins/fo4pool.dll` and `fo4pool.ini`, plus `fo4pool.esl` and `Meshes/fo4pool/`.
 2. Go to a pool table. Look at it (or click it in the console).
 3. **Numpad 4**: calibration markers appear on the felt corners, side pockets, head and foot spots and centre.
    If they don't sit on the felt, edit `[Table]` in `fo4pool.ini` (length, width, height, offsets, axis), then
@@ -28,23 +28,29 @@ Balls are removed automatically before the game saves.
 
 `Data/F4SE/Plugins/fo4pool.log` records what happened (form IDs, the ball mesh's measured size, every shot).
 
-## The ball object
+## The balls
 
-The plugin spawns a static object for each ball and moves its 3D itself, so the object must not use Havok.
-Any ball-shaped mesh works for testing; with `bAutoScale=1` the plugin measures the mesh and scales it to
-`fRadius` (2.0 units, a real 57 mm ball). Numbered textures come later.
-
-To make the ESL from a mesh path (relative to `Data\Meshes`):
+The plugin spawns a static object for each ball and moves its 3D itself, so the balls must not use Havok. The
+vanilla pool balls (`Meshes\Props\Poolballs\Poolball_Cue.nif`, `Poolball_01.nif` to `Poolball_15.nif`) are physics
+objects, so fo4pool uses collision-free copies of them:
 
 ```
-python tools/make_ball_esl.py "Some\\Folder\\Ball.nif"
+python tools/strip_collision.py Poolball_Cue.nif Data/Meshes/fo4pool/Ball_Cue.nif
+python tools/strip_collision.py Poolball_01.nif  Data/Meshes/fo4pool/Ball_01.nif   (and so on to 15)
+python tools/make_esl.py Data/fo4pool.esl
 ```
 
-Or make it by hand in xEdit/the Creation Kit: a new light plugin `fo4pool.esl` with one STAT using the mesh, form
-ID `xx000800`. Any other static works too: point `[Ball] sPlugin` and `iFormID` at it.
+`fo4pool.esl` holds 16 statics: the cue ball at `xx000800` and ball n at `xx000800 + n`. Bethesda's meshes aren't
+in this repository; run the tools on the ones from your own game.
 
-If the mesh has collision, that collision stays where the ball was spawned (only the visible ball moves), so a
-mesh without collision is better.
+Any other static works too: point `[Ball]` in the INI at it. If an object with Havok is used anyway, the plugin
+switches its collision to keyframed so the physics engine leaves it alone.
+
+## Tables
+
+Racking prefers whatever the crosshair points at whose mesh path contains "PoolTable". The INI defaults are measured
+from the vanilla `SetDressing\PoolTable\PoolTable01.nif`: felt at height 70.4, 224 × 112 between the cushion noses,
+length along the mesh's Y axis.
 
 ## Building
 

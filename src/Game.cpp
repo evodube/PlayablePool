@@ -166,6 +166,7 @@ namespace fp
 		_sim.reset();
 		_balls.fill({});
 		_markers.clear();
+		_frozen.clear();
 		_haveLast = false;
 		_scratch = false;
 	}
@@ -216,8 +217,9 @@ namespace fp
 		const float        yaw = player->data.angle.z;
 		const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
 
+		// A pool table mesh wins over anything else that's table sized.
 		RE::TESObjectREFR* best = nullptr;
-		float              bestT = s.aimDistance;
+		float              bestScore = std::numeric_limits<float>::max();
 		ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
 			a_cell->ForEachReferenceInRange(origin, s.aimDistance + 300.0f, [&](RE::TESObjectREFR* a_ref) {
 				auto* root = a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && !IsOurs(a_ref) ? a_ref->Get3D() : nullptr;
@@ -225,16 +227,20 @@ namespace fp
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				const auto& b = root->worldBound;
-				if (b.fRadius < 40.0f || b.fRadius > 300.0f) {  // roughly table sized
+				const bool  pool = IsPoolTable(a_ref);
+				if (!pool && (b.fRadius < 40.0f || b.fRadius > 300.0f)) {  // roughly table sized
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				const auto  oc = b.center - origin;
 				const float t = oc.Dot(dir);
 				const float miss2 = oc.SqrLength() - t * t;
-				// the view line passes near the object's middle, and it's the nearest such object so far
-				if (t > 0.0f && t < bestT && miss2 <= b.fRadius * b.fRadius * 0.5f) {
-					best = a_ref;
-					bestT = t;
+				// the view line passes near the object's middle, within reach
+				if (t > 0.0f && t < s.aimDistance + b.fRadius && miss2 <= b.fRadius * b.fRadius * 0.5f) {
+					const float score = t + (pool ? 0.0f : 100000.0f);
+					if (score < bestScore) {
+						best = a_ref;
+						bestScore = score;
+					}
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
@@ -242,7 +248,22 @@ namespace fp
 		return best;
 	}
 
-	RE::TESBoundObject* Game::BallForm() const
+	std::string Game::ModelPath(const RE::TESObjectREFR* a_ref)
+	{
+		auto* base = a_ref ? a_ref->GetObjectReference() : nullptr;
+		auto* model = base ? base->As<RE::TESModel>() : nullptr;
+		const char* path = model ? model->GetModel() : nullptr;
+		return path ? path : "";
+	}
+
+	bool Game::IsPoolTable(const RE::TESObjectREFR* a_ref)
+	{
+		auto path = ModelPath(a_ref);
+		std::ranges::transform(path, path.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+		return path.find("pooltable") != std::string::npos && path.find("rack") == std::string::npos;
+	}
+
+	RE::TESBoundObject* Game::BallForm(int a_number) const
 	{
 		const auto& s = Settings::Get();
 		auto*       dh = RE::TESDataHandler::GetSingleton();
@@ -253,14 +274,35 @@ namespace fp
 		if (!file || file->compileIndex == 0xFF) {
 			return nullptr;
 		}
-		RE::TESFormID id;
+		const std::uint32_t raw = s.FormIDFor(a_number);
+		RE::TESFormID       id;
 		if (file->compileIndex == 0xFE) {  // light plugin
-			id = (0xFEu << 24) | (static_cast<std::uint32_t>(file->smallFileCompileIndex) << 12) | (s.ballFormID & 0xFFF);
+			id = (0xFEu << 24) | (static_cast<std::uint32_t>(file->smallFileCompileIndex) << 12) | (raw & 0xFFF);
 		} else {
-			id = (static_cast<std::uint32_t>(file->compileIndex) << 24) | (s.ballFormID & 0xFFFFFF);
+			id = (static_cast<std::uint32_t>(file->compileIndex) << 24) | (raw & 0xFFFFFF);
 		}
 		auto* form = RE::TESForm::GetFormByID(id);
 		return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+	}
+
+	void Game::FreezePhysics(RE::TESObjectREFR* a_ref)
+	{
+		// fo4pool's ball meshes have no collision. If [Ball] points at an object that does have Havok, make it
+		// keyframed so the physics engine doesn't move the ball while we do.
+		auto* root = a_ref ? a_ref->Get3D() : nullptr;
+		if (!root || std::ranges::find(_frozen, root) != _frozen.end()) {
+			return;
+		}
+		_frozen.push_back(root);
+		int count = 0;
+		RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNPCollisionObject* a_collision) {
+			a_collision->SetMotionType(RE::hknpMotionPropertiesId::Preset::kKeyframed);
+			++count;
+			return RE::BSVisitControl::kContinue;
+		});
+		if (count) {
+			log::info("{:08X}: switched {} collision object(s) to keyframed", a_ref->GetFormID(), count);
+		}
 	}
 
 	bool Game::GetFrame(Frame& a_out) const
@@ -330,6 +372,7 @@ namespace fp
 		if (!root) {
 			return;
 		}
+		FreezePhysics(a_ref);
 		if (root->GetAppCulled() != a_hidden) {
 			root->SetAppCulled(a_hidden);
 		}
@@ -371,10 +414,14 @@ namespace fp
 			Notify("Pool: look at a pool table (or click it in the console) first");
 			return;
 		}
-		auto* ball = BallForm();
-		if (!ball) {
-			Notify(std::format("Pool: ball form {}|{:X} not found (see fo4pool.ini [Ball])", s.ballPlugin, s.ballFormID));
-			return;
+		std::array<RE::TESBoundObject*, pool::Sim::kBalls> forms{};
+		for (int i = 0; i < pool::Sim::kBalls; ++i) {
+			forms[i] = BallForm(i);
+			if (!forms[i]) {
+				Notify(std::format("Pool: ball {} ({}|{:X}) not found. Is {} installed? See fo4pool.ini [Ball]", i, s.ballPlugin,
+					s.FormIDFor(i), s.ballPlugin));
+				return;
+			}
 		}
 
 		Clear();
@@ -396,10 +443,11 @@ namespace fp
 		int spawned = 0;
 		for (int i = 0; i < pool::Sim::kBalls; ++i) {
 			const auto& b = _sim->Balls()[i];
-			_balls[i] = Spawn(ball, table, ToWorld(frame, b.pos, static_cast<float>(s.spec.ballRadius)));
+			_balls[i] = Spawn(forms[i], table, ToWorld(frame, b.pos, static_cast<float>(s.spec.ballRadius)));
 			spawned += static_cast<bool>(_balls[i]);
 		}
-		log::info("racked on {:08X} ({}x{} felt): {} balls spawned", table->GetFormID(), s.spec.length, s.spec.width, spawned);
+		log::info("racked on {:08X} '{}' ({}x{} felt): {} balls spawned", table->GetFormID(), ModelPath(table), s.spec.length,
+			s.spec.width, spawned);
 		Notify(spawned == pool::Sim::kBalls ? "Pool: racked" : std::format("Pool: only {} of 16 balls could be placed", spawned));
 	}
 
@@ -443,6 +491,7 @@ namespace fp
 			remove(m.ref);
 		}
 		_markers.clear();
+		_frozen.clear();
 		_sim.reset();
 		_table = {};
 	}
@@ -469,7 +518,7 @@ namespace fp
 		auto& s = Settings::Get();
 		s.Load();
 		auto* table = PickTable();
-		auto* ball = BallForm();
+		auto* ball = BallForm(0);
 		if (!table || !ball) {
 			Notify(!table ? "Pool: look at a pool table (or click it in the console) first" : "Pool: ball form not found (see fo4pool.ini [Ball])");
 			return;
