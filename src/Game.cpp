@@ -259,7 +259,7 @@ namespace fp
 			r[1].x, r[1].y, r[1].z, r[2].x, r[2].y, r[2].z);
 
 		// every piece of the table's mesh, in the table's own space: tells us which mesh this really is
-		const auto inv = a_frame.tableRot.Transpose();
+		const auto& inv = a_frame.tableRot;  // undoes the table's rotation (see Frame)
 		const float s = a_frame.scale != 0.0f ? a_frame.scale : 1.0f;
 		if (auto* root = a_table->Get3D()) {
 			RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geom) {
@@ -337,7 +337,7 @@ namespace fp
 		}
 		const auto& w = root->GetWorldTransform();
 		a_out.tableRot = w.rotate;
-		a_out.rot = w.rotate * AxisSwap(Settings::Get().lengthAxis);
+		a_out.rot = AxisSwap(Settings::Get().lengthAxis).Transpose() * w.rotate;
 		a_out.origin = w.translate;
 		a_out.scale = w.scale;
 		return true;
@@ -352,7 +352,7 @@ namespace fp
 		} else {
 			mesh = { s.offsetX + static_cast<float>(a_pos.x), s.offsetY + static_cast<float>(a_pos.y), s.surfaceZ + a_height };
 		}
-		return a_frame.origin + a_frame.tableRot * (mesh * a_frame.scale);
+		return a_frame.origin + a_frame.tableRot.Transpose() * (mesh * a_frame.scale);
 	}
 
 	RE::ObjectRefHandle Game::Spawn(RE::TESBoundObject* a_form, RE::TESObjectREFR* a_table, const RE::NiPoint3& a_pos) const
@@ -407,10 +407,9 @@ namespace fp
 		RE::NiTransform local;
 		if (auto* parent = root->parent) {
 			const auto& p = parent->GetWorldTransform();
-			const auto  inv = p.rotate.Transpose();
 			const float ps = p.scale != 0.0f ? p.scale : 1.0f;
-			local.rotate = inv * a_rot;
-			local.translate = (inv * (a_pos - p.translate)) * (1.0f / ps);
+			local.rotate = a_rot * p.rotate.Transpose();
+			local.translate = (p.rotate * (a_pos - p.translate)) * (1.0f / ps);
 			local.scale = a_scale / ps;
 		} else {
 			local.rotate = a_rot;
@@ -493,7 +492,7 @@ namespace fp
 		// where the player faces, flattened onto the table and turned into table space
 		const float        yaw = player->data.angle.z;
 		const RE::NiPoint3 world{ std::sin(yaw), std::cos(yaw), 0.0f };
-		const RE::NiPoint3 table = frame.rot.Transpose() * world;
+		const RE::NiPoint3 table = frame.rot * world;
 		const float        speed = Settings::Get().shotSpeed * a_power;
 		_sim->Strike({ table.x, table.y }, speed);
 		log::info("shot: table dir ({:.3f}, {:.3f}) speed {:.0f}", table.x, table.y, speed);
@@ -649,7 +648,7 @@ namespace fp
 
 			double m[3][3];
 			b.rot.ToMatrix(m);
-			PlaceNode(ref.get(), ToWorld(frame, b.pos, r + s.ballZOffset - sink), frame.rot * FromRows(m), BallScale(ref->Get3D()) * frame.scale,
+			PlaceNode(ref.get(), ToWorld(frame, b.pos, r + s.ballZOffset - sink), FromRows(m).Transpose() * frame.rot, BallScale(ref->Get3D()) * frame.scale,
 				hidden);
 		}
 	}

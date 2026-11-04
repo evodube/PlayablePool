@@ -24,10 +24,13 @@ namespace fp
 		void ClearForSave();
 
 	private:
+		// The game stores a node's rotation with the object's axes as the ROWS of the matrix: a point p in the
+		// object's own space is at translate + scale * (rotate.Transpose() * p) in the world, and rotate * v turns a
+		// world direction back into the object's space. Ball rotations are built the same way (rows = axes).
 		struct Frame  // the table's felt in the world
 		{
-			RE::NiMatrix3 rot;        // world rotation of the table, times the length-axis swap
-			RE::NiMatrix3 tableRot;   // world rotation of the table alone
+			RE::NiMatrix3 rot;        // the table's rotation with the length-axis swap: rows = table x, y, z in the world
+			RE::NiMatrix3 tableRot;   // the table node's own world rotation
 			RE::NiPoint3  origin;     // the table's world position
 			float         scale{ 1.0f };
 		};
