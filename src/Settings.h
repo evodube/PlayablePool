@@ -89,7 +89,7 @@ namespace fp
 		float opponentSkill{ 0.6f };        // 0 = hopeless, 1 = never misses its aim
 		float opponentAimSeconds{ 2.5f };   // how long they line the shot up (PoolAim) before striking
 		float opponentPickDistance{ 600.0f }; // how far away the NPC you challenge can be
-		float opponentWalkTimeout{ 20.0f }; // seconds to reach the shot before they're put there
+		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
 

@@ -198,9 +198,10 @@ namespace fp
 		}
 		_overhead = !_overhead;
 		std::scoped_lock lock(_camMutex);
-		if (!_overhead && _camMapped) {
+		if (_camMapped) {
 			if (auto* free = FreeCamera()) {
-				Component(free, 1 - _yawIndex) = _pitchSign * Settings::Get().camPitch * kDegToRad;
+				// straight down at once (not on the next mouse move), or back to the usual shot pitch
+				Component(free, 1 - _yawIndex) = _pitchSign * (_overhead ? kOverheadPitch : Settings::Get().camPitch * kDegToRad);
 			}
 		}
 	}
@@ -446,9 +447,13 @@ namespace fp
 		const auto& s = Settings::Get();
 		const float yaw = _yawIndex == 0 ? a_free->rotation.x : a_free->rotation.y;
 		const float pitch = _pitchSign * (_yawIndex == 0 ? a_free->rotation.y : a_free->rotation.x);
-		const float distance = _overhead ? s.overheadHeight : s.camDistance;
+		if (_overhead) {
+			// top-down: right above the middle of the table, whichever way it's turned
+			a_out = _camTarget + RE::NiPoint3{ 0.0f, 0.0f, s.overheadHeight };
+			return true;
+		}
 		const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
-		a_out = _camTarget - forward * distance;
+		a_out = _camTarget - forward * s.camDistance;
 		return true;
 	}
 
@@ -494,6 +499,8 @@ namespace fp
 				if (!_haveCamTarget) {
 					_camTarget = _camDesired;
 					_haveCamTarget = true;
+				} else if (_overhead) {
+					_camTarget = _camDesired;  // top-down: on the middle of the table, no drifting there from the cue ball
 				} else if (_camFollow) {
 					_camTarget = _camTarget + (_camDesired - _camTarget) * std::min(1.0f, dt * 5.0f);
 				}
