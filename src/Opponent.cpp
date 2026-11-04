@@ -282,9 +282,12 @@ namespace fp
 		const auto    shot = _npcMarker.get();
 		const char*   turn = _rules.Over() ? "over" : OpponentsTurn() ? "theirs" : "yours";
 		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : _npcPathTarget == _npcApproach ? "approach" : "old";
-		const std::string state = std::format("step {} turn {} held {} look {} path {} own pkg {} pkg {} level {} combat {} furniture {}",
+		const std::string state = std::format("step {} turn {} held {} look {} path {} own pkg {} pkg {} level {} combat {} furniture {} facing {}",
 			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, Anim::RunningOwnPackage(a_actor) ? "running" : Anim::InOwnPackage(a_actor) ? "in alias" : "no", PackageName(a_actor),
-			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no");
+			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no",
+			_npcStep == NpcStep::kAiming || _npcStep == NpcStep::kStriking || _npcStep == NpcStep::kFollow ?
+				std::format("{:.0f} deg off the shot", util::AngleDiff(a_actor->data.angle.z, _npcHeading) / 0.017453292f) :
+				std::string("-"));
 
 		_npcLogTimer += a_dt;
 		if (state == _npcLogLast && _npcLogTimer < 1.0f) {
@@ -671,6 +674,7 @@ namespace fp
 		_npcFacing = false;
 		if (actor && marker) {
 			_npcAtApproach = false;
+			_npcTurnWarned = false;
 			PathOpponent(actor, _npcApproach ? _npcApproach : _npcMarker, s.opponentRun ? 1.0f : 0.0f);
 			_npcStep = NpcStep::kWalking;
 		} else {
@@ -693,6 +697,35 @@ namespace fp
 		_shotLive = true;
 		_sim->Strike(_npcShot.dir, _npcShot.speed);
 		log::info("{} shoots: speed {:.0f}", _opponentName, _npcShot.speed);
+	}
+
+	void Game::KeepFacingShot(RE::Actor* a_actor)
+	{
+		// lined up: facing so the cue runs along the shot line. Anything that turned them (their package, a look-at)
+		// is undone every frame; a big turn is logged, it means something is fighting the hold
+		const float off = util::AngleDiff(a_actor->data.angle.z, _npcHeading);
+		if (std::abs(off) > 0.02f) {
+			if (std::abs(off) > 0.17f && !_npcTurnWarned) {
+				_npcTurnWarned = true;
+				log::warn("{}: turned {:.0f} deg off the shot while lining it up (package {}); turned back", _opponentName,
+					off / 0.017453292f, PackageName(a_actor));
+			}
+			a_actor->SetHeading(_npcHeading);
+		}
+	}
+
+	void Game::GetOutOfFurniture(RE::Actor* a_actor, float a_dt)
+	{
+		// playing pool, not sitting about: out of any chair or workstation they've taken (their sandbox's doing)
+		auto* proc = a_actor->currentProcess;
+		_npcGetUpTimer = std::max(0.0f, _npcGetUpTimer - a_dt);
+		if (!proc || !proc->GetOccupiedFurniture() || _npcGetUpTimer > 0.0f) {
+			return;
+		}
+		_npcGetUpTimer = 3.0f;
+		auto furniture = proc->GetOccupiedFurniture().get();
+		log::info("{}: in furniture {:08X}: getting up (package {})", _opponentName, furniture ? furniture->GetFormID() : 0u, PackageName(a_actor));
+		a_actor->InitiateGetUpPackage();
 	}
 
 	void Game::TickOpponent(const Frame& a_frame, float a_dt)
@@ -722,6 +755,9 @@ namespace fp
 			return;  // paused
 		}
 		LogOpponent(actor, a_dt);
+		if (!_npcReleasedForOver) {
+			GetOutOfFurniture(actor, a_dt);
+		}
 
 		if (!OpponentsTurn()) {
 			if (_npcStep != NpcStep::kNone && _npcStep != NpcStep::kFollow) {
@@ -813,8 +849,12 @@ namespace fp
 
 		case NpcStep::kAiming:
 			if (_npcTimer >= kSettleSeconds && _npcTimer - a_dt < kSettleSeconds) {
+				HoldOpponent(actor, true);  // nothing (their own package) turns or moves them off the shot now
 				actor->SetHeading(_npcHeading);
 				Anim::PlayAim(actor);
+			}
+			if (_npcTimer >= kSettleSeconds) {
+				KeepFacingShot(actor);
 			}
 			if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
 				HideOpponentStick();
@@ -827,6 +867,7 @@ namespace fp
 			break;
 
 		case NpcStep::kStriking:
+			KeepFacingShot(actor);
 			if (!PlaceStickInHands(actor)) {
 				HideOpponentStick();
 			}
@@ -838,6 +879,7 @@ namespace fp
 			break;
 
 		case NpcStep::kFollow:
+			KeepFacingShot(actor);
 			if (!PlaceStickInHands(actor)) {
 				HideOpponentStick();
 			}

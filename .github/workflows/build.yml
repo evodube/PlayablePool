@@ -48,12 +48,71 @@ jobs:
       - name: Build
         run: xmake build -y fo4pool
 
+      # ---------------- Papyrus (fo4pool.esl's opponent quest scripts) ----------------
+      - name: Vanilla script sources
+        run: git clone --depth 1 https://github.com/rux616/modding-fo4-scripts-vanilla.git vanilla
+
+      - name: Cache Caprica
+        id: caprica-cache
+        uses: actions/cache@v4
+        with:
+          path: caprica-bin
+          key: caprica-v0.3.0
+
+      - name: Get Caprica
+        if: steps.caprica-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Caprica has no release binaries: build it (vcpkg pulls boost + fmt); cached afterwards. Same recipe as
+          # evodube/MagicSyringesMod
+          git clone --depth 1 -b v0.3.0 https://github.com/Orvid/Caprica caprica-src
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          # Caprica pins boost 1.80, which no longer builds with current MSVC; use the runner's vcpkg ports
+          $baseline = git -C $env:VCPKG_ROOT rev-parse HEAD
+          $manifest = Get-Content caprica-src/vcpkg.json -Raw | ConvertFrom-Json
+          $manifest.'builtin-baseline' = $baseline
+          # Caprica's custom formatters use pre-fmt-10 parse() rules; patch them to the current rules
+          foreach ($f in 'Caprica/common/identifier_ref.h', 'Caprica/papyrus/PapyrusIdentifier.h', 'Caprica/papyrus/PapyrusType.h') {
+            $p = "caprica-src/$f"
+            $t = Get-Content $p -Raw
+            $t = $t.Replace('if (ctx.begin() != ctx.end())', "if (ctx.begin() != ctx.end() && *ctx.begin() != '}')")
+            $t = $t.Replace('return ctx.end();', 'return ctx.begin();')
+            Set-Content $p $t -NoNewline
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content caprica-src/vcpkg.json
+          cmake -S caprica-src -B caprica-build -A x64 "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          if ($LASTEXITCODE -ne 0) { throw "Caprica configure failed" }
+          cmake --build caprica-build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Caprica build failed" }
+          $exe = Get-ChildItem -Recurse caprica-build -Filter Caprica.exe | Select-Object -First 1
+          if (-not $exe) { throw "Caprica.exe not built" }
+          New-Item -ItemType Directory -Force caprica-bin | Out-Null
+          Copy-Item "$($exe.DirectoryName)\*" caprica-bin -Recurse -Force
+
+      - name: Compile scripts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out/Scripts, vanilla-base | Out-Null
+          # base-game scripts only, leading whitespace trimmed (some vanilla files start with a space)
+          Get-ChildItem vanilla/Source -Filter *.psc -File | ForEach-Object {
+            $t = (Get-Content $_.FullName -Raw).TrimStart()
+            if ($t -match '^(?i)scriptname') { Set-Content (Join-Path vanilla-base $_.Name) $t -NoNewline }
+          }
+          Copy-Item vanilla/Source/Institute_Papyrus_Flags.flg vanilla-base/
+          Remove-Item -Recurse -Force vanilla   # Caprica also scans the flags file's folder
+          ./caprica-bin/Caprica.exe -g fallout4 -i "papyrus;vanilla-base" -f vanilla-base/Institute_Papyrus_Flags.flg -o out/Scripts papyrus/fo4poolOpponentQuest.psc papyrus/fo4poolOpponentAlias.psc
+          if ($LASTEXITCODE -ne 0) { throw "Caprica failed" }
+          Get-ChildItem out/Scripts
+
       - name: Package
         shell: pwsh
         run: |
           $stage = "stage"
           New-Item -ItemType Directory -Force "$stage" | Out-Null
           Copy-Item -Recurse dist/Data "$stage/Data"
+          New-Item -ItemType Directory -Force "$stage/Data/Scripts/Source/User" | Out-Null
+          Copy-Item out/Scripts/fo4poolOpponentQuest.pex, out/Scripts/fo4poolOpponentAlias.pex "$stage/Data/Scripts/"
+          Copy-Item papyrus/*.psc "$stage/Data/Scripts/Source/User/"
           Copy-Item build/out/F4SE/Plugins/fo4pool.dll "$stage/Data/F4SE/Plugins/"
           Copy-Item build/out/F4SE/Plugins/fo4pool.pdb "$stage/Data/F4SE/Plugins/" -ErrorAction SilentlyContinue
           Copy-Item LICENSE "$stage/Data/F4SE/Plugins/fo4pool-LICENSE.txt" -ErrorAction SilentlyContinue

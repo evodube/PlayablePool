@@ -121,11 +121,43 @@ def travel_package(form_id: int, editor_id: str, link_keyword: int, radius: int 
     return record(b"PACK", 0, form_id, body)
 
 
+def wstring(text: str) -> bytes:
+    data = text.encode("cp1252")
+    return struct.pack("<H", len(data)) + data
+
+
+def script_entry(name: str, properties: list[bytes]) -> bytes:
+    # name, flags 0 (local), property count, properties
+    return wstring(name) + b"\x00" + struct.pack("<H", len(properties)) + b"".join(properties)
+
+
+def object_property(name: str, form_id: int, alias: int = -1) -> bytes:
+    # type 1 (object), flags 1 (edited), object v2: unused, alias id (-1 none), form id
+    return wstring(name) + bytes([1, 1]) + struct.pack("<HhI", 0, alias, form_id)
+
+
+def quest_vmad(quest_id: int, quest_script: str, alias_property: str, alias_script: str) -> bytes:
+    """Scripts on the quest and on its alias 0, laid out as Fallout4.esm's DialogueGlowingSeaAtom: version 6, object
+    format 2; the quest script; the fragments block with no fragments (03, count 0, an empty fragment script name);
+    then the aliases."""
+    return (
+        struct.pack("<HHH", 6, 2, 1)
+        + script_entry(quest_script, [object_property(alias_property, quest_id, 0)])
+        + b"\x03" + struct.pack("<H", 0) + wstring("")
+        + struct.pack("<H", 1)
+        + struct.pack("<HhI", 0, 0, quest_id)  # alias 0 of this quest
+        + struct.pack("<HHH", 6, 2, 1)
+        + script_entry(alias_script, [])
+    )
+
+
 def quest(form_id: int, editor_id: str, alias_name: str, package: int, priority: int = 100) -> bytes:
-    """A start-game-enabled quest with one optional reference alias (filled from the plugin with ForceRefTo) that
-    carries `package`. Alias packages go by quest priority: 100 is the highest the Creation Kit allows."""
+    """A start-game-enabled quest with one optional reference alias that carries `package`. Alias packages go by
+    quest priority: 100 is the highest the Creation Kit allows. Scripts: fo4poolOpponentQuest (Join / Leave, its
+    Opponent property is the alias) and fo4poolOpponentAlias on the alias (papyrus/)."""
     body = (
         subrecord(b"EDID", zstring(editor_id))
+        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", "Opponent", "fo4poolOpponentAlias"))
         # flags (0x10 start game enabled, 0x1 as saved by the CK for those), priority, unknown, delay 0, type 0 (none)
         + subrecord(b"DNAM", struct.pack("<HBBfI", 0x0011, priority, 0, 0.0, 0))
         + subrecord(b"NEXT", b"")
