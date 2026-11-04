@@ -1,0 +1,115 @@
+<!doctype html>
+<!-- The HUD's panel art, rendered to PNGs by render_hud.py (each .p element becomes one image, padding included so
+     shadows and glows aren't cut off). Sizes are design units: 1 unit = 1 px of a 1280x720 screen. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: 'Chakra Petch'; src: url('ChakraPetch-Bold.ttf'); font-weight: 700; }
+body { margin: 0; background: transparent; }
+.p { position: relative; padding: 48px; display: table; margin: 0 0 120px 120px; }
+.box { position: relative; }
+.metal { position: absolute; inset: 0; background: linear-gradient(150deg, #8a8f8b 0%, #3b3f3c 20%, #61665f 46%, #2b2e2c 70%, #737873 100%); }
+.metal2 { position: absolute; inset: 3px; background: linear-gradient(150deg, #2c302d, #4a4f4b 50%, #262927); }
+.screen { position: absolute; background: radial-gradient(ellipse at 40% 30%, rgba(80,255,120,0.09), rgba(0,0,0,0) 70%), #0a100c; box-shadow: inset 0 0 26px rgba(0,0,0,0.9); }
+.scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, rgba(0,0,0,0) 1px 3px); }
+.rivet { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d9dcd8, #4a4d4a 70%); }
+.clamp { position: absolute; width: 8px; height: 46px; border-radius: 2px; background: linear-gradient(90deg, #2a2d2b, #6b706b, #2a2d2b); }
+.shadow { filter: drop-shadow(0 10px 14px rgba(0,0,0,0.7)); }
+</style>
+</head>
+<body>
+
+<!-- scoreboard frame, 380 x 236 -->
+<div class="p" id="score"><div class="box shadow" style="width: 380px; height: 236px">
+<div class="metal" style="clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px)"></div>
+<div class="metal2" style="clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px)"></div>
+<div class="clamp" style="left: -4px; top: 70px"></div><div class="clamp" style="right: -4px; top: 120px"></div>
+<div class="rivet" style="left: 10px; top: 10px"></div><div class="rivet" style="right: 10px; top: 10px"></div>
+<div class="rivet" style="left: 10px; bottom: 10px"></div><div class="rivet" style="right: 10px; bottom: 10px"></div>
+<div class="screen" style="inset: 11px; clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px)"><div class="scan"></div>
+<div style="position: absolute; left: 18px; right: 18px; top: 94px; height: 1px; background: linear-gradient(90deg, rgba(0,0,0,0), rgba(120,255,140,0.32), rgba(0,0,0,0))"></div></div>
+</div></div>
+
+<!-- turn tag, 300 x 70 -->
+<div class="p" id="tag"><div class="box" style="width: 300px; height: 70px; filter: drop-shadow(0 0 10px rgba(80,255,110,0.35)) drop-shadow(0 8px 14px rgba(0,0,0,0.6))">
+<div style="position: absolute; inset: 0; clip-path: polygon(16px 0, calc(100% - 28px) 0, calc(100% - 28px) 10px, 100% 10px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); background: #6dff7a"></div>
+<div style="position: absolute; inset: 2px; clip-path: polygon(15px 0, calc(100% - 27px) 0, calc(100% - 27px) 10px, 100% 10px, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px); background: radial-gradient(ellipse at 50% 40%, rgba(80,255,120,0.14), rgba(0,0,0,0) 70%), #0a120c"><div class="scan"></div></div>
+</div></div>
+
+<!-- red banner (fouls, a lost game), 580 x 264, with the hazard mark -->
+<div class="p" id="banner_red" style="padding: 80px"><div class="box" style="width: 580px; height: 264px; filter: drop-shadow(0 0 18px rgba(255,50,40,0.55)) drop-shadow(0 14px 24px rgba(0,0,0,0.7))">
+<div style="position: absolute; inset: 0; clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% calc(100% - 22px), calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 22px), 0 22px); background: #ff4a3d"></div>
+<div style="position: absolute; inset: 3px; clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 20px, 100% calc(100% - 20px), calc(100% - 20px) 100%, 20px 100%, 0 calc(100% - 20px), 0 20px); background: radial-gradient(ellipse at 50% 35%, rgba(255,60,40,0.20), rgba(0,0,0,0) 70%), #140707"><div class="scan" style="background: repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, rgba(0,0,0,0) 1px 3px)"></div></div>
+<div style="position: absolute; left: 16px; top: 16px; width: 18px; height: 18px; border-left: 2px solid rgba(255,90,80,0.6); border-top: 2px solid rgba(255,90,80,0.6)"></div>
+<div style="position: absolute; right: 16px; top: 16px; width: 18px; height: 18px; border-right: 2px solid rgba(255,90,80,0.6); border-top: 2px solid rgba(255,90,80,0.6)"></div>
+<div style="position: absolute; left: 16px; bottom: 16px; width: 18px; height: 18px; border-left: 2px solid rgba(255,90,80,0.6); border-bottom: 2px solid rgba(255,90,80,0.6)"></div>
+<div style="position: absolute; right: 16px; bottom: 16px; width: 18px; height: 18px; border-right: 2px solid rgba(255,90,80,0.6); border-bottom: 2px solid rgba(255,90,80,0.6)"></div>
+<svg width="108" height="108" viewBox="0 0 100 100" style="position: absolute; left: 236px; top: 26px; filter: drop-shadow(0 0 8px rgba(255,60,40,0.9))">
+<path d="M 27 10.16 A 46 46 0 0 1 73 10.16 L 57 37.88 A 14 14 0 0 0 43 37.88 Z" fill="#ff4a3d"></path>
+<path d="M 96 50 A 46 46 0 0 1 73 89.84 L 57 62.12 A 14 14 0 0 0 64 50 Z" fill="#ff4a3d"></path>
+<path d="M 27 89.84 A 46 46 0 0 1 4 50 L 36 50 A 14 14 0 0 0 43 62.12 Z" fill="#ff4a3d"></path>
+<circle cx="50" cy="50" r="9" fill="#ff4a3d"></circle>
+</svg>
+</div></div>
+
+<!-- green banner (a won game, the break), 580 x 264 -->
+<div class="p" id="banner_green" style="padding: 80px"><div class="box" style="width: 580px; height: 264px; filter: drop-shadow(0 0 18px rgba(80,255,110,0.45)) drop-shadow(0 14px 24px rgba(0,0,0,0.7))">
+<div style="position: absolute; inset: 0; clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% calc(100% - 22px), calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 22px), 0 22px); background: #6dff7a"></div>
+<div style="position: absolute; inset: 3px; clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 20px, 100% calc(100% - 20px), calc(100% - 20px) 100%, 20px 100%, 0 calc(100% - 20px), 0 20px); background: radial-gradient(ellipse at 50% 35%, rgba(80,255,120,0.18), rgba(0,0,0,0) 70%), #07120a"><div class="scan" style="background: repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, rgba(0,0,0,0) 1px 3px)"></div></div>
+<div style="position: absolute; left: 16px; top: 16px; width: 18px; height: 18px; border-left: 2px solid rgba(120,255,140,0.6); border-top: 2px solid rgba(120,255,140,0.6)"></div>
+<div style="position: absolute; right: 16px; top: 16px; width: 18px; height: 18px; border-right: 2px solid rgba(120,255,140,0.6); border-top: 2px solid rgba(120,255,140,0.6)"></div>
+<div style="position: absolute; left: 16px; bottom: 16px; width: 18px; height: 18px; border-left: 2px solid rgba(120,255,140,0.6); border-bottom: 2px solid rgba(120,255,140,0.6)"></div>
+<div style="position: absolute; right: 16px; bottom: 16px; width: 18px; height: 18px; border-right: 2px solid rgba(120,255,140,0.6); border-bottom: 2px solid rgba(120,255,140,0.6)"></div>
+</div></div>
+
+<!-- small metal panel (ball in hand), 300 x 104 -->
+<div class="p" id="small"><div class="box shadow" style="width: 300px; height: 104px">
+<div class="metal" style="clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px)"></div>
+<div class="screen" style="inset: 8px; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px)"><div class="scan"></div></div>
+</div></div>
+
+<!-- call panel (on the 8), 380 x 172 -->
+<div class="p" id="call"><div class="box shadow" style="width: 380px; height: 172px">
+<div class="metal" style="clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px)"></div>
+<div class="screen" style="inset: 8px; clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px)"><div class="scan"></div></div>
+</div></div>
+
+<!-- power meter frame with the empty tube, 112 x 392 -->
+<div class="p" id="meter"><div class="box shadow" style="width: 112px; height: 392px">
+<div class="metal" style="clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px)"></div>
+<div class="metal2" style="clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px)"></div>
+<div class="clamp" style="left: -5px; top: 40px; width: 9px; height: 60px"></div><div class="clamp" style="right: -5px; top: 250px; width: 9px; height: 60px"></div>
+<div class="rivet" style="left: 9px; top: 9px; width: 6px; height: 6px"></div><div class="rivet" style="right: 9px; bottom: 9px; width: 6px; height: 6px"></div>
+<div style="position: absolute; left: 22px; top: 20px; width: 58px; height: 352px; border-radius: 4px; background: #070a08; box-shadow: inset 0 0 12px rgba(0,0,0,0.95), 0 0 0 1px rgba(0,0,0,0.7)"></div>
+</div></div>
+
+<!-- the tube's glass, drawn over the lit segments, 58 x 352 -->
+<div class="p" id="glass" style="padding: 0"><div class="box" style="width: 58px; height: 352px; border-radius: 4px; background: linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 40%, rgba(0,0,0,0.25))"></div></div>
+
+<!-- balls, 64 x 64 each (0 = the cue ball) -->
+<div id="balls"></div>
+<script>
+const colors = ['#f3c623','#1e4fd1','#d8262a','#5b2b9a','#f07b16','#138a3e','#7c1d24','#141414'];
+for (let n = 0; n <= 15; ++n) {
+  const p = document.createElement('div');
+  p.className = 'p';
+  p.id = 'ball' + n;
+  p.style.padding = "10px";
+  let base, disc = '';
+  if (n === 0) {
+    base = '#ece8dd';
+  } else {
+    const c = colors[(n - 1) % 8];
+    base = n > 8 ? `linear-gradient(#f4f1e8 0 24%, ${c} 24% 76%, #f4f1e8 76%)` : c;
+    disc = `<div style="position:absolute;left:50%;top:50%;width:52%;height:52%;margin-left:-26%;margin-top:-26%;border-radius:50%;background:#f6f3ea;box-shadow:inset 0 -1px 2px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-family:'Chakra Petch';font-weight:700;font-size:19px;line-height:1;color:#121212">${n}</div>`;
+  }
+  p.innerHTML = `<div style="position:relative;width:64px;height:64px;border-radius:50%;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.6)">
+    <div style="position:absolute;inset:0;background:${base}"></div>
+    <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%, rgba(255,255,255,0.75) 0, rgba(255,255,255,0.18) 18%, rgba(255,255,255,0) 38%), radial-gradient(circle at 60% 70%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.45) 100%)"></div>
+    ${disc}</div>`;
+  document.getElementById('balls').appendChild(p);
+}
+</script>
+</body>
+</html>

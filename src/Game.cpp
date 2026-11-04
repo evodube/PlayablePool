@@ -476,7 +476,10 @@ namespace fp
 		_shotLive = false;
 		_manualPocket = _autoPocket = -1;
 		_placing = false;
+		_log = {};
+		_banner = 0;
 		Say(std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
+		Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 	}
 
 	void Game::Clear()
@@ -503,6 +506,8 @@ namespace fp
 		_shotLive = false;
 		_placing = false;
 		_message.clear();
+		_log = {};
+		_banner = 0;
 		UpdateHud();
 	}
 

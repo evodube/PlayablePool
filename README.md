@@ -41,7 +41,15 @@ cushion. Fouls (scratch, hitting nothing, the wrong ball first, no cushion after
 in hand anywhere. You carry on after potting one of yours. Potting the 8 wins once your group is cleared, on a legal
 shot, into the called pocket; potting it any other way loses.
 
-The scoreboard and power bar need [F4SE Menu Framework](https://www.nexusmods.com/fallout4/mods/105090); everything else works
+### HUD
+
+A terminal-style HUD: the scoreboard (both groups, potted balls dimmed), a log of the last calls, YOUR SHOT /
+THEIR SHOT, the cue power meter, a blinking red banner on fouls, ball in hand, the called pocket when you're on the
+8, and the result. It scales with the screen height (the same share of the screen at any resolution);
+`[HUD] fScale` in the INI makes it bigger or smaller on top of that. The art is pre-rendered
+(`tools/hud/render_hud.py` from `tools/hud/panels.html`) into `Data/F4SE/Plugins/fo4pool/hud`.
+
+The HUD needs [F4SE Menu Framework](https://www.nexusmods.com/fallout4/mods/105090); everything else works
 without it.
 
 Balls are removed automatically before the game saves.

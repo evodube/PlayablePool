@@ -98,6 +98,10 @@ namespace fp::Audio
 				return L"pocket";
 			case Bank::kReturn:
 				return L"return";
+			case Bank::kTurn:
+				return L"turn";
+			case Bank::kStart:
+				return L"start";
 			default:
 				return L"";
 			}
@@ -197,6 +201,16 @@ namespace fp::Audio
 	{
 		g_yaw = a_yaw;
 		g_haveYaw = a_valid;
+	}
+
+	void PlayUI(Bank a_bank, float a_gain)
+	{
+		// at the listener: full volume, centred
+		RE::NiPoint3 ear{};
+		if (auto* camera = RE::PlayerCamera::GetSingleton(); camera && camera->cameraRoot) {
+			ear = camera->cameraRoot->world.translate;
+		}
+		Play(a_bank, ear, a_gain);
 	}
 
 	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_seconds)

@@ -3,6 +3,7 @@
 
 #include "Game.h"
 
+#include "Audio.h"
 #include "Settings.h"
 
 namespace fp
@@ -26,7 +27,17 @@ namespace fp
 	{
 		_message = a_message;
 		_messageTime = std::chrono::steady_clock::now();
+		_log[0] = std::move(_log[1]);
+		_log[1] = a_message;
 		Notify("Pool: " + a_message);
+	}
+
+	void Game::Banner(int a_kind, const std::string& a_title, const std::string& a_sub)
+	{
+		_banner = a_kind;
+		_bannerTitle = a_title;
+		_bannerSub = a_sub;
+		_bannerTime = std::chrono::steady_clock::now();
 	}
 
 	int Game::CalledPocket() const
@@ -83,6 +94,13 @@ namespace fp
 			break;
 		}
 		if (r.end != pool::GameEnd::kNone) {
+			const bool playerOneWon = r.winner == 0;
+			const char* why = r.end == pool::GameEnd::kWon ? "8 BALL IN THE CALLED POCKET" : r.end == pool::GameEnd::kEightEarly ? "THE 8 WENT DOWN EARLY" :
+			                  r.end == pool::GameEnd::kEightOnFoul ? "THE 8 WENT DOWN ON A FOUL" : "THE 8 WENT IN THE WRONG POCKET";
+			if (!Settings::Get().callEight && r.end == pool::GameEnd::kWon) {
+				why = "8 BALL DOWN";
+			}
+			Banner(playerOneWon ? 2 : 3, playerOneWon ? "YOU WIN" : "THEY WIN", why);
 			Say(line + ". Numpad 7 racks again");
 			log::info("game over: {}", line);
 			return;
@@ -108,6 +126,9 @@ namespace fp
 
 		if (!foul.empty()) {
 			line = std::format("Foul: {}. {} has ball in hand", foul, PlayerName(_rules.Shooter()));
+			static constexpr std::array<const char*, 5> subs{ "", "CUE BALL POTTED · BALL IN HAND", "NOTHING HIT · BALL IN HAND",
+				"WRONG BALL FIRST · BALL IN HAND", "NO CUSHION AFTER CONTACT · BALL IN HAND" };
+			Banner(1, r.foul == pool::Foul::kScratch ? "SCRATCH / FOUL" : "FOUL", subs[static_cast<int>(r.foul)]);
 		} else if (r.groupsSet) {
 			line = std::format("{} is {}, {} is {}. {} again", shooter, GroupName(_rules.GroupOf(r.shooter)), other,
 				GroupName(_rules.GroupOf((r.shooter + 1) % 2)), shooter);
@@ -123,6 +144,9 @@ namespace fp
 			line += Settings::Get().callEight ? ". On the 8: aim, and Numpad 5 to change the called pocket" : ". On the 8";
 		}
 		Say(line);
+		if (!r.turnContinues) {
+			Audio::PlayUI(Audio::Bank::kTurn, 0.7f);
+		}
 		log::info("shot judged: foul {} continues {} groups {} potted {} -> {}", static_cast<int>(r.foul), r.turnContinues, r.groupsSet,
 			r.pocketed.size(), line);
 
@@ -221,6 +245,12 @@ namespace fp
 			h.over = _rules.Over();
 			h.winner = _rules.Winner();
 			h.message = _message;
+			h.log = _log;
+			h.calledPocket = CalledPocket();
+			h.banner = _banner;
+			h.bannerTitle = _bannerTitle;
+			h.bannerSub = _bannerSub;
+			h.bannerAge = std::chrono::duration<float>(std::chrono::steady_clock::now() - _bannerTime).count();
 			h.messageAge = std::chrono::duration<float>(std::chrono::steady_clock::now() - _messageTime).count();
 		}
 		std::scoped_lock lock(_hudMutex);

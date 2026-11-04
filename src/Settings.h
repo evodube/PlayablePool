@@ -78,6 +78,9 @@ namespace fp
 		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
 		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest
 
+		// [HUD] the terminal HUD (needs F4SE Menu Framework)
+		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)
+
 		// [Sound] Data\Sound\fo4pool\*.wav, played by the plugin itself
 		bool  sound{ true };
 		float soundVolume{ 0.8f };        // 0..1, on top of how hard each hit was

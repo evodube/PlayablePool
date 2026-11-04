@@ -49,6 +49,13 @@ namespace fp
 			int                     winner{ -1 };
 			std::string             message;          // the latest thing that happened ("Foul: scratch", ...)
 			float                   messageAge{ 0.0f };  // seconds since it
+			std::array<std::string, 2> log;           // the last two lines for the terminal log, oldest first
+			int                     calledPocket{ -1 };
+			// the big centre banner: 0 none, 1 foul (red, blinks), 2 won (green), 3 lost (red)
+			int                     banner{ 0 };
+			std::string             bannerTitle;
+			std::string             bannerSub;
+			float                   bannerAge{ 0.0f };
 		};
 		HudState Hud() const;
 
@@ -91,6 +98,7 @@ namespace fp
 		// the 8-ball game
 		void JudgeShot();
 		void Say(const std::string& a_message);  // the HUD's message line, and a notification
+		void Banner(int a_kind, const std::string& a_title, const std::string& a_sub);
 		void UpdateHud();
 		int  CalledPocket() const;
 		void CyclePocket();
@@ -158,6 +166,11 @@ namespace fp
 		bool                                                _overheadBeforePlacing{ false };
 		std::string                                         _message;
 		std::chrono::steady_clock::time_point               _messageTime{};
+		std::array<std::string, 2>                          _log;
+		int                                                 _banner{ 0 };
+		std::string                                         _bannerTitle;
+		std::string                                         _bannerSub;
+		std::chrono::steady_clock::time_point               _bannerTime{};
 		mutable std::mutex                                  _hudMutex;
 		HudState                                            _hud;  // under _hudMutex
 
