@@ -4,6 +4,7 @@
 // read which way it faces and move it so it orbits the cue ball, so the player aims just by looking.
 
 #include "Game.h"
+#include "Anim.h"
 
 #include "Audio.h"
 
@@ -162,6 +163,7 @@ namespace fp
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
 		}
+		Anim::PlayAim();
 	}
 
 	void Game::ExitAim()
@@ -183,6 +185,7 @@ namespace fp
 			}
 		}
 		RemoveAimObjects();  // the stick is a real Pool Cue: don't leave it lying on the table
+		Anim::Stop();
 		log::info("aim mode off");
 	}
 
@@ -223,6 +226,7 @@ namespace fp
 		_rules.BeginShot(*_sim, CalledPocket());
 		_shotLive = true;
 		_sim->Strike(_lastDir, speed);
+		Anim::PlayStrike();
 		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f}); charge input: {} mouse events, {} camera turns; {:.4f} deg/count",
 			a_power * 100.0f, speed, _lastDir.x, _lastDir.y, _chargeMouseEvents, _chargeInputs, DegreesPerCount());
 	}
@@ -242,6 +246,7 @@ namespace fp
 			_placing = false;
 			BlockControls(false);
 			RemoveAimObjects();
+			Anim::Stop();
 			return;
 		}
 

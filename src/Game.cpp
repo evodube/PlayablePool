@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "Anim.h"
 
 #include "Audio.h"
 #include "Hud.h"
@@ -655,6 +656,7 @@ namespace fp
 			dt = 0.0f;
 		}
 		dt = std::clamp(dt, 0.0f, kMaxFrame);
+		Anim::Tick(dt, _aiming);
 
 		if (dt > 0.0f) {
 			const auto events = _sim->Step(dt);

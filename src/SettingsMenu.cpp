@@ -101,6 +101,14 @@ namespace fp::SettingsMenu
 						{ L"Stick", L"sPlugin", "Stick plugin", Kind::kText, &s.stickPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Stick", L"iFormID", "Stick form ID", Kind::kHex, &s.stickFormID, 0, 0, nullptr, "0 = no stick", {}, true },
 					} },
+				{ "Animations", "Your character plays the pool idles while you aim and shoot (needs fo4pool.esl).",
+					{
+						{ L"Anim", L"bEnabled", "Play pool animations", Kind::kBool, &s.anim, 0, 0, nullptr, "lean over the table while aiming, strike on the shot" },
+						{ L"Anim", L"fStrikeSeconds", "Strike length", Kind::kFloat, &s.animStrikeSeconds, 0.5f, 5.0f, "%.1f", "seconds before going back to the aim loop" },
+						{ L"Anim", L"sPlugin", "Idle plugin", Kind::kText, &s.animPlugin, 0, 0, nullptr, nullptr, {}, true },
+						{ L"Anim", L"iAimFormID", "Aim idle form ID", Kind::kHex, &s.animAimFormID, 0, 0, nullptr, nullptr, {}, true },
+						{ L"Anim", L"iStrikeFormID", "Strike idle form ID", Kind::kHex, &s.animStrikeFormID, 0, 0, nullptr, nullptr, {}, true },
+					} },
 				{ "Rules", "The game mode is used from the next rack.",
 					{
 						{ L"Rules", L"iGameMode", "Game mode", Kind::kChoice, &s.gameMode, 0, 0, nullptr,

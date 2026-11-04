@@ -113,6 +113,12 @@ namespace fp
 		stickMaxPull = ReadFloat(L"Stick", L"fMaxPull", stickMaxPull);
 		stickGap = ReadFloat(L"Stick", L"fGap", stickGap);
 
+		anim = ReadBool(L"Anim", L"bEnabled", anim);
+		animPlugin = Narrow(ReadString(L"Anim", L"sPlugin", std::wstring(animPlugin.begin(), animPlugin.end())));
+		animAimFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAimFormID", animAimFormID));
+		animStrikeFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrikeFormID", animStrikeFormID));
+		animStrikeSeconds = std::max(0.1f, ReadFloat(L"Anim", L"fStrikeSeconds", animStrikeSeconds));
+
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);
 		sound = ReadBool(L"Sound", L"bEnabled", sound);

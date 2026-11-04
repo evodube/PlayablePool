@@ -82,6 +82,13 @@ namespace fp
 		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
 		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest
 
+		// [Anim] the player plays the pool idles (fo4pool.esl) while aiming and shooting
+		bool          anim{ true };
+		std::string   animPlugin{ "fo4pool.esl" };
+		std::uint32_t animAimFormID{ 0x811 };     // PoolAim: lined up, practice strokes, loops
+		std::uint32_t animStrikeFormID{ 0x812 };  // PoolStrike: the shot
+		float         animStrikeSeconds{ 2.0f };  // how long the strike plays before going back to the aim loop
+
 		// [HUD] the terminal HUD (needs F4SE Menu Framework)
 		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)
 		bool  notifications{ false };  // also show calls ("3 in", "Player 2's shot") as the game's corner messages

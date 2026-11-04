@@ -20,3 +20,12 @@ Shot geometry, in the actor's own space (root at the origin, facing +Y; game uni
 - bridge hand: left, flat on the felt at y = 40..48; grip hand: right, wrist at about (9.5, -8.5, 80.9)
 
 Exports are checked by re-importing them: within 0.05 units and 0.1 degrees of the Blender clip.
+
+## In the mod
+
+The clips ship at `Data\Meshes\Actors\Character\Animations\fo4pool\` and `fo4pool.esl` has two dynamic idles that
+point at them (`tools/make_esl.py`): `fo4poolAim` (0x811) and `fo4poolStrike` (0x812), both on
+`RaiderRootBehavior.hkx` with the `dyn_ActivationLoop` event, so no behaviour file is touched. `src/Anim.cpp` plays
+them on the player with `AIProcess::PlayIdle`: PoolAim when aiming starts, PoolStrike on the shot (back to PoolAim
+after `[Anim] fStrikeSeconds`), and stops the idle when aiming ends. For now the player isn't moved to the shot line
+and the ball isn't delayed to frame 35; this is a first look at the clips on a real character.

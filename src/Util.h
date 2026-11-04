@@ -32,6 +32,23 @@ namespace fp::util
 	}
 
 	// A base object from a plugin by its form ID within that plugin (load order bits are ignored).
+	// any form from a plugin, by its ID within that plugin (works for light plugins)
+	inline RE::TESForm* ResolveAnyForm(std::string_view a_plugin, std::uint32_t a_rawID)
+	{
+		auto* dh = RE::TESDataHandler::GetSingleton();
+		auto* file = dh ? dh->LookupModByName(a_plugin) : nullptr;
+		if (!file || file->compileIndex == 0xFF) {
+			return nullptr;
+		}
+		RE::TESFormID id;
+		if (file->compileIndex == 0xFE) {  // light plugin
+			id = (0xFEu << 24) | (static_cast<std::uint32_t>(file->smallFileCompileIndex) << 12) | (a_rawID & 0xFFF);
+		} else {
+			id = (static_cast<std::uint32_t>(file->compileIndex) << 24) | (a_rawID & 0xFFFFFF);
+		}
+		return RE::TESForm::GetFormByID(id);
+	}
+
 	inline RE::TESBoundObject* ResolveForm(std::string_view a_plugin, std::uint32_t a_rawID)
 	{
 		auto* dh = RE::TESDataHandler::GetSingleton();

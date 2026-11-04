@@ -7,6 +7,11 @@ Form IDs (what fo4pool.ini expects by default):
     xx000800        cue ball   Meshes\\fo4pool\\Ball_Cue.nif
     xx000801..80F   balls 1-15 Meshes\\fo4pool\\Ball_01.nif .. Ball_15.nif
     xx000810        cue stick  Meshes\\fo4pool\\CueStick.nif   (only with --stick)
+    xx000811        idle fo4poolAim     Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolAim.hkx
+    xx000812        idle fo4poolStrike  Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike.hkx
+
+The idles are "dynamic idles": the human behaviour graph's dyn_ActivationLoop event plays whatever HKX the idle
+names, so no behaviour file is edited. The plugin plays them on the player with AIProcess::PlayIdle.
 
 The meshes are collision-free copies of the vanilla pool balls (tools/strip_collision.py).
 """
@@ -53,6 +58,26 @@ def stat(form_id: int, editor_id: str, mesh: str, bound: int = 4) -> bytes:
     )
 
 
+BEHAVIOR = "Actors\\Character\\Behaviors\\RaiderRootBehavior.hkx"
+ANIM_DIR = "Actors\\Character\\Animations\\fo4pool\\"
+
+
+def idle(form_id: int, editor_id: str, anim_file: str, event: str = "dyn_ActivationLoop") -> bytes:
+    return record(
+        b"IDLE",
+        0,
+        form_id,
+        subrecord(b"EDID", zstring(editor_id))
+        + subrecord(b"DNAM", zstring(BEHAVIOR))
+        + subrecord(b"ENAM", zstring(event))
+        # related idles: parent, previous sibling (none: played directly, not picked from the idle tree)
+        + subrecord(b"ANAM", struct.pack("<II", 0, 0))
+        # looping min/max seconds, flags, animation group section, replay delay
+        + subrecord(b"DATA", struct.pack("<BBBBH", 0, 0, 0, 0, 0))
+        + subrecord(b"GNAM", zstring(anim_file)),
+    )
+
+
 def build(with_stick: bool) -> bytes:
     own = 0x01000000  # our records come after the one master
     stats = [stat(own | FIRST_ID, "fo4poolBallCue", "fo4pool\\Ball_Cue.nif")]
@@ -61,17 +86,22 @@ def build(with_stick: bool) -> bytes:
     if with_stick:
         stats.append(stat(own | (FIRST_ID + 16), "fo4poolCueStick", "fo4pool\\CueStick.nif", bound=80))
 
+    idles = [
+        idle(own | (FIRST_ID + 17), "fo4poolAim", ANIM_DIR + "PoolAim.hkx"),
+        idle(own | (FIRST_ID + 18), "fo4poolStrike", ANIM_DIR + "PoolStrike.hkx"),
+    ]
+
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, len(stats), FIRST_ID + len(stats)))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, len(stats) + len(idles), FIRST_ID + 19))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
         + subrecord(b"DATA", struct.pack("<Q", 0)),
     )
-    return header + group(b"STAT", b"".join(stats))
+    return header + group(b"STAT", b"".join(stats)) + group(b"IDLE", b"".join(idles))
 
 
 def main() -> int:
@@ -81,7 +111,7 @@ def main() -> int:
     data = build(with_stick)
     with open(out, "wb") as f:
         f.write(data)
-    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics)")
+    print(f"wrote {out} ({len(data)} bytes, {17 if with_stick else 16} statics, 2 idles)")
     return 0
 
 
