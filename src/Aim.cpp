@@ -138,6 +138,10 @@ namespace fp
 		}
 		_entryYaw = player->data.angle.z;
 		_entryPitch = player->data.angle.x;
+		if (auto* third = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraStates::k3rdPerson].get())) {
+			_entryFreeRotation = third->freeRotation;
+		}
+		_haveEntryView = true;
 		{
 			std::scoped_lock lock(_camMutex);
 			_camMapped = false;
@@ -170,6 +174,8 @@ namespace fp
 		_overhead = false;
 		_placing = false;  // ball in hand is still owed: it starts again on the next aim
 		Audio::SetListenerYaw(0.0f, false);
+		HoldPlayerView();  // back exactly as it was when aiming started
+		_haveEntryView = false;
 		BlockControls(false);
 		if (InFreeCamera()) {
 			if (auto* camera = RE::PlayerCamera::GetSingleton()) {
@@ -228,6 +234,8 @@ namespace fp
 			// something else took the camera back (a menu, a scene): leave aim mode quietly
 			log::info("free camera ended outside fo4pool; leaving aim mode");
 			Audio::SetListenerYaw(0.0f, false);
+			HoldPlayerView();
+			_haveEntryView = false;
 			_aiming = false;
 			_charging = false;
 			_overhead = false;
@@ -506,6 +514,10 @@ namespace fp
 			}
 		}
 
+		// The mouse that turns the shot camera also reaches the player's own look controls; undo that every frame so
+		// the player (and the view they get back) doesn't drift while aiming.
+		HoldPlayerView();
+
 		// The stick and the guide follow the aim here, in the same update as the camera, so they never trail it.
 		Frame frame;
 		if (_sim && GetFrame(frame)) {
@@ -663,6 +675,22 @@ namespace fp
 		}
 		if (auto ref = _stick.get()) {
 			PlaceNode(ref.get(), {}, {}, 1.0f, true);
+		}
+	}
+
+	void Game::HoldPlayerView()
+	{
+		if (!_haveEntryView) {
+			return;
+		}
+		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+			player->data.angle.x = _entryPitch;
+			player->data.angle.z = _entryYaw;
+		}
+		if (auto* camera = RE::PlayerCamera::GetSingleton()) {
+			if (auto* third = static_cast<RE::ThirdPersonState*>(camera->cameraStates[RE::CameraStates::k3rdPerson].get())) {
+				third->freeRotation = _entryFreeRotation;
+			}
 		}
 	}
 

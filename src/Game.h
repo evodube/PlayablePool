@@ -129,6 +129,7 @@ namespace fp
 		void  HideAimObjects();
 		void  RemoveAimObjects();
 		void  BlockControls(bool a_block);
+		void  HoldPlayerView();  // keeps the player facing where they did when aiming started
 		float PowerNow() const;
 		void  AddPull(double a_degrees);  // _camMutex held
 		static void LogShape(RE::TESObjectREFR* a_ref, const char* a_what);
@@ -186,6 +187,8 @@ namespace fp
 		float                            _pitchSign{ 1.0f };
 		float                            _entryYaw{ 0.0f };
 		float                            _entryPitch{ 0.0f };
+		RE::NiPoint2                     _entryFreeRotation{};  // third person's free-look offset
+		bool                             _haveEntryView{ false };
 		RE::NiPoint3                     _camTarget;
 		bool                             _haveCamTarget{ false };
 		float                            _strikeShow{ 0.0f };  // the stick stays visible this much longer after a shot
