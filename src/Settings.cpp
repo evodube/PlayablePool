@@ -67,6 +67,9 @@ namespace fp
 		keyShoot = static_cast<int>(ReadInt(L"Keys", L"iShoot", keyShoot));
 		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
+		keyCallPocket = static_cast<int>(ReadInt(L"Keys", L"iCallPocket", keyCallPocket));
+		callEight = ReadBool(L"Rules", L"bCallEight", callEight);
+		placeSpeed = std::clamp(ReadFloat(L"Rules", L"fPlaceSpeed", placeSpeed), 0.005f, 1.0f);
 
 		ballPlugin = Narrow(ReadString(L"Ball", L"sPlugin", std::wstring(ballPlugin.begin(), ballPlugin.end())));
 		cueFormID = static_cast<std::uint32_t>(ReadInt(L"Ball", L"iCueFormID", cueFormID));

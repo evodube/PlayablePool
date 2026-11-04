@@ -53,7 +53,18 @@ namespace fp
 
 	Game::HudState Game::Hud() const
 	{
-		return { _aiming.load(), _charging.load(), _rolling.load(), _overhead.load(), PowerNow() };
+		HudState h;
+		{
+			std::scoped_lock lock(_hudMutex);
+			h = _hud;
+		}
+		h.aiming = _aiming;
+		h.charging = _charging;
+		h.rolling = _rolling;
+		h.overhead = _overhead;
+		h.power = PowerNow();
+		h.placing = _placing;
+		return h;
 	}
 
 	// ---------------------------------------------------------------- render thread
@@ -69,7 +80,11 @@ namespace fp
 		const bool rmb = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 		auto*      tasks = F4SE::GetTaskInterface();
 
-		if (lmb && !_lmbWasDown && !_rolling) {
+		if (lmb && !_lmbWasDown && _placing) {
+			if (tasks) {
+				tasks->AddTask([this]() { ConfirmPlacement(); });
+			}
+		} else if (lmb && !_lmbWasDown && !_rolling) {
 			_power = 0.0f;
 			_chargeMouseEvents = 0;
 			_chargeInputs = 0;
@@ -82,7 +97,7 @@ namespace fp
 				tasks->AddTask([this, power]() { ShootAim(power); });
 			}
 		}
-		if (rmb && !_rmbWasDown && tasks) {
+		if (rmb && !_rmbWasDown && tasks && !_placing) {
 			tasks->AddTask([this]() { ToggleOverhead(); });
 		}
 		_lmbWasDown = lmb;
@@ -139,6 +154,9 @@ namespace fp
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
 		Notify("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. Numpad 8: stop");
+		if (_rules.BallInHand() && !_rules.Over()) {
+			StartPlacement();
+		}
 	}
 
 	void Game::ExitAim()
@@ -149,6 +167,7 @@ namespace fp
 		_aiming = false;
 		_charging = false;
 		_overhead = false;
+		_placing = false;  // ball in hand is still owed: it starts again on the next aim
 		Audio::SetListenerYaw(0.0f, false);
 		BlockControls(false);
 		if (InFreeCamera()) {
@@ -162,7 +181,7 @@ namespace fp
 
 	void Game::ToggleOverhead()
 	{
-		if (!_aiming) {
+		if (!_aiming || _placing) {
 			return;
 		}
 		_overhead = !_overhead;
@@ -176,7 +195,11 @@ namespace fp
 
 	void Game::ShootAim(float a_power)
 	{
-		if (!_aiming || !_sim || !_sim->AtRest() || IsGamePaused()) {
+		if (!_aiming || !_sim || !_sim->AtRest() || IsGamePaused() || _placing || _shotLive) {
+			return;
+		}
+		if (_rules.Over()) {
+			Notify("Pool: the game's over. Numpad 7 racks again");
 			return;
 		}
 		if (a_power < 0.02f) {
@@ -190,6 +213,8 @@ namespace fp
 		if (Frame frame; GetFrame(frame)) {
 			Audio::Play(Audio::Bank::kCue, ToWorld(frame, _strikePos, static_cast<float>(s.spec.ballRadius)), 0.25f + 0.75f * a_power);
 		}
+		_rules.BeginShot(*_sim, CalledPocket());
+		_shotLive = true;
 		_sim->Strike(_lastDir, speed);
 		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f}); charge input: {} mouse events, {} camera turns; {:.4f} deg/count",
 			a_power * 100.0f, speed, _lastDir.x, _lastDir.y, _chargeMouseEvents, _chargeInputs, DegreesPerCount());
@@ -205,6 +230,7 @@ namespace fp
 			_aiming = false;
 			_charging = false;
 			_overhead = false;
+			_placing = false;
 			BlockControls(false);
 			RemoveAimObjects();
 			return;
@@ -223,6 +249,10 @@ namespace fp
 			_camDesired = desired;
 			_camFollow = atRest || _overhead;  // don't chase the cue ball while it rolls
 			_haveCamDesired = true;
+		}
+
+		if (_placing) {
+			TickPlacement(a_frame);
 		}
 
 		// The camera update places the stick and the guide (so they move in step with the view) but doesn't create
@@ -256,6 +286,10 @@ namespace fp
 		}
 
 		const auto& cue = _sim->Balls()[0];
+		if (_placing) {
+			HideAimObjects();
+			return;
+		}
 		if (_sim->AtRest() && cue.state == pool::BallState::kOnTable) {
 			if (s.guide) {
 				PlaceGuide(a_frame, _lastDir);
@@ -311,6 +345,13 @@ namespace fp
 		_lastMouseEvent = a_event;
 		_lastMouseTime = a_event->timeCode;
 
+		if (_placing) {
+			if (!repeat) {
+				_placeDX += a_event->mouseInputX;
+				_placeDY += a_event->mouseInputY;
+			}
+			return true;  // the mouse moves the cue ball, not the view
+		}
 		if (!_charging) {
 			if (!repeat) {
 				_frameCounts += a_event->mouseInputY;
@@ -326,7 +367,7 @@ namespace fp
 
 	void Game::BeforeFreeCameraUpdate(RE::FreeCameraState* a_free)
 	{
-		if (!_aiming || !_charging || !a_free) {
+		if (!_aiming || !(_charging || _placing) || !a_free) {
 			return;
 		}
 		if (auto* camera = a_free->camera) {
@@ -357,6 +398,11 @@ namespace fp
 		const float before = pitchIndex == 0 ? a_before.x : a_before.y;
 		const double tilted = _pitchSign * (Component(a_free, pitchIndex) - before) / kDegToRad;
 
+		if (_placing) {
+			a_free->rotation = a_before;  // the view holds still, looking straight down, while the cue ball is moved
+			Component(a_free, pitchIndex) = _pitchSign * kOverheadPitch;
+			return;
+		}
 		if (_charging) {
 			// If the mouse never reached a handler we could catch, the turn that got through is the pull instead
 			// (how 0.2 did it). Either way the view goes back to where it was.
@@ -506,6 +552,31 @@ namespace fp
 			} else {
 				line(prediction.contact, prediction.cueDir, r + s.guideSpacing, r + s.guideCueLength);
 			}
+		}
+
+		// On the 8: the pocket it's heading for is the called one (unless one was picked with the key); mark it.
+		if (prediction.hitBall && prediction.ball == 8) {
+			const auto& eight = _sim->Balls()[8].pos;
+			double      best = -2.0;
+			for (int p = 0; p < pool::Sim::kPockets; ++p) {
+				pool::Vec2 mouth, inward;
+				_sim->PocketMouth(p, mouth, inward);
+				const pool::Vec2 to = mouth - eight;
+				const double     l = to.Length();
+				const double     c = l > 0.0 ? to.Dot(prediction.objectDir) / l : -1.0;
+				if (c > best) {
+					best = c;
+					_autoPocket = p;
+				}
+			}
+		}
+		if (const int called = CalledPocket(); called >= 0) {
+			pool::Vec2 mouth, inward;
+			_sim->PocketMouth(called, mouth, inward);
+			if (dots.size() >= kMaxDots) {
+				dots.pop_back();
+			}
+			dots.push_back({ mouth - inward * r, dotRadius * 4.0f });  // a big dot just in front of the opening
 		}
 
 		_dotsWanted = dots.size();  // the tick makes more dot objects if these aren't enough

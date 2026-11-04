@@ -119,6 +119,8 @@ namespace pool
 
 		// Pocket centres in table space: 0..3 corners (head-left, head-right, foot-left, foot-right), 4..5 sides.
 		Vec2 PocketPos(int a_pocket) const;
+		// A pocket's opening: its middle and the direction into the pocket.
+		void PocketMouth(int a_pocket, Vec2& a_middle, Vec2& a_inward) const;
 
 		Vec2 HeadSpot() const { return { -_spec.length * 0.25, 0.0 }; }
 		Vec2 FootSpot() const { return { _spec.length * 0.25, 0.0 }; }
@@ -161,8 +163,6 @@ namespace pool
 		void SeparateBalls();
 		void CollideCushions(int a_index, std::vector<Event>& a_events);
 		void CheckPockets(int a_index, std::vector<Event>& a_events);
-		// a pocket's opening: its middle and the direction into the pocket
-		void PocketMouth(int a_pocket, Vec2& a_middle, Vec2& a_inward) const;
 		bool SpotFree(Vec2 a_pos, int a_ignore) const;
 		void RespotNear(int a_index, Vec2 a_spot, double a_backwards);
 

@@ -21,6 +21,11 @@ namespace fp
 		int keyShoot{ 0x68 };      // Numpad 8 (Shift = soft, Ctrl = hard)
 		int keyClear{ 0x69 };      // Numpad 9
 		int keyCalibrate{ 0x64 };  // Numpad 4
+		int keyCallPocket{ 0x65 }; // Numpad 5: pick the pocket for the 8
+
+		// [Rules] 8-ball
+		bool  callEight{ true };    // the 8 must go in the called pocket (the one marked on the table)
+		float placeSpeed{ 0.06f };  // ball in hand: how far the cue ball moves per mouse count
 
 		// [Ball] base objects. By default fo4pool.esl: the cue ball at 0x800 and ball n at 0x800 + n.
 		std::string                   ballPlugin{ "fo4pool.esl" };

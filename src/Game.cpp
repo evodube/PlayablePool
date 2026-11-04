@@ -104,7 +104,7 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 4> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate };
+		const std::array<int, 5> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -120,7 +120,8 @@ namespace fp
 						case 0: Rack(); break;
 						case 1: ToggleAim(); break;
 						case 2: Clear(); break;
-						default: ToggleCalibrate(); break;
+						case 3: ToggleCalibrate(); break;
+						default: CyclePocket(); break;
 						}
 					});
 				}
@@ -467,7 +468,15 @@ namespace fp
 		}
 		log::info("racked on {:08X} '{}' ({}x{} felt): {} balls spawned", table->GetFormID(), ModelPath(table), s.spec.length,
 			s.spec.width, spawned);
-		Notify(spawned == pool::Sim::kBalls ? "Pool: racked" : std::format("Pool: only {} of 16 balls could be placed", spawned));
+		if (spawned != pool::Sim::kBalls) {
+			Notify(std::format("Pool: only {} of 16 balls could be placed", spawned));
+		}
+		_rules.NewGame(_nextBreaker);
+		_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
+		_shotLive = false;
+		_manualPocket = _autoPocket = -1;
+		_placing = false;
+		Say(std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
 	}
 
 	void Game::Clear()
@@ -491,6 +500,10 @@ namespace fp
 		_frozen.clear();
 		_sim.reset();
 		_table = {};
+		_shotLive = false;
+		_placing = false;
+		_message.clear();
+		UpdateHud();
 	}
 
 	void Game::ClearMarkers()
@@ -588,13 +601,16 @@ namespace fp
 		if (dt > 0.0f) {
 			const auto events = _sim->Step(dt);
 			PlaySounds(frame, events);
+			if (_shotLive) {
+				_rules.OnEvents(events);
+			}
 			for (const auto& e : events) {
 				if (e.type == pool::Event::Type::kPocket) {
 					if (e.a == 0) {
 						_scratch = true;
-						Notify("Pool: scratch!");
+						Say("scratch!");
 					} else {
-						Notify(std::format("Pool: {} in", BallName(e.a)));
+						Say(std::format("{} in", BallName(e.a)));
 					}
 				}
 			}
@@ -607,9 +623,11 @@ namespace fp
 
 		if (_scratch && _sim->AtRest()) {
 			_scratch = false;
-			_sim->RespotCue();
+			_sim->RespotCue();  // ball in hand moves it from there
 			_dropTime[0] = 0.0f;
-			Notify("Pool: cue ball back on the spot");
+		}
+		if (_shotLive && _sim->AtRest()) {
+			JudgeShot();
 		}
 
 		for (int i = 0; i < pool::Sim::kBalls; ++i) {
@@ -632,6 +650,7 @@ namespace fp
 		if (_aiming) {
 			TickAim(frame, dt);
 		}
+		UpdateHud();
 	}
 
 	void Game::PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events)

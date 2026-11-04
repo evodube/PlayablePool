@@ -19,7 +19,7 @@ or opponents yet.
 3. **Numpad 4**: calibration markers appear on the felt corners, side pockets, head and foot spots and centre.
    If they don't sit on the felt, edit `[Table]` in `fo4pool.ini` (length, width, height, offsets, axis), then
    press Numpad 4 twice to see the change. The INI is re-read every time.
-4. **Numpad 7**: rack.
+4. **Numpad 7**: rack a game of 8-ball (players take turns to break; you play both sides for now).
 5. **Numpad 8**: aim. The camera moves behind the cue ball; turn it with the mouse and you aim where it faces.
    Dots show the cue ball's path, where it meets the first ball, and where both go next.
    - Hold the **left mouse button**: the camera freezes. Pull the mouse back for power (push forward for less);
@@ -27,10 +27,21 @@ or opponents yet.
    - While aiming, weapons, movement, activating and the Pip-Boy are off.
    - **Right mouse button**: overhead view and back.
    - **Numpad 8** again stops aiming and gives you the normal camera back.
-   A scratched cue ball goes back on the head spot.
+   - **Ball in hand** (after a foul): the view goes overhead and the mouse moves the cue ball; left click sets it.
+   - **On the 8**: the pocket the guide points the 8 at is called and marked with a big dot; **Numpad 5** picks
+     another. (`bCallEight=0` in `[Rules]` turns calling off.)
 6. **Numpad 9**: take the balls away (also stops aiming).
 
-The power bar needs [F4SE Menu Framework](https://www.nexusmods.com/fallout4/mods/105090); everything else works
+### 8-ball rules
+
+Solids 1-7, stripes 9-15. The break: anything potted keeps the breaker shooting, but the table stays open, and the
+8 potted on the break is spotted again. After that the first ball legally potted decides the groups. A legal shot
+hits one of your own balls first (the 8 once your group is cleared), and then something goes in or touches a
+cushion. Fouls (scratch, hitting nothing, the wrong ball first, no cushion after contact) give the other player ball
+in hand anywhere. You carry on after potting one of yours. Potting the 8 wins once your group is cleared, on a legal
+shot, into the called pocket; potting it any other way loses.
+
+The scoreboard and power bar need [F4SE Menu Framework](https://www.nexusmods.com/fallout4/mods/105090); everything else works
 without it.
 
 Balls are removed automatically before the game saves.
@@ -81,6 +92,7 @@ The simulation (`src/sim`) has no game dependencies and is tested on its own:
 
 ```
 g++ -std=c++20 -O2 -Isrc tests/sim_test.cpp src/sim/Sim.cpp -o sim_test && ./sim_test
+g++ -std=c++20 -O2 -Isrc tests/rules_test.cpp src/sim/Rules.cpp src/sim/Sim.cpp -o rules_test && ./rules_test
 ```
 
 ## How it works

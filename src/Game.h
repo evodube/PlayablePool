@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sim/Rules.h"
 #include "sim/Sim.h"
 
 namespace fp
@@ -32,6 +33,22 @@ namespace fp
 			bool  rolling{ false };
 			bool  overhead{ false };
 			float power{ 0.0f };
+
+			// the 8-ball game, while a table is racked
+			bool                    game{ false };
+			int                     shooter{ 0 };
+			std::array<int, 2>      group{};        // 0 open table, 1 solids, 2 stripes
+			std::array<int, 2>      remaining{};
+			std::array<bool, 16>    onTable{};      // which balls are still on the table
+			bool                    breakShot{ false };
+			bool                    onEight{ false };
+			bool                    calling{ false };  // the shooter is on the 8 and calls a pocket
+			bool                    ballInHand{ false };
+			bool                    placing{ false };
+			bool                    over{ false };
+			int                     winner{ -1 };
+			std::string             message;          // the latest thing that happened ("Foul: scratch", ...)
+			float                   messageAge{ 0.0f };  // seconds since it
 		};
 		HudState Hud() const;
 
@@ -70,6 +87,17 @@ namespace fp
 		void PollMouse();
 		void Tick();
 		void PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events);
+
+		// the 8-ball game
+		void JudgeShot();
+		void Say(const std::string& a_message);  // the HUD's message line, and a notification
+		void UpdateHud();
+		int  CalledPocket() const;
+		void CyclePocket();
+		void StartPlacement();
+		void ConfirmPlacement();
+		void TickPlacement(const Frame& a_frame);
+		static std::string PlayerName(int a_player) { return a_player == 0 ? "Player 1" : "Player 2"; }
 
 		void Rack();
 		void Clear();
@@ -122,6 +150,16 @@ namespace fp
 		bool                                                _scratch{ false };
 		bool                                                _warned3D{ false };
 		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
+		pool::Rules                                         _rules;
+		int                                                 _nextBreaker{ 0 };
+		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
+		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
+		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
+		bool                                                _overheadBeforePlacing{ false };
+		std::string                                         _message;
+		std::chrono::steady_clock::time_point               _messageTime{};
+		mutable std::mutex                                  _hudMutex;
+		HudState                                            _hud;  // under _hudMutex
 
 		// aim mode, main thread
 		bool                             _camMapped{ false };  // worked out which free-camera value is yaw
@@ -156,6 +194,8 @@ namespace fp
 		RE::NiPoint3                     _camDesired;  // where the tick says the camera should orbit
 		bool                             _haveCamDesired{ false };
 		bool                             _camFollow{ true };
+		double                           _placeDX{ 0.0 };  // mouse counts waiting to move the cue ball (ball in hand)
+		double                           _placeDY{ 0.0 };
 		std::mutex                       _camMutex;  // camera update thread vs the tick
 		float                            _camYaw{ 0.0f };
 		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
@@ -167,9 +207,10 @@ namespace fp
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _rolling{ false };
 		std::atomic<float>         _power{ 0.0f };     // 0..1 while charging
+		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
 
 		// render thread
-		std::array<bool, 4> _keyWasDown{};
+		std::array<bool, 5> _keyWasDown{};
 		bool                _lmbWasDown{ false };
 		bool                _rmbWasDown{ false };
 		std::atomic<bool>   _tickPending{ false };
