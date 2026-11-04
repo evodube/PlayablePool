@@ -130,7 +130,8 @@ namespace fp
 		void        OpponentStrike(const Frame& a_frame);
 		void        SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos);
 		void        WaitByTable();  // a wait spot at the table on the side they're on
-		void        HoldOpponent(RE::Actor* a_actor, bool a_hold);       // SetDontMove, only when it changes
+		void        HoldOpponent(RE::Actor* a_actor, bool a_hold);       // SetRestrained, only when it changes
+		void        PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun);  // one walk at a time
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
 		void        TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt);
@@ -262,10 +263,12 @@ namespace fp
 		RE::ObjectRefHandle _npcMarker;    // an XMarkerHeading at the shot, for PathToReference / MoveTo
 		RE::ObjectRefHandle _npcWaitMarker; // where they wait for their turn, by the table
 		float               _npcWaitHeading{ 0.0f };
-		float               _npcRepath{ 0.0f }; // seconds since they were last sent back to the wait spot
 		bool                _npcFacing{ false }; // turned to the table since arriving at the wait spot
 		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
-		bool                _npcHeld{ false };   // SetDontMove(true) is on them
+		bool                _npcHeld{ false };   // SetRestrained(true) is on them
+		RE::ObjectRefHandle _npcPathTarget;      // where they were last sent walking
+		float               _npcPathAge{ 0.0f }; // seconds since
+		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };

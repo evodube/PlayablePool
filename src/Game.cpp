@@ -164,12 +164,14 @@ namespace fp
 		_autoAim = false;
 		_npcHeld = false;
 		_npcLooking = false;
+		_npcPathTarget = {};
+		_npcReleasedForOver = false;
 		_watching = false;
 	}
 
 	void Game::ClearForSave()
 	{
-		ReleaseOpponent();  // SetDontMove is saved with the game: never leave it on in a save
+		ReleaseOpponent();  // SetRestrained is saved with the game: never leave it on in a save
 		if (_sim || !_markers.empty()) {
 			Clear();
 			Tell("Pool: balls cleared before saving");

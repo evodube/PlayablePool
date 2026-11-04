@@ -29,8 +29,8 @@ namespace fp
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
 		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
-		constexpr float kRepathSeconds = 3.0f;
-		constexpr float kWaitFromCentre = 170.0f; // the first wait spot: this far from the table's middle, towards them
+		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this
+		constexpr float kWaitBeyondRail = 30.0f; // the first wait spot: this far outside the felt, on their side
 
 		float Distance2D(const RE::NiPoint3& a, const RE::NiPoint3& b)
 		{
@@ -162,8 +162,25 @@ namespace fp
 	{
 		if (a_actor && a_hold != _npcHeld) {
 			_npcHeld = a_hold;
-			Anim::SetDontMove(a_actor, a_hold);
+			Anim::SetRestrained(a_actor, a_hold);
 		}
+	}
+
+	void Game::PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun)
+	{
+		auto target = a_target.get();
+		if (!a_actor || !target) {
+			return;
+		}
+		// PathToReference is latent: sending it again while a walk is under way fights the walk already going, so
+		// the same target is only re-sent after a good while (in case their AI dropped it)
+		if (a_target == _npcPathTarget && _npcPathAge < kRepathSeconds) {
+			return;
+		}
+		HoldOpponent(a_actor, false);  // a restrained actor can't walk
+		_npcPathTarget = a_target;
+		_npcPathAge = 0.0f;
+		Anim::PathTo(a_actor, target.get(), a_walkRun);
 	}
 
 	void Game::OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look)
@@ -257,7 +274,6 @@ namespace fp
 		if (auto marker = _npcWaitMarker.get()) {
 			marker->data.angle = { 0.0f, 0.0f, _npcWaitHeading };
 		}
-		_npcRepath = kRepathSeconds;  // check straight away
 		_npcFacing = false;
 	}
 
@@ -268,8 +284,23 @@ namespace fp
 		if (!actor || !GetFrame(frame)) {
 			return;
 		}
-		const RE::NiPoint3 away = util::Normalized(RE::NiPoint3{ actor->data.location.x - frame.origin.x, actor->data.location.y - frame.origin.y, 0.0f });
-		SetWaitSpot(frame, frame.origin + away * (kWaitFromCentre * frame.scale));
+		// where they are, in table space; then the nearest point just outside the felt on that side
+		const auto&        s = Settings::Get();
+		const RE::NiPoint3 rel = (actor->data.location - frame.origin) * (1.0f / std::max(0.01f, frame.scale));
+		const RE::NiPoint3 t = frame.rot * RE::NiPoint3{ rel.x, rel.y, 0.0f };
+		const double       hx = s.spec.length * 0.5 + kWaitBeyondRail;
+		const double       hy = s.spec.width * 0.5 + kWaitBeyondRail;
+		pool::Vec2         p{ std::clamp<double>(t.x, -hx, hx), std::clamp<double>(t.y, -hy, hy) };
+		if (std::abs(p.x) < hx && std::abs(p.y) < hy) {  // inside the outline: out to the nearest edge
+			if (hx - std::abs(p.x) < hy - std::abs(p.y)) {
+				p.x = p.x < 0 ? -hx : hx;
+			} else {
+				p.y = p.y < 0 ? -hy : hy;
+			}
+		}
+		RE::NiPoint3 spot = ToWorld(frame, p, 0.0f);
+		spot.z = frame.origin.z;
+		SetWaitSpot(frame, spot);
 	}
 
 	void Game::TickWaiting(RE::Actor* a_actor, [[maybe_unused]] const Frame& a_frame, float a_dt)
@@ -278,19 +309,14 @@ namespace fp
 		OpponentLooksAtPlayer(a_actor, !OpponentsTurn() && !_rules.Over());
 
 		auto marker = _npcWaitMarker.get();
-		if (!marker) {
+		if (!marker || _npcReleasedForOver) {
 			return;
 		}
-		_npcRepath += a_dt;
 		const float away = Distance2D(a_actor->data.location, marker->data.location);
 		if (away > kWaitRadius) {
-			// pushed or pulled off the spot: walk back (they can't walk while held)
+			// not there yet (or pulled off it): walk back
 			_npcFacing = false;
-			HoldOpponent(a_actor, false);
-			if (_npcRepath >= kRepathSeconds) {
-				_npcRepath = 0.0f;
-				Anim::PathTo(a_actor, marker.get(), 0.0f);
-			}
+			PathOpponent(a_actor, _npcWaitMarker, 0.0f);
 		} else if (!_npcFacing && away < kWaitRadius * 0.5f) {
 			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
@@ -369,9 +395,9 @@ namespace fp
 		}
 		_npcTimer = 0.0f;
 		OpponentLooksAtPlayer(actor, false);
-		HoldOpponent(actor, false);  // free to walk to the shot
 		_npcFacing = false;
-		if (actor && marker && Anim::PathTo(actor, marker.get(), s.opponentRun ? 1.0f : 0.0f)) {
+		if (actor && marker) {
+			PathOpponent(actor, _npcMarker, s.opponentRun ? 1.0f : 0.0f);
 			_npcStep = NpcStep::kWalking;
 		} else {
 			// can't make them walk: straight to lining up the shot
@@ -435,6 +461,15 @@ namespace fp
 		const auto& s = Settings::Get();
 		auto        marker = _npcMarker.get();
 		_npcTimer += a_dt;
+		_npcPathAge += a_dt;
+
+		// the game's over: let them go about their business until the next rack
+		if (_rules.Over() && _npcStep == NpcStep::kNone && !_npcReleasedForOver) {
+			_npcReleasedForOver = true;
+			HoldOpponent(actor, false);
+			OpponentLooksAtPlayer(actor, false);
+			log::info("{}: game over, released", _opponentName);
+		}
 		switch (_npcStep) {
 		case NpcStep::kNone:
 			TickWaiting(actor, a_frame, a_dt);
@@ -461,7 +496,6 @@ namespace fp
 				if (marker) {
 					Anim::MoveTo(actor, marker.get());  // exactly on the spot, facing the shot
 				}
-				HoldOpponent(actor, true);
 				Anim::SetHeadTracking(actor, false);  // eyes on the shot, not on whoever walks by
 				_npcStep = NpcStep::kAiming;
 				_npcTimer = 0.0f;

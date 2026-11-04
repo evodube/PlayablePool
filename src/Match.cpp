@@ -36,6 +36,7 @@ namespace fp
 			_npcStep = NpcStep::kNone;
 			_npcTimer = 0.0f;
 			_autoAim = _rules.Shooter() == 0;  // your break: straight into the shot camera
+			_npcReleasedForOver = false;
 			if (!_npcWaitMarker) {
 				WaitByTable();
 			}

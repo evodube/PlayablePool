@@ -94,9 +94,9 @@ namespace fp::Anim
 		return CallActor(a_actor, "MoveTo", a_target, 0.0f, 0.0f, 0.0f, true);
 	}
 
-	bool SetDontMove(RE::Actor* a_actor, bool a_dontMove)
+	bool SetRestrained(RE::Actor* a_actor, bool a_restrained)
 	{
-		return CallActor(a_actor, "SetDontMove", a_dontMove);
+		return CallActor(a_actor, "SetRestrained", a_restrained);
 	}
 
 	bool LookAt(RE::Actor* a_actor, RE::TESObjectREFR* a_target)
