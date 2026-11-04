@@ -79,6 +79,7 @@ namespace fp
 		float soundFullDistance{ 150.0f }; // full volume within this distance of the camera
 		float soundMaxDistance{ 3000.0f }; // silent beyond this
 		bool  soundReturn{ true };         // the rolling-away sound after a ball drops
+		int   returnEnd{ 1 };              // which end the ball return is: 1 the foot (rack) end, -1 the head end
 
 		// [Table] the felt, in the table mesh's own space (before the table's scale). The defaults are measured
 		// from the vanilla SetDressing\PoolTable\PoolTable01.nif.

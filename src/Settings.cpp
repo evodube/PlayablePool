@@ -112,6 +112,7 @@ namespace fp
 		soundFullDistance = std::max(1.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));
 		soundMaxDistance = std::max(soundFullDistance + 1.0f, ReadFloat(L"Sound", L"fMaxDistance", soundMaxDistance));
 		soundReturn = ReadBool(L"Sound", L"bBallReturn", soundReturn);
+		returnEnd = ReadInt(L"Sound", L"iBallReturnEnd", returnEnd) < 0 ? -1 : 1;
 
 		useConsolePick = ReadBool(L"Table", L"bUseConsolePick", useConsolePick);
 		aimDistance = ReadFloat(L"Table", L"fAimDistance", aimDistance);

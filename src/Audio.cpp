@@ -26,6 +26,7 @@ namespace fp::Audio
 		{
 			IXAudio2SourceVoice*                  voice{ nullptr };
 			std::chrono::steady_clock::time_point started{};
+			std::vector<std::uint8_t>             cut;  // a shortened, faded copy while it plays
 		};
 
 		std::mutex                                                g_lock;
@@ -198,7 +199,7 @@ namespace fp::Audio
 		g_haveYaw = a_valid;
 	}
 
-	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain)
+	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_seconds)
 	{
 		const auto& s = Settings::Get();
 		if (!s.sound || a_gain <= 0.001f) {
@@ -256,10 +257,26 @@ namespace fp::Audio
 			return;
 		}
 		const auto& clip = clips[static_cast<std::size_t>(Random01() * static_cast<float>(clips.size())) % clips.size()];
+		const std::uint8_t* data = clip.data.data();
+		std::size_t         bytes = clip.data.size();
+		const std::size_t   wanted = a_seconds > 0.0f ? static_cast<std::size_t>(a_seconds * kRate) * 2 : bytes;
+		if (wanted < bytes) {
+			// the voice is idle (FreeVoice stopped it if it wasn't), so its copy can be replaced
+			v->cut.assign(clip.data.begin(), clip.data.begin() + wanted);
+			auto*             samples = reinterpret_cast<std::int16_t*>(v->cut.data());
+			const std::size_t count = wanted / 2;
+			const std::size_t fade = std::min<std::size_t>(count, kRate * 2 / 5);  // 0.4 s
+			for (std::size_t i = 0; i < fade; ++i) {
+				auto& sample = samples[count - fade + i];
+				sample = static_cast<std::int16_t>(sample * (1.0f - static_cast<float>(i + 1) / static_cast<float>(fade)));
+			}
+			data = v->cut.data();
+			bytes = v->cut.size();
+		}
 		XAUDIO2_BUFFER buffer{};
 		buffer.Flags = XAUDIO2_END_OF_STREAM;
-		buffer.AudioBytes = static_cast<UINT32>(clip.data.size());
-		buffer.pAudioData = clip.data.data();
+		buffer.AudioBytes = static_cast<UINT32>(bytes);
+		buffer.pAudioData = data;
 		v->voice->SetOutputMatrix(g_master, 1, g_channels, matrix.data());
 		v->voice->SetVolume(1.0f);
 		v->voice->SetFrequencyRatio(0.95f + 0.1f * Random01());

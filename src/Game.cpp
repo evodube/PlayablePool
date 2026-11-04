@@ -9,7 +9,9 @@ namespace fp
 {
 	namespace
 	{
-		constexpr float kDropSeconds = 0.3f;  // a pocketed ball sinks out of sight over this long
+		constexpr float kDropSeconds = 0.3f;     // a pocketed ball sinks out of sight over this long
+		constexpr double kReturnShortest = 1.5;  // seconds of rolling from the pockets nearest the ball return
+		constexpr double kReturnLongest = 5.5;   // from the far corners (the whole sound)
 		constexpr float kMaxFrame = 0.05f;    // longer frames (hitches) are clamped so balls don't jump through things
 
 		using util::FromRows;
@@ -640,6 +642,7 @@ namespace fp
 			Audio::Bank  bank;
 			RE::NiPoint3 pos;
 			float        gain;
+			float        seconds{ 0.0f };
 		};
 		std::vector<Sound> sounds;
 		const float        r = static_cast<float>(Settings::Get().spec.ballRadius);
@@ -666,7 +669,16 @@ namespace fp
 					const auto pos = ToWorld(a_frame, _sim->PocketPos(e.b), 0.0f);
 					sounds.push_back({ Audio::Bank::kPocket, pos, 0.5f + 0.5f * loudness(e.speed, 0.0, 250.0) });
 					if (Settings::Get().soundReturn) {
-						sounds.push_back({ Audio::Bank::kReturn, pos, 0.45f });
+						// The ball runs under the table to the return at the foot end (where the balls are racked):
+						// the further the pocket from it, the longer the roll.
+						const auto&      spec = Settings::Get().spec;
+						const double     end = Settings::Get().returnEnd >= 0 ? 1.0 : -1.0;
+						const pool::Vec2 collect{ end * spec.length * 0.5, 0.0 };
+						const double     nearest = spec.width * 0.5;                                          // a foot corner
+						const double     farthest = std::sqrt(spec.length * spec.length + nearest * nearest);  // a head corner
+						const double     t = std::clamp(((_sim->PocketPos(e.b) - collect).Length() - nearest) / (farthest - nearest), 0.0, 1.0);
+						const float      seconds = static_cast<float>(kReturnShortest + (kReturnLongest - kReturnShortest) * t);
+						sounds.push_back({ Audio::Bank::kReturn, pos, 0.45f, seconds });
 					}
 				}
 				break;
@@ -678,7 +690,7 @@ namespace fp
 			if (played >= 8 || snd.gain < 0.02f) {
 				break;
 			}
-			Audio::Play(snd.bank, snd.pos, snd.gain);
+			Audio::Play(snd.bank, snd.pos, snd.gain, snd.seconds);
 			++played;
 		}
 	}

@@ -17,7 +17,8 @@ namespace fp::Audio
 
 	// Plays one of the bank's sounds at a_pos in the world. a_gain 0..1 is how hard the hit was; distance from the
 	// camera and the [Sound] volume are applied on top.
-	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain);
+	// a_seconds > 0 plays only that much of the sound, fading out over the last part.
+	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_seconds = 0.0f);
 
 	// Which way the listener faces (radians, the game's yaw: 0 = north/+Y). Set each frame while aiming.
 	void SetListenerYaw(float a_yaw, bool a_valid);
