@@ -1,25 +1,29 @@
 # Pool animations
 
-`pool_anims.blend` (Blender 5.2 + PyNifly 30.2) holds Fallout 4's human rig, imported from the vanilla
-`skeleton.hkx`, a game-scale table, cue ball and cue, and two clips. Hand-animated, rotations driven by a
-small two-bone IK script (the `pool_ik` text block), no constraints left to bake.
+`pool_anims_v2.blend` (on the PC, in `anim_tests`) holds Fallout 4's human rig, imported from the vanilla
+`skeleton.hkx`, a game-scale table, cue ball and cue. The clips are posed by script, `pool_pose.py` here (the
+`pool_pose` text block in the scene): every frame is built from where the cue is and a handful of body parameters,
+with two-bone IK for the arms and legs, and keyed on every bone. No constraints to bake.
 
 | Clip | File | Frames (30 fps) | What |
 |---|---|---|---|
-| PoolAim | PoolAim.hkx | 90 (3 s), loops | lined up, two practice strokes of 7 units, one breath |
-| PoolStrike | PoolStrike.hkx | 60 (2 s) | settle, backswing 11 units, pause, accelerating stroke, follow-through 7 units |
+| PoolAim2 | PoolAim.hkx | 120 (4 s), loops | settled; three practice strokes of 6 to 7.5 units; sway against the stroke, breath, small head moves |
+| PoolStrike2 | PoolStrike.hkx | 60 (2 s) | backswing 12 units, pause, stroke speeding up to the ball, follow-through 9, starts to stand up |
 
-**Cue ball contact: PoolStrike frame 35** (about 1.13 s in). The game should strike the ball then.
+**Cue ball contact: PoolStrike frame 35** (about 1.13 s in). The game strikes the ball then.
 
-Shot geometry, in the actor's own space (root at the origin, facing +Y; game units):
+Stance: open, right-handed. Left foot forward, right foot back and turned out, hips turned 40 degrees towards the
+cue line; the cue runs beside the right hip, so the grip hand hangs outside the body (palm on the outside of the cue,
+fingers wrapped under it); the bridge hand lies flat on the felt with the cue in the V of thumb and index.
 
-- cue line: x = 8.5, along +Y, rising about 2 degrees towards the butt
-- cue tip at rest: (8.5, 60.6, 73.9); cue ball centre: (8.5, 66.1, 73.9) (felt 70.4 + radius 3.51)
-- so the actor stands with its root 66.1 units behind the cue ball along the shot line and 8.5 units to the
-  left of it (the line runs under the chin)
-- bridge hand: left, flat on the felt at y = 40..48; grip hand: right, wrist at about (9.5, -8.5, 80.9)
+Shot geometry, in the actor's own space (root midway between the feet, facing +Y; game units):
 
-Exports are checked by re-importing them: within 0.05 units and 0.1 degrees of the Blender clip.
+- cue line: x = 13, along +Y, rising 3 degrees towards the butt
+- cue ball centre: (13, 89, 73.9) (felt 70.4 + radius 3.51)
+- so the actor stands with its root 89 units behind the cue ball along the shot line and 13 to the left of it
+- the table front can be 64 behind the cue ball (the left foot's toes and the hips stay clear of it)
+
+Exports are checked by re-importing them: within 0.1 units of the Blender clip on every bone checked.
 
 ## In the mod
 

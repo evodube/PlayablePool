@@ -14,16 +14,16 @@ namespace fp
 {
 	namespace
 	{
-		// The pool clips' shot geometry, in the actor's own space (root at the origin, facing +Y): the cue runs
-		// along x = 8.5 and the cue ball sits 66.1 ahead of the root (tools/anim/README.md).
-		constexpr float kStanceBack = 66.1f;
-		constexpr float kStanceSide = 8.5f;
+		// The pool clips' shot geometry, in the actor's own space (root midway between the feet, facing +Y): the
+		// cue runs along x = 13 and the cue ball sits 89 ahead of the root (tools/anim/README.md).
+		constexpr float kStanceBack = 89.0f;
+		constexpr float kStanceSide = 13.0f;
 		constexpr float kContactSeconds = 35.0f / 30.0f;  // PoolStrike: the cue reaches the ball on frame 35
 		constexpr float kStrikeLength = 60.0f / 30.0f;
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
 		constexpr float kThinkSeconds = 0.8f;    // after the balls stop, before they set off
 		constexpr float kArrivedDistance = 30.0f;
-		constexpr float kTableMargin = 22.0f;    // the rails and some room for the body, beyond the felt
+		constexpr float kTableMargin = 30.0f;    // the rails and room for the hips and front foot, beyond the felt
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
