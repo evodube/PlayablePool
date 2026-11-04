@@ -1,0 +1,99 @@
+#include "Settings.h"
+
+namespace fp
+{
+	namespace
+	{
+		constexpr auto kIniPath = L"Data\\F4SE\\Plugins\\fo4pool.ini";
+
+		std::wstring ReadString(const wchar_t* a_section, const wchar_t* a_key, const std::wstring& a_default)
+		{
+			wchar_t buf[512]{};
+			::GetPrivateProfileStringW(a_section, a_key, a_default.c_str(), buf, static_cast<DWORD>(std::size(buf)), kIniPath);
+			std::wstring value = buf;
+			// strip inline "; comment" and surrounding whitespace
+			for (std::size_t i = 0; i < value.size(); ++i) {
+				if (value[i] == L';' && (i == 0 || value[i - 1] == L' ' || value[i - 1] == L'\t')) {
+					value.resize(i);
+					break;
+				}
+			}
+			while (!value.empty() && (value.back() == L' ' || value.back() == L'\t')) {
+				value.pop_back();
+			}
+			return value;
+		}
+
+		std::string Narrow(const std::wstring& a_str)
+		{
+			if (a_str.empty()) {
+				return {};
+			}
+			const int len = ::WideCharToMultiByte(CP_UTF8, 0, a_str.c_str(), static_cast<int>(a_str.size()), nullptr, 0, nullptr, nullptr);
+			std::string out(static_cast<std::size_t>(len), '\0');
+			::WideCharToMultiByte(CP_UTF8, 0, a_str.c_str(), static_cast<int>(a_str.size()), out.data(), len, nullptr, nullptr);
+			return out;
+		}
+
+		long long ReadInt(const wchar_t* a_section, const wchar_t* a_key, long long a_default)
+		{
+			const auto str = ReadString(a_section, a_key, std::to_wstring(a_default));
+			try {
+				return std::stoll(str, nullptr, 0);  // accepts 0x800 style
+			} catch (...) {
+				return a_default;
+			}
+		}
+
+		float ReadFloat(const wchar_t* a_section, const wchar_t* a_key, float a_default)
+		{
+			const auto str = ReadString(a_section, a_key, std::to_wstring(a_default));
+			try {
+				return std::stof(str);
+			} catch (...) {
+				return a_default;
+			}
+		}
+
+		bool ReadBool(const wchar_t* a_section, const wchar_t* a_key, bool a_default)
+		{
+			return ReadInt(a_section, a_key, a_default ? 1 : 0) != 0;
+		}
+	}
+
+	void Settings::Load()
+	{
+		keyRack = static_cast<int>(ReadInt(L"Keys", L"iRack", keyRack));
+		keyShoot = static_cast<int>(ReadInt(L"Keys", L"iShoot", keyShoot));
+		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));
+		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
+
+		ballPlugin = Narrow(ReadString(L"Ball", L"sPlugin", std::wstring(ballPlugin.begin(), ballPlugin.end())));
+		ballFormID = static_cast<std::uint32_t>(ReadInt(L"Ball", L"iFormID", ballFormID));
+		ballAutoScale = ReadBool(L"Ball", L"bAutoScale", ballAutoScale);
+		ballScale = ReadFloat(L"Ball", L"fScale", ballScale);
+		ballZOffset = ReadFloat(L"Ball", L"fZOffset", ballZOffset);
+		spec.ballRadius = std::max(0.5f, ReadFloat(L"Ball", L"fRadius", static_cast<float>(spec.ballRadius)));
+
+		shotSpeed = ReadFloat(L"Shot", L"fSpeed", shotSpeed);
+
+		useConsolePick = ReadBool(L"Table", L"bUseConsolePick", useConsolePick);
+		aimDistance = ReadFloat(L"Table", L"fAimDistance", aimDistance);
+		lengthAxis = static_cast<int>(ReadInt(L"Table", L"iLengthAxis", lengthAxis)) == 1 ? 1 : 0;
+		offsetX = ReadFloat(L"Table", L"fOffsetX", offsetX);
+		offsetY = ReadFloat(L"Table", L"fOffsetY", offsetY);
+		surfaceZ = ReadFloat(L"Table", L"fSurfaceZ", surfaceZ);
+		spec.length = std::max(20.0f, ReadFloat(L"Table", L"fLength", static_cast<float>(spec.length)));
+		spec.width = std::max(10.0f, ReadFloat(L"Table", L"fWidth", static_cast<float>(spec.width)));
+		spec.cornerMouth = ReadFloat(L"Table", L"fCornerMouth", static_cast<float>(spec.cornerMouth));
+		spec.sideMouth = ReadFloat(L"Table", L"fSideMouth", static_cast<float>(spec.sideMouth));
+
+		spec.rollDecel = ReadFloat(L"Physics", L"fRollDecel", static_cast<float>(spec.rollDecel));
+		spec.ballRestitution = ReadFloat(L"Physics", L"fBallRestitution", static_cast<float>(spec.ballRestitution));
+		spec.cushionRestitution = ReadFloat(L"Physics", L"fCushionRestitution", static_cast<float>(spec.cushionRestitution));
+
+		log::info("settings: ball {}|{:X} r={} autoscale={} | table {}x{} surfaceZ={} axis={} offset=({}, {}) | shot {}",
+			ballPlugin, ballFormID, spec.ballRadius, ballAutoScale, spec.length, spec.width, surfaceZ, lengthAxis, offsetX, offsetY,
+			shotSpeed);
+	}
+}

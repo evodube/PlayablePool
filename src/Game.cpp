@@ -1,0 +1,580 @@
+#include "Game.h"
+
+#include "Settings.h"
+
+namespace fp
+{
+	namespace
+	{
+		constexpr float kDropSeconds = 0.3f;  // a pocketed ball sinks out of sight over this long
+		constexpr float kMaxFrame = 0.05f;    // longer frames (hitches) are clamped so balls don't jump through things
+
+		HWND GameWindow()
+		{
+			auto* data = RE::BSGraphics::GetRendererData();
+			return data ? reinterpret_cast<HWND>(data->renderWindow[0].hwnd) : nullptr;
+		}
+
+		template <class F>
+		void ForEachLoadedCell(F&& a_fn)
+		{
+			std::vector<RE::TESObjectCELL*> seen;
+			auto visit = [&](RE::TESObjectCELL* a_cell) {
+				if (a_cell && std::ranges::find(seen, a_cell) == seen.end()) {
+					seen.push_back(a_cell);
+					a_fn(a_cell);
+				}
+			};
+			if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+				visit(player->GetParentCell());
+			}
+			auto* tes = RE::TES::GetSingleton();
+			if (!tes) {
+				return;
+			}
+			if (tes->interiorCell) {
+				visit(tes->interiorCell);
+				return;
+			}
+			if (auto* grid = tes->gridCells; grid && grid->gridCell) {
+				const auto dim = std::min<std::uint32_t>(grid->dimension, 15);
+				for (std::uint32_t i = 0; i < dim * dim; ++i) {
+					auto* cell = grid->gridCell[i].cell;
+					if (cell && cell->IsAttached()) {
+						visit(cell);
+					}
+				}
+			}
+		}
+
+		RE::NiMatrix3 FromRows(const double a_m[3][3])
+		{
+			return RE::NiMatrix3(
+				static_cast<float>(a_m[0][0]), static_cast<float>(a_m[0][1]), static_cast<float>(a_m[0][2]), 0.0f,
+				static_cast<float>(a_m[1][0]), static_cast<float>(a_m[1][1]), static_cast<float>(a_m[1][2]), 0.0f,
+				static_cast<float>(a_m[2][0]), static_cast<float>(a_m[2][1]), static_cast<float>(a_m[2][2]), 0.0f);
+		}
+
+		// Table x/y -> mesh x/y. With iLengthAxis=1 the table's length runs along the mesh's Y axis.
+		RE::NiMatrix3 AxisSwap(int a_lengthAxis)
+		{
+			if (a_lengthAxis == 1) {
+				return RE::NiMatrix3(
+					0.0f, -1.0f, 0.0f, 0.0f,
+					1.0f, 0.0f, 0.0f, 0.0f,
+					0.0f, 0.0f, 1.0f, 0.0f);
+			}
+			RE::NiMatrix3 m;
+			m.MakeIdentity();
+			return m;
+		}
+
+		const char* BallName(int a_index)
+		{
+			static const std::array<std::string, pool::Sim::kBalls> names = [] {
+				std::array<std::string, pool::Sim::kBalls> n;
+				n[0] = "cue ball";
+				for (int i = 1; i < pool::Sim::kBalls; ++i) {
+					n[i] = std::format("{}-ball", i);
+				}
+				return n;
+			}();
+			return names[a_index].c_str();
+		}
+	}
+
+	// ---------------------------------------------------------------- render thread
+
+	void Game::OnPresent()
+	{
+		PollKeys();
+		if (_tickPending.exchange(true)) {
+			return;
+		}
+		auto* tasks = F4SE::GetTaskInterface();
+		if (!tasks) {
+			_tickPending = false;
+			return;
+		}
+		tasks->AddTask([this]() {
+			Tick();
+			_tickPending = false;
+		});
+	}
+
+	void Game::PollKeys()
+	{
+		const HWND window = GameWindow();
+		if (window && ::GetForegroundWindow() != window) {
+			return;
+		}
+		const auto&              s = Settings::Get();
+		const std::array<int, 4> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate };
+		for (std::size_t i = 0; i < keys.size(); ++i) {
+			if (keys[i] <= 0) {
+				continue;
+			}
+			const bool down = (::GetAsyncKeyState(keys[i]) & 0x8000) != 0;
+			if (down && !_keyWasDown[i]) {
+				const bool shift = (::GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+				const bool ctrl = (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+				if (auto* tasks = F4SE::GetTaskInterface()) {
+					tasks->AddTask([this, i, shift, ctrl]() {
+						if (IsGamePaused()) {
+							return;  // menus, console (typing numbers), loading
+						}
+						switch (i) {
+						case 0: Rack(); break;
+						case 1: Shoot(shift ? 0.4f : ctrl ? 1.6f : 1.0f); break;
+						case 2: Clear(); break;
+						default: ToggleCalibrate(); break;
+						}
+					});
+				}
+			}
+			_keyWasDown[i] = down;
+		}
+	}
+
+	// ---------------------------------------------------------------- main thread
+
+	bool Game::IsGamePaused()
+	{
+		auto* ui = RE::UI::GetSingleton();
+		if (!ui) {
+			return false;
+		}
+		if (ui->menuMode != 0 || ui->freezeFramePause != 0) {
+			return true;
+		}
+		static const std::array<RE::BSFixedString, 6> menus{
+			RE::BSFixedString("PauseMenu"), RE::BSFixedString("PipboyMenu"), RE::BSFixedString("LoadingMenu"),
+			RE::BSFixedString("MainMenu"), RE::BSFixedString("Console"), RE::BSFixedString("WorkshopMenu")
+		};
+		return std::ranges::any_of(menus, [&](const RE::BSFixedString& a_name) { return ui->GetMenuOpen(a_name); });
+	}
+
+	void Game::Notify(const std::string& a_message)
+	{
+		log::info("{}", a_message);
+		RE::SendHUDMessage::ShowHUDMessage(a_message.c_str(), nullptr, false, false);
+	}
+
+	void Game::Forget()
+	{
+		_table = {};
+		_sim.reset();
+		_balls.fill({});
+		_markers.clear();
+		_haveLast = false;
+		_scratch = false;
+	}
+
+	void Game::ClearForSave()
+	{
+		if (_sim || !_markers.empty()) {
+			Clear();
+			Notify("Pool: balls cleared before saving");
+		}
+	}
+
+	bool Game::IsOurs(const RE::TESObjectREFR* a_ref) const
+	{
+		if (!a_ref) {
+			return false;
+		}
+		for (const auto& h : _balls) {
+			if (h && h.get().get() == a_ref) {
+				return true;
+			}
+		}
+		for (const auto& m : _markers) {
+			if (m.ref && m.ref.get().get() == a_ref) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	RE::TESObjectREFR* Game::PickTable() const
+	{
+		const auto& s = Settings::Get();
+		if (s.useConsolePick) {
+			if (auto picked = RE::Console::GetPickRef().get(); picked && !IsOurs(picked.get()) && picked->Get3D()) {
+				return picked.get();
+			}
+		}
+
+		// what the crosshair points at: the nearest table-sized object along the view line
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* camera = RE::PlayerCamera::GetSingleton();
+		if (!player || !camera || !camera->cameraRoot) {
+			return nullptr;
+		}
+		const auto         origin = camera->cameraRoot->GetWorldTranslate();
+		const float        pitch = player->data.angle.x;
+		const float        yaw = player->data.angle.z;
+		const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
+
+		RE::TESObjectREFR* best = nullptr;
+		float              bestT = s.aimDistance;
+		ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReferenceInRange(origin, s.aimDistance + 300.0f, [&](RE::TESObjectREFR* a_ref) {
+				auto* root = a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && !IsOurs(a_ref) ? a_ref->Get3D() : nullptr;
+				if (!root) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				const auto& b = root->worldBound;
+				if (b.fRadius < 40.0f || b.fRadius > 300.0f) {  // roughly table sized
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				const auto  oc = b.center - origin;
+				const float t = oc.Dot(dir);
+				const float miss2 = oc.SqrLength() - t * t;
+				// the view line passes near the object's middle, and it's the nearest such object so far
+				if (t > 0.0f && t < bestT && miss2 <= b.fRadius * b.fRadius * 0.5f) {
+					best = a_ref;
+					bestT = t;
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		return best;
+	}
+
+	RE::TESBoundObject* Game::BallForm() const
+	{
+		const auto& s = Settings::Get();
+		auto*       dh = RE::TESDataHandler::GetSingleton();
+		if (!dh) {
+			return nullptr;
+		}
+		auto* file = dh->LookupModByName(s.ballPlugin);
+		if (!file || file->compileIndex == 0xFF) {
+			return nullptr;
+		}
+		RE::TESFormID id;
+		if (file->compileIndex == 0xFE) {  // light plugin
+			id = (0xFEu << 24) | (static_cast<std::uint32_t>(file->smallFileCompileIndex) << 12) | (s.ballFormID & 0xFFF);
+		} else {
+			id = (static_cast<std::uint32_t>(file->compileIndex) << 24) | (s.ballFormID & 0xFFFFFF);
+		}
+		auto* form = RE::TESForm::GetFormByID(id);
+		return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+	}
+
+	bool Game::GetFrame(Frame& a_out) const
+	{
+		auto table = _table.get();
+		auto* root = table ? table->Get3D() : nullptr;
+		if (!root) {
+			return false;
+		}
+		const auto& w = root->GetWorldTransform();
+		a_out.tableRot = w.rotate;
+		a_out.rot = w.rotate * AxisSwap(Settings::Get().lengthAxis);
+		a_out.origin = w.translate;
+		a_out.scale = w.scale;
+		return true;
+	}
+
+	RE::NiPoint3 Game::ToWorld(const Frame& a_frame, pool::Vec2 a_pos, float a_height) const
+	{
+		const auto&  s = Settings::Get();
+		RE::NiPoint3 mesh;
+		if (s.lengthAxis == 1) {
+			mesh = { s.offsetX - static_cast<float>(a_pos.y), s.offsetY + static_cast<float>(a_pos.x), s.surfaceZ + a_height };
+		} else {
+			mesh = { s.offsetX + static_cast<float>(a_pos.x), s.offsetY + static_cast<float>(a_pos.y), s.surfaceZ + a_height };
+		}
+		return a_frame.origin + a_frame.tableRot * (mesh * a_frame.scale);
+	}
+
+	RE::ObjectRefHandle Game::Spawn(RE::TESBoundObject* a_form, RE::TESObjectREFR* a_table, const RE::NiPoint3& a_pos) const
+	{
+		auto* dh = RE::TESDataHandler::GetSingleton();
+		auto* cell = a_table->GetParentCell();
+		if (!dh || !cell) {
+			return {};
+		}
+		RE::NEW_REFR_DATA data;
+		data.location = a_pos;
+		data.direction = { 0.0f, 0.0f, 0.0f };
+		data.object = a_form;
+		if (cell->IsInterior()) {
+			data.interior = cell;
+		} else {
+			data.world = cell->worldSpace;
+		}
+		data.initializeScripts = false;
+		return dh->CreateReferenceAtLocation(data);
+	}
+
+	float Game::BallScale(RE::NiAVObject* a_root)
+	{
+		const auto& s = Settings::Get();
+		if (!s.ballAutoScale) {
+			return s.ballScale;
+		}
+		if (_modelRadius <= 0.0f && a_root && a_root->worldBound.fRadius > 0.0f && a_root->GetWorldScale() > 0.0f) {
+			_modelRadius = a_root->worldBound.fRadius / a_root->GetWorldScale();
+			log::info("ball mesh radius {:.3f} -> scale {:.3f} for a {:.2f} ball", _modelRadius,
+				static_cast<float>(s.spec.ballRadius) / _modelRadius, s.spec.ballRadius);
+		}
+		return _modelRadius > 0.0f ? static_cast<float>(s.spec.ballRadius) / _modelRadius : s.ballScale;
+	}
+
+	void Game::PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden)
+	{
+		auto* root = a_ref ? a_ref->Get3D() : nullptr;
+		if (!root) {
+			return;
+		}
+		if (root->GetAppCulled() != a_hidden) {
+			root->SetAppCulled(a_hidden);
+		}
+		if (a_hidden) {
+			return;
+		}
+
+		// we know the world transform we want; the node stores it relative to its parent
+		RE::NiTransform local;
+		if (auto* parent = root->parent) {
+			const auto& p = parent->GetWorldTransform();
+			const auto  inv = p.rotate.Transpose();
+			const float ps = p.scale != 0.0f ? p.scale : 1.0f;
+			local.rotate = inv * a_rot;
+			local.translate = (inv * (a_pos - p.translate)) * (1.0f / ps);
+			local.scale = a_scale / ps;
+		} else {
+			local.rotate = a_rot;
+			local.translate = a_pos;
+			local.scale = a_scale;
+		}
+		root->SetLocalTransform(local);
+
+		RE::NiUpdateData update;
+		root->Update(update);
+
+		a_ref->data.location.x = a_pos.x;
+		a_ref->data.location.y = a_pos.y;
+		a_ref->data.location.z = a_pos.z;
+	}
+
+	void Game::Rack()
+	{
+		auto& s = Settings::Get();
+		s.Load();
+
+		auto* table = PickTable();
+		if (!table) {
+			Notify("Pool: look at a pool table (or click it in the console) first");
+			return;
+		}
+		auto* ball = BallForm();
+		if (!ball) {
+			Notify(std::format("Pool: ball form {}|{:X} not found (see fo4pool.ini [Ball])", s.ballPlugin, s.ballFormID));
+			return;
+		}
+
+		Clear();
+		_table = table->GetHandle();
+		Frame frame;
+		if (!GetFrame(frame)) {
+			Notify("Pool: that table has no 3D loaded");
+			_table = {};
+			return;
+		}
+
+		_sim = std::make_unique<pool::Sim>(s.spec);
+		_sim->Rack(static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
+		_dropTime.fill(0.0f);
+		_scratch = false;
+		_haveLast = false;
+		_warned3D = false;
+
+		int spawned = 0;
+		for (int i = 0; i < pool::Sim::kBalls; ++i) {
+			const auto& b = _sim->Balls()[i];
+			_balls[i] = Spawn(ball, table, ToWorld(frame, b.pos, static_cast<float>(s.spec.ballRadius)));
+			spawned += static_cast<bool>(_balls[i]);
+		}
+		log::info("racked on {:08X} ({}x{} felt): {} balls spawned", table->GetFormID(), s.spec.length, s.spec.width, spawned);
+		Notify(spawned == pool::Sim::kBalls ? "Pool: racked" : std::format("Pool: only {} of 16 balls could be placed", spawned));
+	}
+
+	void Game::Shoot(float a_power)
+	{
+		if (!_sim) {
+			Notify("Pool: rack first");
+			return;
+		}
+		if (!_sim->AtRest()) {
+			return;
+		}
+		Frame frame;
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!player || !GetFrame(frame)) {
+			return;
+		}
+
+		// where the player faces, flattened onto the table and turned into table space
+		const float        yaw = player->data.angle.z;
+		const RE::NiPoint3 world{ std::sin(yaw), std::cos(yaw), 0.0f };
+		const RE::NiPoint3 table = frame.rot.Transpose() * world;
+		const float        speed = Settings::Get().shotSpeed * a_power;
+		_sim->Strike({ table.x, table.y }, speed);
+		log::info("shot: table dir ({:.3f}, {:.3f}) speed {:.0f}", table.x, table.y, speed);
+	}
+
+	void Game::Clear()
+	{
+		auto remove = [](RE::ObjectRefHandle& a_handle) {
+			if (auto ref = a_handle.get()) {
+				ref->Disable();
+				ref->SetWantsDelete(true);
+			}
+			a_handle = {};
+		};
+		for (auto& h : _balls) {
+			remove(h);
+		}
+		for (auto& m : _markers) {
+			remove(m.ref);
+		}
+		_markers.clear();
+		_sim.reset();
+		_table = {};
+	}
+
+	void Game::ClearMarkers()
+	{
+		for (auto& m : _markers) {
+			if (auto ref = m.ref.get()) {
+				ref->Disable();
+				ref->SetWantsDelete(true);
+			}
+		}
+		_markers.clear();
+	}
+
+	void Game::ToggleCalibrate()
+	{
+		if (!_markers.empty()) {
+			ClearMarkers();
+			Notify("Pool: calibration markers removed");
+			return;
+		}
+
+		auto& s = Settings::Get();
+		s.Load();
+		auto* table = PickTable();
+		auto* ball = BallForm();
+		if (!table || !ball) {
+			Notify(!table ? "Pool: look at a pool table (or click it in the console) first" : "Pool: ball form not found (see fo4pool.ini [Ball])");
+			return;
+		}
+		if (!_sim) {
+			_table = table->GetHandle();
+		} else if (_table.get().get() != table) {
+			Notify("Pool: clear the current game first");
+			return;
+		}
+
+		// the felt corners (= corner pockets), the side pockets, the head and foot spots and the centre
+		pool::Sim probe(s.spec);
+		for (int p = 0; p < pool::Sim::kPockets; ++p) {
+			_markers.push_back({ {}, probe.PocketPos(p) });
+		}
+		_markers.push_back({ {}, probe.HeadSpot() });
+		_markers.push_back({ {}, probe.FootSpot() });
+		_markers.push_back({ {}, { 0.0, 0.0 } });
+
+		Frame frame;
+		if (!GetFrame(frame)) {
+			_markers.clear();
+			return;
+		}
+		for (auto& m : _markers) {
+			m.ref = Spawn(ball, table, ToWorld(frame, m.pos, static_cast<float>(s.spec.ballRadius)));
+		}
+		Notify("Pool: markers at the felt corners, side pockets, spots and centre. Edit [Table] in fo4pool.ini, then press again twice");
+	}
+
+	void Game::Tick()
+	{
+		if (!_sim && _markers.empty()) {
+			return;
+		}
+		Frame frame;
+		if (!GetFrame(frame)) {
+			if (!_warned3D) {
+				log::warn("table 3D not loaded; balls on hold");
+				_warned3D = true;
+			}
+			return;
+		}
+
+		const auto& s = Settings::Get();
+		const float r = static_cast<float>(s.spec.ballRadius);
+
+		for (auto& m : _markers) {
+			if (auto ref = m.ref.get()) {
+				PlaceNode(ref.get(), ToWorld(frame, m.pos, r + s.ballZOffset), frame.rot, BallScale(ref->Get3D()) * frame.scale, false);
+			}
+		}
+		if (!_sim) {
+			return;
+		}
+
+		const auto now = std::chrono::steady_clock::now();
+		float      dt = _haveLast ? std::chrono::duration<float>(now - _last).count() : 0.0f;
+		_last = now;
+		_haveLast = true;
+		if (IsGamePaused()) {
+			dt = 0.0f;
+		}
+		dt = std::clamp(dt, 0.0f, kMaxFrame);
+
+		if (dt > 0.0f) {
+			for (const auto& e : _sim->Step(dt)) {
+				if (e.type == pool::Event::Type::kPocket) {
+					if (e.a == 0) {
+						_scratch = true;
+						Notify("Pool: scratch!");
+					} else {
+						Notify(std::format("Pool: {} in", BallName(e.a)));
+					}
+				}
+			}
+			for (int i = 0; i < pool::Sim::kBalls; ++i) {
+				if (_sim->Balls()[i].state == pool::BallState::kPocketed) {
+					_dropTime[i] += dt;
+				}
+			}
+		}
+
+		if (_scratch && _sim->AtRest()) {
+			_scratch = false;
+			_sim->RespotCue();
+			_dropTime[0] = 0.0f;
+			Notify("Pool: cue ball back on the spot");
+		}
+
+		for (int i = 0; i < pool::Sim::kBalls; ++i) {
+			auto ref = _balls[i].get();
+			if (!ref) {
+				continue;
+			}
+			const auto& b = _sim->Balls()[i];
+			const bool  pocketed = b.state == pool::BallState::kPocketed;
+			const bool  hidden = b.state == pool::BallState::kOff || (pocketed && _dropTime[i] >= kDropSeconds);
+			const float sink = pocketed ? (_dropTime[i] / kDropSeconds) * 2.5f * r : 0.0f;
+
+			double m[3][3];
+			b.rot.ToMatrix(m);
+			PlaceNode(ref.get(), ToWorld(frame, b.pos, r + s.ballZOffset - sink), frame.rot * FromRows(m), BallScale(ref->Get3D()) * frame.scale,
+				hidden);
+		}
+	}
+}
