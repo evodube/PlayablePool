@@ -227,21 +227,37 @@ namespace pool
 		return true;
 	}
 
+	bool Sim::CanPlace(int a_index, Vec2 a_pos) const
+	{
+		const double r = _spec.ballRadius;
+		return std::abs(a_pos.x) <= _spec.length * 0.5 - r && std::abs(a_pos.y) <= _spec.width * 0.5 - r && SpotFree(a_pos, a_index);
+	}
+
 	void Sim::RespotCue()
+	{
+		RespotNear(0, HeadSpot(), -1.0);
+	}
+
+	void Sim::RespotOnFoot(int a_index)
+	{
+		RespotNear(a_index, FootSpot(), 1.0);
+	}
+
+	void Sim::RespotNear(int a_index, Vec2 a_spot, double a_backwards)
 	{
 		const double r = _spec.ballRadius;
 		const double hl = _spec.length * 0.5;
-		Vec2         spot = HeadSpot();
-		// walk back towards the head rail, then forwards, until there's room
+		Vec2         spot = a_spot;
+		// walk back towards the nearer end rail, then forwards, until there's room
 		for (int i = 0; i < 200; ++i) {
-			const double offset = (i % 2 == 0 ? -1.0 : 1.0) * (i / 2) * r * 0.5;
-			const Vec2   p{ spot.x + offset, 0.0 };
-			if (std::abs(p.x) < hl - r && SpotFree(p, 0)) {
+			const double offset = (i % 2 == 0 ? a_backwards : -a_backwards) * (i / 2) * r * 0.5;
+			const Vec2   p{ a_spot.x + offset, 0.0 };
+			if (std::abs(p.x) < hl - r && SpotFree(p, a_index)) {
 				spot = p;
 				break;
 			}
 		}
-		Place(0, spot);
+		Place(a_index, spot);
 	}
 
 	void Sim::Strike(Vec2 a_dir, double a_speed)

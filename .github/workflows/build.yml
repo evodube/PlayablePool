@@ -12,10 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build and run physics tests
+      - name: Build and run physics and rules tests
         run: |
           g++ -std=c++20 -O2 -Wall -Wextra -Isrc tests/sim_test.cpp src/sim/Sim.cpp -o sim_test
           ./sim_test
+          g++ -std=c++20 -O2 -Wall -Wextra -Isrc tests/rules_test.cpp src/sim/Rules.cpp src/sim/Sim.cpp -o rules_test
+          ./rules_test
 
   build:
     runs-on: windows-latest

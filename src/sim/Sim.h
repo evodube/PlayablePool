@@ -129,8 +129,12 @@ namespace pool
 		void Rack(std::uint32_t a_seed);
 		// Puts one ball on the table at rest.
 		void Place(int a_index, Vec2 a_pos);
+		// Whether a ball could be put at a_pos: on the felt and not touching another (a_ignore aside).
+		bool CanPlace(int a_index, Vec2 a_pos) const;
 		// Puts the cue ball back on the head spot, or the nearest free spot behind it.
 		void RespotCue();
+		// Puts the 8 (or any ball) back on the foot spot, or the nearest free spot behind it.
+		void RespotOnFoot(int a_index);
 
 		// Hits the cue ball in direction a_dir (any length) at a_speed units/s.
 		void Strike(Vec2 a_dir, double a_speed);
@@ -160,6 +164,7 @@ namespace pool
 		// a pocket's opening: its middle and the direction into the pocket
 		void PocketMouth(int a_pocket, Vec2& a_middle, Vec2& a_inward) const;
 		bool SpotFree(Vec2 a_pos, int a_ignore) const;
+		void RespotNear(int a_index, Vec2 a_spot, double a_backwards);
 
 		TableSpec                _spec;
 		std::array<Ball, kBalls> _balls;
