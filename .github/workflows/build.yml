@@ -101,9 +101,15 @@ jobs:
           }
           Copy-Item vanilla/Source/Institute_Papyrus_Flags.flg vanilla-base/
           Remove-Item -Recurse -Force vanilla   # Caprica also scans the flags file's folder
-          ./caprica-bin/Caprica.exe -g fallout4 -i "papyrus;vanilla-base" -f vanilla-base/Institute_Papyrus_Flags.flg -o out/Scripts papyrus/fo4poolOpponentQuest.psc papyrus/fo4poolOpponentAlias.psc
-          if ($LASTEXITCODE -ne 0) { throw "Caprica failed" }
-          Get-ChildItem out/Scripts
+          # from inside papyrus/, so the scripts are top level (from the repo root Caprica puts them in a
+          # 'papyrus' namespace: out/Scripts/papyrus/, and the wrong script names)
+          Push-Location papyrus
+          ../caprica-bin/Caprica.exe -g fallout4 -i "../vanilla-base" -f ../vanilla-base/Institute_Papyrus_Flags.flg -o ../out/Scripts fo4poolOpponentQuest.psc fo4poolOpponentAlias.psc
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { throw "Caprica failed" }
+          Get-ChildItem -Recurse out/Scripts
+          if (-not (Test-Path out/Scripts/fo4poolOpponentQuest.pex) -or -not (Test-Path out/Scripts/fo4poolOpponentAlias.pex)) { throw "scripts not at out/Scripts/" }
 
       - name: Package
         shell: pwsh
