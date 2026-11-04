@@ -159,7 +159,9 @@ namespace fp
 		// a load: the opponent's still in the world, but the game's gone
 		_opponent = {};
 		_npcMarker = {};
+		_npcWaitMarker = {};
 		_npcStep = NpcStep::kNone;
+		_autoAim = false;
 		_watching = false;
 	}
 
@@ -529,6 +531,11 @@ namespace fp
 			marker->SetWantsDelete(true);
 		}
 		_npcMarker = {};
+		if (auto marker = _npcWaitMarker.get()) {
+			marker->Disable();
+			marker->SetWantsDelete(true);
+		}
+		_npcWaitMarker = {};
 		RemoveAimObjects();
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {

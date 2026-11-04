@@ -128,6 +128,9 @@ namespace fp
 		void        TickOpponent(const Frame& a_frame, float a_dt);
 		void        PlanOpponentShot(const Frame& a_frame);
 		void        OpponentStrike(const Frame& a_frame);
+		void        SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos);
+		void        WaitByTable();  // a wait spot at the table on the side they're on
+		void        TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt);
 		RE::NiPoint3 StanceFor(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float& a_heading) const;
 
 		void Rack();
@@ -251,6 +254,11 @@ namespace fp
 		RE::NiPoint3        _npcStance;
 		float               _npcHeading{ 0.0f };
 		RE::ObjectRefHandle _npcMarker;    // an XMarkerHeading at the shot, for PathToReference / MoveTo
+		RE::ObjectRefHandle _npcWaitMarker; // where they wait for their turn, by the table
+		float               _npcWaitHeading{ 0.0f };
+		float               _npcRepath{ 0.0f }; // seconds since they were last sent back to the wait spot
+		bool                _npcFacing{ false }; // turned to the table since arriving at the wait spot
+		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
 

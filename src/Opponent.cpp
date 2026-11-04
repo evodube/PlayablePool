@@ -27,6 +27,9 @@ namespace fp
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
+		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
+		constexpr float kRepathSeconds = 3.0f;
+		constexpr float kWaitFromCentre = 170.0f; // the first wait spot: this far from the table's middle, towards them
 
 		float Distance2D(const RE::NiPoint3& a, const RE::NiPoint3& b)
 		{
@@ -160,6 +163,8 @@ namespace fp
 			Anim::Stop(actor);
 		}
 		RemoveRef(_npcMarker);
+		RemoveRef(_npcWaitMarker);
+		_autoAim = false;
 		_opponent = {};
 		_npcStep = NpcStep::kNone;
 		_npcTimer = 0.0f;
@@ -197,6 +202,58 @@ namespace fp
 		RE::NiPoint3 root = ToWorld(a_frame, a_cue - a_dir * back, 0.0f) - right * kStanceSide;
 		root.z = a_frame.origin.z;  // the clip has the felt 70.4 above the feet: the table's own height
 		return root;
+	}
+
+	void Game::SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos)
+	{
+		auto* table = _table.get().get();
+		RemoveRef(_npcWaitMarker);
+		auto* form = RE::TESForm::GetFormByID(kXMarkerHeading);
+		auto* bound = form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+		if (!bound || !table) {
+			return;
+		}
+		RE::NiPoint3 pos = a_pos;
+		pos.z = a_frame.origin.z;
+		// facing the middle of the table while they wait
+		_npcWaitHeading = std::atan2(a_frame.origin.x - pos.x, a_frame.origin.y - pos.y);
+		_npcWaitMarker = Spawn(bound, table, pos);
+		if (auto marker = _npcWaitMarker.get()) {
+			marker->data.angle = { 0.0f, 0.0f, _npcWaitHeading };
+		}
+		_npcRepath = kRepathSeconds;  // check straight away
+		_npcFacing = false;
+	}
+
+	void Game::WaitByTable()
+	{
+		auto*  actor = Opponent();
+		Frame  frame;
+		if (!actor || !GetFrame(frame)) {
+			return;
+		}
+		const RE::NiPoint3 away = util::Normalized(RE::NiPoint3{ actor->data.location.x - frame.origin.x, actor->data.location.y - frame.origin.y, 0.0f });
+		SetWaitSpot(frame, frame.origin + away * (kWaitFromCentre * frame.scale));
+	}
+
+	void Game::TickWaiting(RE::Actor* a_actor, [[maybe_unused]] const Frame& a_frame, float a_dt)
+	{
+		auto marker = _npcWaitMarker.get();
+		if (!marker) {
+			return;
+		}
+		_npcRepath += a_dt;
+		const float away = Distance2D(a_actor->data.location, marker->data.location);
+		if (away > kWaitRadius) {
+			_npcFacing = false;
+			if (_npcRepath >= kRepathSeconds) {
+				_npcRepath = 0.0f;
+				Anim::PathTo(a_actor, marker.get(), 0.0f);  // their sandbox package keeps pulling them off: back to the table
+			}
+		} else if (!_npcFacing && away < kWaitRadius * 0.5f) {
+			_npcFacing = true;
+			a_actor->SetHeading(_npcWaitHeading);
+		}
 	}
 
 	void Game::PlanOpponentShot(const Frame& a_frame)
@@ -298,6 +355,13 @@ namespace fp
 		_npcTimer += a_dt;
 		switch (_npcStep) {
 		case NpcStep::kNone:
+			TickWaiting(actor, a_frame, a_dt);
+			if (_autoAim && !OpponentsTurn() && !_shotLive && _sim->AtRest()) {
+				_autoAim = false;
+				if (_watching && !_aiming && !_rules.Over()) {
+					EnterAim();  // your shot: straight to the cue ball
+				}
+			}
 			if (!OpponentsTurn() || _shotLive || _scratch || !_sim->AtRest()) {
 				_npcTimer = 0.0f;
 				break;
@@ -349,6 +413,7 @@ namespace fp
 				Anim::Stop(actor);
 				_npcStep = NpcStep::kNone;
 				_npcTimer = 0.0f;
+				SetWaitSpot(a_frame, actor->data.location);  // stay where they shot from
 			}
 			break;
 		}

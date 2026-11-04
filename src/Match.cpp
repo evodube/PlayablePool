@@ -35,6 +35,10 @@ namespace fp
 			}
 			_npcStep = NpcStep::kNone;
 			_npcTimer = 0.0f;
+			_autoAim = false;
+			if (!_npcWaitMarker) {
+				WaitByTable();
+			}
 		}
 		_rules.NewGame(_nextBreaker, mode);
 		if (mode == pool::Mode::kEightBall) {
@@ -198,6 +202,9 @@ namespace fp
 
 		if (OpponentsTurn() && _aiming) {
 			ExitAim();  // their shot: the table's theirs until the balls stop
+		}
+		if (_opponent && r.shooter == 1 && !_rules.Over() && _rules.Shooter() == 0) {
+			_autoAim = true;  // the opponent's tick puts you in the shot camera once they've finished their stroke
 		}
 		if (r.ballInHand && _aiming) {
 			StartPlacement();
