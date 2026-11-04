@@ -124,12 +124,13 @@ namespace fp
 			_camMapped = false;
 			_mapFrames = 0;
 			_haveCamTarget = false;
-			_haveCamTranslation = false;
+			_haveCamDesired = false;
+			_haveCamUpdate = false;
 		}
+		_dotsWanted = 0;
 		_overhead = false;
 		_charging = false;
 		_strikeShow = 0.0f;
-		_chargeLocked = false;
 		_aiming = true;
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
@@ -185,7 +186,7 @@ namespace fp
 		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f})", a_power * 100.0f, speed, _lastDir.x, _lastDir.y);
 	}
 
-	void Game::TickAim(const Frame& a_frame, float a_dt)
+	void Game::TickAim(const Frame& a_frame, [[maybe_unused]] float a_dt)
 	{
 		auto* free = FreeCamera();
 		if (!free || !InFreeCamera()) {
@@ -207,30 +208,45 @@ namespace fp
 		const bool   atRest = _sim->AtRest();
 		const auto&  cue = _sim->Balls()[0];
 		const RE::NiPoint3 desired = _overhead ? ToWorld(a_frame, { 0.0, 0.0 }, 0.0f) : ToWorld(a_frame, cue.pos, r);
-		float yaw;
 		{
 			std::scoped_lock lock(_camMutex);
-			if (!_haveCamTarget) {
-				_camTarget = desired;
-				_haveCamTarget = true;
-			} else if (atRest || _overhead) {
-				const float k = std::min(1.0f, a_dt * 5.0f);
-				_camTarget = _camTarget + (desired - _camTarget) * k;
-			}
-			yaw = _camYaw;
-		}
-		if (!_camMapped) {
-			return;
+			_camDesired = desired;
+			_camFollow = atRest || _overhead;  // don't chase the cue ball while it rolls
+			_haveCamDesired = true;
 		}
 
+		// The camera update places the stick and the guide (so they move in step with the view) but doesn't create
+		// objects; that happens here, a frame ahead of when they're needed.
+		auto* table = _table.get().get();
+		if (table && atRest && cue.state == pool::BallState::kOnTable) {
+			if (!_stick) {
+				if (auto* form = StickForm()) {
+					_stick = Spawn(form, table, ToWorld(a_frame, cue.pos, r));
+				} else if (!_stickWarned && s.stickFormID != 0) {
+					_stickWarned = true;
+					Notify(std::format("Pool: no cue stick: {}|{:X} not found. Is the new fo4pool.esl installed?", s.stickPlugin, s.stickFormID));
+				}
+			}
+			auto* dotForm = BallForm(0);
+			while (s.guide && dotForm && _dots.size() < std::min(_dotsWanted + 8, kMaxDots)) {
+				_dots.push_back(Spawn(dotForm, table, ToWorld(a_frame, cue.pos, s.guideDotRadius)));
+			}
+		}
+	}
+
+	void Game::PlaceAimObjects(const Frame& a_frame, float a_yaw, float a_dt)
+	{
+		const auto& s = Settings::Get();
+
 		// aim along where the camera faces, flattened onto the table
-		const RE::NiPoint3 world{ std::sin(yaw), std::cos(yaw), 0.0f };
+		const RE::NiPoint3 world{ std::sin(a_yaw), std::cos(a_yaw), 0.0f };
 		const RE::NiPoint3 table = a_frame.rot * world;
 		if (std::abs(table.x) + std::abs(table.y) > 1e-4f) {
 			_lastDir = pool::Vec2{ table.x, table.y } * (1.0 / pool::Vec2{ table.x, table.y }.Length());
 		}
 
-		if (atRest && cue.state == pool::BallState::kOnTable) {
+		const auto& cue = _sim->Balls()[0];
+		if (_sim->AtRest() && cue.state == pool::BallState::kOnTable) {
 			if (s.guide) {
 				PlaceGuide(a_frame, _lastDir);
 			}
@@ -249,84 +265,123 @@ namespace fp
 
 	// ---------------------------------------------------------------- the game's camera update
 
-	void Game::OnFreeCameraUpdate(RE::FreeCameraState* a_free)
+	void Game::OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before)
 	{
 		if (!_aiming || !a_free) {
 			return;
 		}
 		std::scoped_lock lock(_camMutex);
-		const auto& s = Settings::Get();
-
-		// The free camera keeps two angles; work out once which one is yaw by comparing with where the player
-		// faced when aiming started (the free camera starts there).
 		if (!_camMapped) {
-			const float a = a_free->rotation.x;
-			const float b = a_free->rotation.y;
-			if (a == 0.0f && b == 0.0f && ++_mapFrames < 10) {
-				return;  // not set up yet
-			}
-			const float errA = std::abs(util::AngleDiff(a, _entryYaw));
-			const float errB = std::abs(util::AngleDiff(b, _entryYaw));
-			_yawIndex = errA <= errB ? 0 : 1;
-			const float pitchValue = _yawIndex == 0 ? b : a;
-			_pitchSign = 1.0f;
-			if (std::abs(_entryPitch) > 0.05f && std::abs(pitchValue) > 0.05f && (pitchValue > 0.0f) != (_entryPitch > 0.0f)) {
-				_pitchSign = -1.0f;
-			}
-			log::info("free camera rotation ({:.3f}, {:.3f}) vs player yaw {:.3f} pitch {:.3f}: yaw is value {}, pitch sign {}", a, b,
-				_entryYaw, _entryPitch, _yawIndex, _pitchSign);
-			Component(a_free, 1 - _yawIndex) = _pitchSign * s.camPitch * kDegToRad;
-			_camMapped = true;
+			return;
 		}
-
-		float yaw = Component(a_free, _yawIndex);
-		float pitch = _pitchSign * Component(a_free, 1 - _yawIndex);
+		const auto& s = Settings::Get();
+		const int   pitchIndex = 1 - _yawIndex;
 
 		if (_charging) {
-			// The view holds still while charging. Whatever the mouse just did to it is read as the pull: back (view
-			// tilts down) adds power, forward takes it away. Then the view is put back, before the frame is drawn.
-			if (!_chargeLocked) {
-				_lockYaw = yaw;
-				_lockPitch = pitch;
-				_chargeLocked = true;
-			} else {
-				const float degrees = (pitch - _lockPitch) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
+			// The view stays exactly where it was. What the game just did to the angles is read as the pull: back
+			// (the view would tilt down) adds power, forward takes it away. Then the angles go back before anything
+			// reads them, so nothing on screen moves.
+			const float before = pitchIndex == 0 ? a_before.x : a_before.y;
+			const float after = Component(a_free, pitchIndex);
+			const float degrees = _pitchSign * (after - before) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
+			if (degrees != 0.0f) {
 				_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
 			}
-			yaw = _lockYaw;
-			pitch = _lockPitch;
-			Component(a_free, _yawIndex) = yaw;
-			Component(a_free, 1 - _yawIndex) = _pitchSign * pitch;
-		} else {
-			_chargeLocked = false;
-			const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
-			if (wanted != pitch) {
-				pitch = wanted;
-				Component(a_free, 1 - _yawIndex) = _pitchSign * pitch;
-			}
+			a_free->rotation = a_before;
+			return;
 		}
-		_camYaw = yaw;
 
-		if (_haveCamTarget) {
-			const float        distance = _overhead ? s.overheadHeight : s.camDistance;
-			const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
-			_camTranslation = _camTarget - forward * distance;
-			a_free->translation = _camTranslation;
-			_haveCamTranslation = true;
+		const float pitch = _pitchSign * Component(a_free, pitchIndex);
+		const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
+		if (wanted != pitch) {
+			Component(a_free, pitchIndex) = _pitchSign * wanted;
 		}
 	}
 
-	bool Game::FreeCameraTranslation(RE::NiPoint3& a_out)
+	bool Game::CamTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out) const
 	{
-		if (!_aiming) {
+		if (!_camMapped || !_haveCamTarget) {
+			return false;
+		}
+		const auto& s = Settings::Get();
+		const float yaw = _yawIndex == 0 ? a_free->rotation.x : a_free->rotation.y;
+		const float pitch = _pitchSign * (_yawIndex == 0 ? a_free->rotation.y : a_free->rotation.x);
+		const float distance = _overhead ? s.overheadHeight : s.camDistance;
+		const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
+		a_out = _camTarget - forward * distance;
+		return true;
+	}
+
+	void Game::OnFreeCameraUpdate(RE::FreeCameraState* a_free)
+	{
+		if (!_aiming || !a_free) {
+			return;
+		}
+		const auto& s = Settings::Get();
+		float       yaw = 0.0f;
+		float       camDt = 0.0f;
+		{
+			std::scoped_lock lock(_camMutex);
+
+			// The free camera keeps two angles; work out once which one is yaw by comparing with where the player
+			// faced when aiming started (the free camera starts there).
+			if (!_camMapped) {
+				const float a = a_free->rotation.x;
+				const float b = a_free->rotation.y;
+				if (a == 0.0f && b == 0.0f && ++_mapFrames < 10) {
+					return;  // not set up yet
+				}
+				const float errA = std::abs(util::AngleDiff(a, _entryYaw));
+				const float errB = std::abs(util::AngleDiff(b, _entryYaw));
+				_yawIndex = errA <= errB ? 0 : 1;
+				const float pitchValue = _yawIndex == 0 ? b : a;
+				_pitchSign = 1.0f;
+				if (std::abs(_entryPitch) > 0.05f && std::abs(pitchValue) > 0.05f && (pitchValue > 0.0f) != (_entryPitch > 0.0f)) {
+					_pitchSign = -1.0f;
+				}
+				log::info("free camera rotation ({:.3f}, {:.3f}) vs player yaw {:.3f} pitch {:.3f}: yaw is value {}, pitch sign {}", a, b,
+					_entryYaw, _entryPitch, _yawIndex, _pitchSign);
+				Component(a_free, 1 - _yawIndex) = _pitchSign * s.camPitch * kDegToRad;
+				_camMapped = true;
+			}
+
+			// ease the point the camera orbits towards the cue ball (it moves after each shot)
+			const auto  now = std::chrono::steady_clock::now();
+			const float dt = _haveCamUpdate ? std::min(0.1f, std::chrono::duration<float>(now - _lastCamUpdate).count()) : 0.0f;
+			_lastCamUpdate = now;
+			_haveCamUpdate = true;
+			if (_haveCamDesired) {
+				if (!_haveCamTarget) {
+					_camTarget = _camDesired;
+					_haveCamTarget = true;
+				} else if (_camFollow) {
+					_camTarget = _camTarget + (_camDesired - _camTarget) * std::min(1.0f, dt * 5.0f);
+				}
+			}
+			camDt = dt;
+
+			yaw = Component(a_free, _yawIndex);
+			_camYaw = yaw;
+			RE::NiPoint3 pos;
+			if (CamTranslation(a_free, pos)) {
+				a_free->translation = pos;  // the game's own movement never gets a say
+			}
+		}
+
+		// The stick and the guide follow the aim here, in the same update as the camera, so they never trail it.
+		Frame frame;
+		if (_sim && GetFrame(frame)) {
+			PlaceAimObjects(frame, yaw, camDt);
+		}
+	}
+
+	bool Game::FreeCameraTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out)
+	{
+		if (!_aiming || !a_free) {
 			return false;
 		}
 		std::scoped_lock lock(_camMutex);
-		if (!_haveCamTranslation) {
-			return false;
-		}
-		a_out = _camTranslation;
-		return true;
+		return CamTranslation(a_free, a_out);
 	}
 
 	void Game::PlaceGuide(const Frame& a_frame, pool::Vec2 a_dir)
@@ -362,12 +417,7 @@ namespace fp
 			}
 		}
 
-		// enough dot objects for this frame
-		auto* table = _table.get().get();
-		auto* form = BallForm(0);
-		while (_dots.size() < dots.size() && table && form) {
-			_dots.push_back(Spawn(form, table, ToWorld(a_frame, cue.pos, dotRadius)));
-		}
+		_dotsWanted = dots.size();  // the tick makes more dot objects if these aren't enough
 
 		for (std::size_t i = 0; i < _dots.size(); ++i) {
 			auto ref = _dots[i].get();
@@ -385,23 +435,9 @@ namespace fp
 
 	void Game::PlaceStick(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float a_pull, bool a_show)
 	{
-		auto* form = StickForm();
-		if (!form) {
-			if (!_stickWarned && Settings::Get().stickFormID != 0) {
-				_stickWarned = true;
-				const auto& st = Settings::Get();
-				Notify(std::format("Pool: no cue stick: {}|{:X} not found. Is the new fo4pool.esl installed?", st.stickPlugin, st.stickFormID));
-			}
-			return;
-		}
 		const auto& s = Settings::Get();
 		const float r = static_cast<float>(s.spec.ballRadius);
-		if (!_stick) {
-			if (auto* table = _table.get().get()) {
-				_stick = Spawn(form, table, ToWorld(a_frame, a_cue, r));
-			}
-		}
-		auto ref = _stick.get();
+		auto        ref = _stick.get();  // made by the tick
 		if (!ref) {
 			return;
 		}

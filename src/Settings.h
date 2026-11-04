@@ -89,7 +89,7 @@ namespace fp
 			.cornerMouth = 12.4,
 			.sideMouth = 20.8,
 			.rollDecel = 17.5,
-			.ballRestitution = 0.95,
+			.ballRestitution = 0.75,
 			.cushionRestitution = 0.75,
 			.stopSpeed = 0.7
 		};

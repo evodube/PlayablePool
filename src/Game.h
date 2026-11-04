@@ -35,11 +35,13 @@ namespace fp
 		};
 		HudState Hud() const;
 
-		// Called from inside the game's free camera update (CameraHook.cpp): applies the mouse to aim or power and
-		// moves the camera to orbit the cue ball, before the frame is drawn.
+		// Right after the game's free camera code turned the view (mouse handler or update, CameraHook.cpp): while
+		// charging the turn becomes power and the angles go back to a_before, otherwise the pitch is kept in range.
+		void OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before);
+		// Right after the game's free camera update: moves the camera, the cue stick and the guide for this frame.
 		void OnFreeCameraUpdate(RE::FreeCameraState* a_free);
-		// The camera position to use this frame while aiming; false = leave the game's own.
-		bool FreeCameraTranslation(RE::NiPoint3& a_out);
+		// The camera position while aiming, from the camera's angles right now; false = leave the game's own.
+		bool FreeCameraTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out);
 
 	private:
 		// The game stores a node's rotation with the object's axes as the ROWS of the matrix: a point p in the
@@ -75,6 +77,8 @@ namespace fp
 		void  ToggleOverhead();
 		void  ShootAim(float a_power);
 		void  TickAim(const Frame& a_frame, float a_dt);
+		void  PlaceAimObjects(const Frame& a_frame, float a_yaw, float a_dt);
+		bool  CamTranslation(const RE::FreeCameraState* a_free, RE::NiPoint3& a_out) const;  // _camMutex held
 		void  PlaceGuide(const Frame& a_frame, pool::Vec2 a_dir);
 		void  PlaceStick(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float a_pull, bool a_show);
 		void  HideAimObjects();
@@ -128,13 +132,14 @@ namespace fp
 		RE::ObjectRefHandle              _stick;
 		bool                             _stickLogged{ false };
 		bool                             _stickWarned{ false };
-		bool                             _chargeLocked{ false };  // camera angles frozen for this charge
-		float                            _lockYaw{ 0.0f };
-		float                            _lockPitch{ 0.0f };
+		std::size_t                      _dotsWanted{ 0 };  // guide dots the camera update needed; the tick spawns them
+		std::chrono::steady_clock::time_point _lastCamUpdate{};
+		bool                             _haveCamUpdate{ false };
+		RE::NiPoint3                     _camDesired;  // where the tick says the camera should orbit
+		bool                             _haveCamDesired{ false };
+		bool                             _camFollow{ true };
 		std::mutex                       _camMutex;  // camera update thread vs the tick
 		float                            _camYaw{ 0.0f };
-		RE::NiPoint3                     _camTranslation;
-		bool                             _haveCamTranslation{ false };
 		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
 		bool                             _controlsBlocked{ false };
 
