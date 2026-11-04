@@ -248,6 +248,29 @@ namespace fp
 		return best;
 	}
 
+	void Game::LogTable(RE::TESObjectREFR* a_table, const Frame& a_frame)
+	{
+		auto*       base = a_table->GetObjectReference();
+		const auto& r = a_frame.tableRot;
+		log::info("table {:08X} base {:08X} '{}' pool={} | pos ({:.1f}, {:.1f}, {:.1f}) angle z {:.1f} deg | world scale {:.3f}",
+			a_table->GetFormID(), base ? base->GetFormID() : 0, ModelPath(a_table), IsPoolTable(a_table), a_frame.origin.x,
+			a_frame.origin.y, a_frame.origin.z, a_table->data.angle.z * 57.29578f, a_frame.scale);
+		log::info("  rotation rows ({:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f}) ({:.3f} {:.3f} {:.3f})", r[0].x, r[0].y, r[0].z,
+			r[1].x, r[1].y, r[1].z, r[2].x, r[2].y, r[2].z);
+
+		// every piece of the table's mesh, in the table's own space: tells us which mesh this really is
+		const auto inv = a_frame.tableRot.Transpose();
+		const float s = a_frame.scale != 0.0f ? a_frame.scale : 1.0f;
+		if (auto* root = a_table->Get3D()) {
+			RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geom) {
+				const auto& b = a_geom->worldBound;
+				const auto  c = (inv * (b.center - a_frame.origin)) * (1.0f / s);
+				log::info("  shape '{}': centre ({:.1f}, {:.1f}, {:.1f}) radius {:.1f}", a_geom->name.c_str(), c.x, c.y, c.z, b.fRadius / s);
+				return RE::BSVisitControl::kContinue;
+			});
+		}
+	}
+
 	std::string Game::ModelPath(const RE::TESObjectREFR* a_ref)
 	{
 		auto* base = a_ref ? a_ref->GetObjectReference() : nullptr;
@@ -433,6 +456,7 @@ namespace fp
 			return;
 		}
 
+		LogTable(table, frame);
 		_sim = std::make_unique<pool::Sim>(s.spec);
 		_sim->Rack(static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
 		_dropTime.fill(0.0f);
@@ -544,8 +568,11 @@ namespace fp
 			_markers.clear();
 			return;
 		}
+		LogTable(table, frame);
 		for (auto& m : _markers) {
-			m.ref = Spawn(ball, table, ToWorld(frame, m.pos, static_cast<float>(s.spec.ballRadius)));
+			const auto p = ToWorld(frame, m.pos, static_cast<float>(s.spec.ballRadius));
+			log::info("  marker table ({:.1f}, {:.1f}) -> world ({:.1f}, {:.1f}, {:.1f})", m.pos.x, m.pos.y, p.x, p.y, p.z);
+			m.ref = Spawn(ball, table, p);
 		}
 		Notify("Pool: markers at the felt corners, side pockets, spots and centre. Edit [Table] in fo4pool.ini, then press again twice");
 	}

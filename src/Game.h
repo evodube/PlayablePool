@@ -57,6 +57,7 @@ namespace fp
 		void                PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden);
 		bool                IsOurs(const RE::TESObjectREFR* a_ref) const;
 		static std::string  ModelPath(const RE::TESObjectREFR* a_ref);
+		static void         LogTable(RE::TESObjectREFR* a_table, const Frame& a_frame);
 		static bool         IsPoolTable(const RE::TESObjectREFR* a_ref);
 		static bool         IsGamePaused();
 		static void         Notify(const std::string& a_message);
