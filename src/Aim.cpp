@@ -110,7 +110,7 @@ namespace fp
 	{
 		if (_aiming) {
 			ExitAim();
-			Notify("Pool: stopped aiming");
+			Tell("Pool: stopped aiming");
 		} else {
 			EnterAim();
 		}
@@ -153,7 +153,7 @@ namespace fp
 		_aiming = true;
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
-		Notify(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. {}: stop",
+		Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. {}: stop",
 			Settings::Key(Settings::Get().keyShoot)));
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
@@ -204,7 +204,7 @@ namespace fp
 			return;
 		}
 		if (a_power < 0.02f) {
-			Notify("Pool: no power, no shot");
+			Tell("Pool: no power, no shot");
 			return;
 		}
 		const auto& s = Settings::Get();

@@ -563,6 +563,11 @@ namespace fp::Hud
 		F4SEMenuFramework::Model::HudElement* g_element{ nullptr };
 	}
 
+	bool Showing()
+	{
+		return g_element && !g_artMissing;
+	}
+
 	void Install()
 	{
 		if (g_element) {

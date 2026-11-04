@@ -84,6 +84,7 @@ namespace fp
 
 		// [HUD] the terminal HUD (needs F4SE Menu Framework)
 		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)
+		bool  notifications{ false };  // also show calls ("3 in", "Player 2's shot") as the game's corner messages
 
 		// [Sound] Data\Sound\fo4pool\*.wav, played by the plugin itself
 		bool  sound{ true };

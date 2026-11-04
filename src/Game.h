@@ -148,7 +148,8 @@ namespace fp
 		static void         LogTable(RE::TESObjectREFR* a_table, const Frame& a_frame);
 		static bool         IsPoolTable(const RE::TESObjectREFR* a_ref);
 		static bool         IsGamePaused();
-		static void         Notify(const std::string& a_message);
+		static void         Notify(const std::string& a_message);  // always: problems and instructions
+		static void         Tell(const std::string& a_message);    // only without the HUD, or with bNotifications=1
 
 		// main thread
 		RE::ObjectRefHandle                                 _table;

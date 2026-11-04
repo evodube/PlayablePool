@@ -46,7 +46,7 @@ namespace fp
 		_messageTime = std::chrono::steady_clock::now();
 		_log[0] = std::move(_log[1]);
 		_log[1] = a_message;
-		Notify("Pool: " + a_message);
+		Tell("Pool: " + a_message);  // the HUD's log has it anyway
 	}
 
 	void Game::Banner(int a_kind, const std::string& a_title, const std::string& a_sub)
@@ -207,7 +207,7 @@ namespace fp
 			_placeDX = _placeDY = 0.0;
 		}
 		_placing = true;
-		Notify("Pool: ball in hand. Move the mouse to place the cue ball, left click to set it");
+		Tell("Pool: ball in hand. Move the mouse to place the cue ball, left click to set it");
 	}
 
 	void Game::ConfirmPlacement()
@@ -220,7 +220,7 @@ namespace fp
 		if (!_overheadBeforePlacing && _overhead) {
 			ToggleOverhead();  // back down to the cue ball, at the usual shot pitch
 		}
-		Notify("Pool: cue ball set");
+		Tell("Pool: cue ball set");
 	}
 
 	void Game::TickPlacement(const Frame& a_frame)

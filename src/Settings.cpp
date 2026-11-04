@@ -114,6 +114,7 @@ namespace fp
 		stickGap = ReadFloat(L"Stick", L"fGap", stickGap);
 
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
+		notifications = ReadBool(L"HUD", L"bNotifications", notifications);
 		sound = ReadBool(L"Sound", L"bEnabled", sound);
 		soundVolume = std::clamp(ReadFloat(L"Sound", L"fVolume", soundVolume), 0.0f, 1.0f);
 		soundFullDistance = std::max(1.0f, ReadFloat(L"Sound", L"fFullDistance", soundFullDistance));

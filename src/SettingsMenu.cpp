@@ -66,6 +66,8 @@ namespace fp::SettingsMenu
 				{ "HUD", "The HUD sizes itself to your screen height; the scale makes it bigger or smaller on top of that. Rack a table to see it while you change it.",
 					{
 						{ L"HUD", L"fScale", "HUD scale", Kind::kFloat, &s.hudScale, 0.3f, 3.0f, "%.2fx", "1.00 = the normal size for your screen" },
+						{ L"HUD", L"bNotifications", "Corner messages too", Kind::kBool, &s.notifications, 0, 0, nullptr,
+							"also show every call as the game's corner notifications (they queue up and keep coming after a game)" },
 					} },
 				{ "Shot & camera", "How hard shots go, how pulling the mouse turns into power, and where the shot camera sits.",
 					{

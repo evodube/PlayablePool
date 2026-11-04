@@ -1,6 +1,7 @@
 #include "Game.h"
 
 #include "Audio.h"
+#include "Hud.h"
 
 #include "Settings.h"
 #include "Util.h"
@@ -154,6 +155,13 @@ namespace fp
 		RE::SendHUDMessage::ShowHUDMessage(a_message.c_str(), nullptr, false, false);
 	}
 
+	void Game::Tell(const std::string& a_message)
+	{
+		if (Settings::Get().notifications || !Hud::Showing()) {
+			Notify(a_message);
+		}
+	}
+
 	void Game::Forget()
 	{
 		_table = {};
@@ -177,7 +185,7 @@ namespace fp
 	{
 		if (_sim || !_markers.empty()) {
 			Clear();
-			Notify("Pool: balls cleared before saving");
+			Tell("Pool: balls cleared before saving");
 		}
 	}
 
