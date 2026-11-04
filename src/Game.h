@@ -136,6 +136,8 @@ namespace fp
 		// each tick of a walk: re-sends it when they stop getting closer (their sandbox package took over)
 		void        KeepFacingShot(RE::Actor* a_actor);                  // lined up: turned back onto the shot every frame
 		void        GetOutOfFurniture(RE::Actor* a_actor, float a_dt);   // out of any chair they've taken while playing
+		void        ProbeNavmesh(const Frame& a_frame);                 // logs how much navmesh is around the table
+		std::string NavmeshAt(const RE::NiPoint3& a_pos) const;         // "on navmesh <id>" / "NO navmesh" (for the log)
 		bool        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt, int a_tries);  // true: gave up
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
@@ -290,6 +292,7 @@ namespace fp
 		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
 		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
 		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
+		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)
 		float               _npcPathAge{ 0.0f }; // seconds since
 		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack

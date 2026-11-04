@@ -192,6 +192,10 @@ namespace fp
 			Rack();
 		}
 		Say(std::format("{} plays you at 8-ball. You break", _opponentName));
+		if (Frame frame; GetFrame(frame)) {
+			ProbeNavmesh(frame);  // for the log: can they walk round this table at all?
+			log::info("{}: standing {}", _opponentName, NavmeshAt(actor->data.location));
+		}
 	}
 
 	void Game::HoldOpponent(RE::Actor* a_actor, bool a_hold)
@@ -334,8 +338,10 @@ namespace fp
 			_npcPathId = 0;  // KeepWalking sends it once the hold's off
 			return;
 		}
-		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : a_target == _npcApproach ? "shot (clear of the table)" : "shot",
-			Distance2D(a_actor->data.location, target->data.location), again ? ", again" : "");
+		log::info("{}: walk to the {} ({:.0f} away){}; the spot is {}, they're {}", _opponentName,
+			a_target == _npcWaitMarker ? "wait spot" : a_target == _npcApproach ? "shot (clear of the table)" : "shot",
+			Distance2D(a_actor->data.location, target->data.location), again ? ", again" : "", NavmeshAt(target->data.location),
+			NavmeshAt(a_actor->data.location));
 		_npcPathAge = 0.0f;
 		Anim::JoinOwnPackage(a_actor);  // if they aren't in the Opponent alias yet; this walk may still be PathToReference
 		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun);
@@ -697,6 +703,124 @@ namespace fp
 		_shotLive = true;
 		_sim->Strike(_npcShot.dir, _npcShot.speed);
 		log::info("{} shoots: speed {:.0f}", _opponentName, _npcShot.speed);
+	}
+
+	namespace
+	{
+		// a_pos on this navmesh: inside one of its triangles seen from above, with the triangle within a step of
+		// a_pos's height. Vertices are in world space.
+		bool OnNavmesh(RE::NavMesh* a_nav, const RE::NiPoint3& a_pos, float a_height = 60.0f)
+		{
+			const auto& v = a_nav->vertices;
+			for (const auto& tri : a_nav->triangles) {
+				if (tri.vertices[0] >= v.size() || tri.vertices[1] >= v.size() || tri.vertices[2] >= v.size()) {
+					continue;
+				}
+				const auto& a = v[tri.vertices[0]].location;
+				const auto& b = v[tri.vertices[1]].location;
+				const auto& c = v[tri.vertices[2]].location;
+				const float d = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+				if (std::abs(d) < 1e-6f) {
+					continue;
+				}
+				const float l1 = ((b.y - c.y) * (a_pos.x - c.x) + (c.x - b.x) * (a_pos.y - c.y)) / d;
+				const float l2 = ((c.y - a.y) * (a_pos.x - c.x) + (a.x - c.x) * (a_pos.y - c.y)) / d;
+				const float l3 = 1.0f - l1 - l2;
+				if (l1 < 0.0f || l2 < 0.0f || l3 < 0.0f) {
+					continue;
+				}
+				const float z = a.z * l1 + b.z * l2 + c.z * l3;
+				if (std::abs(z - a_pos.z) <= a_height) {
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+
+	void Game::ProbeNavmesh(const Frame& a_frame)
+	{
+		// Pathing only goes where there's navmesh. Every navmesh with a vertex within 2500 of the table, then rings
+		// of points round the felt (a point every ~25 units) at a few distances out: how many have navmesh under them
+		_navmeshes.clear();
+		const auto start = std::chrono::steady_clock::now();
+		{
+			const auto& [map, lock] = RE::TESForm::GetAllForms();
+			RE::BSAutoReadLock l{ lock };
+			if (map) {
+				for (const auto& [id, form] : *map) {
+					if (!form || form->GetFormType() != RE::ENUM_FORM_ID::kNAVM) {
+						continue;
+					}
+					auto* nav = static_cast<RE::NavMesh*>(form);
+					for (const auto& vert : nav->vertices) {
+						if (Distance2D(vert.location, a_frame.origin) < 2500.0f && std::abs(vert.location.z - a_frame.origin.z) < 400.0f) {
+							_navmeshes.push_back(id);
+							break;
+						}
+					}
+				}
+			}
+		}
+		const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
+		std::string ids;
+		for (const auto id : _navmeshes) {
+			auto* form = RE::TESForm::GetFormByID(id);
+			auto* file = form ? form->GetFile(0) : nullptr;
+			ids += std::format(" {:08X}({})", id, file ? std::string(file->GetFilename()) : std::string("?"));
+		}
+		log::info("navmesh: {} near the table (found in {:.0f} ms):{}", _navmeshes.size(), ms, ids);
+
+		const auto& s = Settings::Get();
+		for (const float out : { 10.0f, 22.0f, 40.0f, 55.0f, 80.0f, 120.0f, 200.0f }) {
+			const double hx = s.spec.length * 0.5 + out;
+			const double hy = s.spec.width * 0.5 + out;
+			const double perimeter = 4.0 * (hx + hy);
+			const int    n = static_cast<int>(perimeter / 25.0);
+			int          covered = 0;
+			std::string  gaps;
+			for (int i = 0; i < n; ++i) {
+				// walk the rectangle's outline
+				double     t = perimeter * i / n;
+				pool::Vec2 p;
+				if (t < 2 * hx) {
+					p = { -hx + t, -hy };
+				} else if ((t -= 2 * hx) < 2 * hy) {
+					p = { hx, -hy + t };
+				} else if ((t -= 2 * hy) < 2 * hx) {
+					p = { hx - t, hy };
+				} else {
+					t -= 2 * hx;
+					p = { -hx, hy - t };
+				}
+				RE::NiPoint3 w = ToWorld(a_frame, p, 0.0f);
+				w.z = a_frame.origin.z;
+				bool on = false;
+				for (const auto id : _navmeshes) {
+					auto* form = RE::TESForm::GetFormByID(id);
+					if (form && form->GetFormType() == RE::ENUM_FORM_ID::kNAVM && OnNavmesh(static_cast<RE::NavMesh*>(form), w)) {
+						on = true;
+						break;
+					}
+				}
+				covered += on;
+				if (!on && gaps.size() < 160) {
+					gaps += std::format(" ({:.0f},{:.0f})", p.x, p.y);
+				}
+			}
+			log::info("navmesh: {:.0f} outside the felt: {}/{} points on navmesh{}{}", out, covered, n, gaps.empty() ? "" : "; none at (table space)", gaps);
+		}
+	}
+
+	std::string Game::NavmeshAt(const RE::NiPoint3& a_pos) const
+	{
+		for (const auto id : _navmeshes) {
+			auto* form = RE::TESForm::GetFormByID(id);
+			if (form && form->GetFormType() == RE::ENUM_FORM_ID::kNAVM && OnNavmesh(static_cast<RE::NavMesh*>(form), a_pos)) {
+				return std::format("on navmesh {:08X}", id);
+			}
+		}
+		return _navmeshes.empty() ? "navmesh not probed" : "NO navmesh there";
 	}
 
 	void Game::KeepFacingShot(RE::Actor* a_actor)
