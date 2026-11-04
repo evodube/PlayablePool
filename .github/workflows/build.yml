@@ -96,7 +96,8 @@ jobs:
           # base-game scripts only, leading whitespace trimmed (some vanilla files start with a space)
           Get-ChildItem vanilla/Source -Filter *.psc -File | ForEach-Object {
             $t = (Get-Content $_.FullName -Raw).TrimStart()
-            if ($t -match '^(?i)scriptname') { Set-Content (Join-Path vanilla-base $_.Name) $t -NoNewline }
+            # (ScriptObject.psc starts with a comment: keep any file that declares a script somewhere)
+            if ($t -match '(?im)^\s*scriptname\s') { Set-Content (Join-Path vanilla-base $_.Name) $t -NoNewline }
           }
           Copy-Item vanilla/Source/Institute_Papyrus_Flags.flg vanilla-base/
           Remove-Item -Recurse -Force vanilla   # Caprica also scans the flags file's folder
