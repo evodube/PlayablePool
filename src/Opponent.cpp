@@ -473,8 +473,8 @@ namespace fp
 		// the fingers themselves move in the clip, so they don't decide it. Bridge: on top of the left hand, over the
 		// V between thumb and index finger
 		RE::NiPoint3 grip = rHand->world.translate;
-		auto*        index = node("RArm_Finger21");
-		auto*        little = node("RArm_Finger51");
+		auto*        rIndex = node("RArm_Finger21");
+		auto*        rLittle = node("RArm_Finger51");
 		RE::NiPoint3 bases{};
 		int          found = 0;
 		for (const char* n : { "RArm_Finger21", "RArm_Finger31", "RArm_Finger41", "RArm_Finger51" }) {
@@ -483,10 +483,10 @@ namespace fp
 				++found;
 			}
 		}
-		if (found == 4 && index && little) {
+		if (found == 4 && rIndex && rLittle) {
 			bases = bases * 0.25f;
 			const RE::NiPoint3 e1 = util::Normalized(bases - rHand->world.translate);
-			const RE::NiPoint3 side = index->world.translate - little->world.translate;
+			const RE::NiPoint3 side = rIndex->world.translate - rLittle->world.translate;
 			const RE::NiPoint3 e2 = util::Normalized(side - e1 * side.Dot(e1));
 			const RE::NiPoint3 e3 = e1.Cross(e2);
 			grip = rHand->world.translate + e1 * kGripAlong + e2 * kGripAcross + e3 * kGripOut;
