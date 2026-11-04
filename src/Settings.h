@@ -16,6 +16,9 @@ namespace fp
 
 		void Load();
 
+		// a key's name for messages ("F7", "Numpad 7")
+		static std::string Key(int a_vk);
+
 		// [Keys] virtual-key codes
 		int keyRack{ 0x67 };       // Numpad 7
 		int keyShoot{ 0x68 };      // Numpad 8 (Shift = soft, Ctrl = hard)
@@ -24,6 +27,7 @@ namespace fp
 		int keyCallPocket{ 0x65 }; // Numpad 5: pick the pocket for the 8
 
 		// [Rules] 8-ball
+		int   gameMode{ 0 };        // 0 = 8-Ball (two players), 1 = Solo Play
 		bool  callEight{ true };    // the 8 must go in the called pocket (the one marked on the table)
 		float placeSpeed{ 0.06f };  // ball in hand: how far the cue ball moves per mouse count
 

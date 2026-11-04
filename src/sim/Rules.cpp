@@ -4,14 +4,22 @@
 
 namespace pool
 {
-	void Rules::NewGame(int a_breaker)
+	void Rules::NewGame(int a_breaker, Mode a_mode)
 	{
 		*this = Rules{};
-		_shooter = a_breaker % kPlayers;
+		_mode = a_mode;
+		_shooter = a_mode == Mode::kSolo ? 0 : a_breaker % kPlayers;
 	}
 
 	int Rules::Remaining(int a_player, const Sim& a_sim) const
 	{
+		if (_mode == Mode::kSolo) {  // every ball but the 8
+			int n = 0;
+			for (const auto& b : a_sim.Balls()) {
+				n += b.state == BallState::kOnTable && GroupOfBall(b.number) != Group::kNone;
+			}
+			return n;
+		}
 		const Group g = _groups[a_player];
 		if (g == Group::kNone) {
 			return 7;
@@ -25,6 +33,9 @@ namespace pool
 
 	bool Rules::OnEight(int a_player, const Sim& a_sim) const
 	{
+		if (_mode == Mode::kSolo) {
+			return Remaining(a_player, a_sim) == 0;
+		}
 		return _groups[a_player] != Group::kNone && Remaining(a_player, a_sim) == 0;
 	}
 
@@ -81,6 +92,9 @@ namespace pool
 			return r;
 		}
 		_inShot = false;
+		if (_mode == Mode::kSolo) {
+			return EndSoloShot(a_sim, r);
+		}
 
 		const int   opponent = (_shooter + 1) % kPlayers;
 		const Group mine = _groups[_shooter];
@@ -151,6 +165,44 @@ namespace pool
 			_shooter = opponent;
 		}
 		r.ballInHand = r.foul != Foul::kNone;
+		_ballInHand = r.ballInHand;
+		_break = false;
+		(void)a_sim;
+		return r;
+	}
+
+	ShotResult Rules::EndSoloShot(const Sim& a_sim, ShotResult r)
+	{
+		const bool eightIn = std::ranges::find(_potted, 8) != _potted.end();
+		if (_cueIn) {
+			r.foul = Foul::kScratch;
+		}
+		if (eightIn) {
+			if (_break) {
+				r.end = GameEnd::kEightOnBreak;
+			} else if (!_onEightAtStart) {
+				r.end = GameEnd::kEightEarly;
+			} else if (_cueIn) {
+				r.end = GameEnd::kScratchOnEight;
+			} else if (_called >= 0 && _eightPocket != _called) {
+				r.end = GameEnd::kEightWrongPocket;
+			} else {
+				r.end = GameEnd::kWon;
+			}
+		} else if (_cueIn && _onEightAtStart) {
+			r.end = GameEnd::kScratchOnEight;
+		}
+		if (r.end != GameEnd::kNone) {
+			_over = true;
+			_winner = r.end == GameEnd::kWon ? 0 : 1;  // 1 = the table won
+			r.winner = _winner;
+			return r;
+		}
+		for (int n : _potted) {
+			r.ownPotted += n != 8;
+		}
+		r.turnContinues = true;  // always your shot
+		r.ballInHand = _cueIn;    // a scratch: place the cue ball and carry on
 		_ballInHand = r.ballInHand;
 		_break = false;
 		(void)a_sim;

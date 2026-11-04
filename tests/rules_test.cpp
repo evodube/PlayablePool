@@ -227,6 +227,76 @@ namespace
 		}
 	}
 
+	void Solo()
+	{
+		std::puts("solo play");
+		auto fresh = [](Table& t) { t.rules.NewGame(1, Mode::kSolo); };
+		{
+			Table t;
+			fresh(t);
+			Check(t.rules.Shooter() == 0 && t.rules.Remaining(0, t.sim) == 14, "one player, 14 to pot");
+			auto r = t.Shoot(1, true, { { 8, 2 } });
+			Check(r.end == GameEnd::kEightOnBreak && t.rules.Over(), "the 8 on the break loses");
+		}
+		{
+			Table t;
+			fresh(t);
+			t.Shoot(1, true, {});
+			auto r = t.Shoot(3, true, {});
+			Check(r.turnContinues && !r.ballInHand && t.rules.Shooter() == 0, "a miss is fine: shoot again");
+			r = t.Shoot(-1, false, {});
+			Check(r.end == GameEnd::kNone && r.turnContinues, "hitting nothing doesn't matter either");
+			r = t.Shoot(4, true, { { 4, 0 }, { 0, 3 } });
+			Check(r.end == GameEnd::kNone && r.ballInHand && r.turnContinues, "a scratch before the 8: ball in hand, carry on");
+			Check(t.sim.Balls()[4].state == BallState::kPocketed, "the ball potted with it stays down");
+		}
+		{
+			Table t;
+			fresh(t);
+			t.Shoot(1, true, {});
+			auto r = t.Shoot(8, true, { { 8, 4 } });
+			Check(r.end == GameEnd::kEightEarly, "the 8 before the 14 loses");
+		}
+		auto cleared = [&](Table& t) {
+			fresh(t);
+			t.Shoot(1, true, {});
+			for (int n : { 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15 }) {
+				t.Pot(n);
+			}
+		};
+		{
+			Table t;
+			cleared(t);
+			Check(t.rules.OnEight(0, t.sim), "all 14 down: on the 8");
+			auto r = t.Shoot(8, true, { { 8, 5 } }, 5);
+			Check(r.end == GameEnd::kWon && r.winner == 0, "the 8 in the called pocket wins");
+		}
+		{
+			Table t;
+			cleared(t);
+			auto r = t.Shoot(8, true, { { 8, 1 } }, 5);
+			Check(r.end == GameEnd::kEightWrongPocket, "the 8 in another pocket loses");
+		}
+		{
+			Table t;
+			cleared(t);
+			auto r = t.Shoot(8, true, { { 0, 2 } }, 5);
+			Check(r.end == GameEnd::kScratchOnEight, "a scratch while on the 8 loses");
+		}
+		{
+			Table t;
+			cleared(t);
+			auto r = t.Shoot(8, true, { { 8, 5 }, { 0, 2 } }, 5);
+			Check(r.end == GameEnd::kScratchOnEight, "the 8 with a scratch loses");
+		}
+		{
+			Table t;
+			cleared(t);
+			auto r = t.Shoot(8, true, {}, 5);
+			Check(r.end == GameEnd::kNone && r.turnContinues, "missing the 8 is fine");
+		}
+	}
+
 	// whole games with random shots through the real physics: they always end, and the bookkeeping holds up
 	void RandomGames()
 	{
@@ -291,6 +361,7 @@ int main()
 	OpenTable();
 	Fouls();
 	TheEight();
+	Solo();
 	RandomGames();
 	std::printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;

@@ -372,18 +372,36 @@ namespace fp
 		return dh->CreateReferenceAtLocation(data);
 	}
 
-	float Game::BallScale(RE::NiAVObject* a_root)
+	float Game::BallScale([[maybe_unused]] RE::NiAVObject* a_root)
 	{
 		const auto& s = Settings::Get();
 		if (!s.ballAutoScale) {
 			return s.ballScale;
 		}
-		if (_modelRadius <= 0.0f && a_root && a_root->worldBound.fRadius > 0.0f && a_root->GetWorldScale() > 0.0f) {
-			_modelRadius = a_root->worldBound.fRadius / a_root->GetWorldScale();
-			log::info("ball mesh radius {:.3f} -> scale {:.3f} for a {:.2f} ball", _modelRadius,
-				static_cast<float>(s.spec.ballRadius) / _modelRadius, s.spec.ballRadius);
-		}
+		// Until a real ball has been measured (its first frame), the INI's scale (1.0 = the vanilla balls' size).
 		return _modelRadius > 0.0f ? static_cast<float>(s.spec.ballRadius) / _modelRadius : s.ballScale;
+	}
+
+	void Game::MeasureBall(RE::NiAVObject* a_root)
+	{
+		// Measured from a ball right after it was placed and updated, so its bound and scale belong together. Guide
+		// dots (shrunk cue balls) never get here.
+		if (_modelRadius > 0.0f || !a_root || a_root->GetAppCulled()) {
+			return;
+		}
+		const float scale = a_root->GetWorldScale();
+		const float bound = a_root->worldBound.fRadius;
+		if (scale <= 0.0f || bound <= 0.0f) {
+			return;
+		}
+		const float radius = bound / scale;
+		if (radius < 0.5f || radius > 50.0f) {
+			log::warn("ball mesh measured an odd size ({:.3f}); not using it", radius);
+			return;
+		}
+		_modelRadius = radius;
+		log::info("ball mesh radius {:.3f} -> scale {:.3f} for a {:.2f} ball", _modelRadius,
+			static_cast<float>(Settings::Get().spec.ballRadius) / _modelRadius, Settings::Get().spec.ballRadius);
 	}
 
 	void Game::PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden)
@@ -423,12 +441,46 @@ namespace fp
 		a_ref->data.location.z = a_pos.z;
 	}
 
+	bool Game::RerackInPlace()
+	{
+		auto* table = _table.get().get();
+		if (!_sim || !table) {
+			return false;
+		}
+		const auto& s = Settings::Get();
+		for (int i = 0; i < pool::Sim::kBalls; ++i) {
+			auto ref = _balls[i].get();
+			if (!ref || ref->GetObjectReference() != BallForm(i)) {
+				return false;  // a ball's gone, or the INI now names other balls: rack from scratch
+			}
+		}
+		Frame frame;
+		if (!GetFrame(frame)) {
+			return false;
+		}
+		_sim = std::make_unique<pool::Sim>(s.spec);
+		_sim->Rack(static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
+		_dropTime.fill(0.0f);
+		_scratch = false;
+		_haveLast = false;
+		_modelRadius = 0.0f;
+		log::info("re-racked on the same table");
+		StartGame();
+		return true;
+	}
+
 	void Game::Rack()
 	{
 		auto& s = Settings::Get();
 		s.Load();
 
-		auto* table = PickTable();
+		// Same table (or no other one in view, or in the shot camera, where there's no crosshair): just start again.
+		auto* picked = _aiming ? nullptr : PickTable();
+		if (_sim && (!picked || picked == _table.get().get()) && RerackInPlace()) {
+			return;
+		}
+
+		auto* table = picked ? picked : PickTable();
 		if (!table) {
 			Notify("Pool: look at a pool table (or click it in the console) first");
 			return;
@@ -471,15 +523,8 @@ namespace fp
 		if (spawned != pool::Sim::kBalls) {
 			Notify(std::format("Pool: only {} of 16 balls could be placed", spawned));
 		}
-		_rules.NewGame(_nextBreaker);
-		_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
-		_shotLive = false;
-		_manualPocket = _autoPocket = -1;
-		_placing = false;
-		_log = {};
-		_banner = 0;
-		Say(std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
-		Audio::PlayUI(Audio::Bank::kStart, 0.8f);
+		_modelRadius = 0.0f;
+		StartGame();
 	}
 
 	void Game::Clear()
@@ -649,6 +694,7 @@ namespace fp
 			b.rot.ToMatrix(m);
 			PlaceNode(ref.get(), ToWorld(frame, b.pos, r + s.ballZOffset - sink), FromRows(m).Transpose() * frame.rot, BallScale(ref->Get3D()) * frame.scale,
 				hidden);
+			MeasureBall(ref->Get3D());
 		}
 
 		_rolling = !_sim->AtRest();

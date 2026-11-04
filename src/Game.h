@@ -36,6 +36,7 @@ namespace fp
 
 			// the 8-ball game, while a table is racked
 			bool                    game{ false };
+			bool                    solo{ false };     // Solo Play
 			int                     shooter{ 0 };
 			std::array<int, 2>      group{};        // 0 open table, 1 solids, 2 stripes
 			std::array<int, 2>      remaining{};
@@ -102,12 +103,14 @@ namespace fp
 		void UpdateHud();
 		int  CalledPocket() const;
 		void CyclePocket();
+		void StartGame();  // the rules side of a rack
 		void StartPlacement();
 		void ConfirmPlacement();
 		void TickPlacement(const Frame& a_frame);
 		static std::string PlayerName(int a_player) { return a_player == 0 ? "Player 1" : "Player 2"; }
 
 		void Rack();
+		bool RerackInPlace();  // a new game on the table already in use, keeping the balls and aim mode
 		void Clear();
 		void ToggleCalibrate();
 		void ClearMarkers();
@@ -138,6 +141,7 @@ namespace fp
 		RE::NiPoint3        ToWorld(const Frame& a_frame, pool::Vec2 a_pos, float a_height) const;
 		RE::ObjectRefHandle Spawn(RE::TESBoundObject* a_form, RE::TESObjectREFR* a_table, const RE::NiPoint3& a_pos) const;
 		float               BallScale(RE::NiAVObject* a_root);
+		void                MeasureBall(RE::NiAVObject* a_root);  // once per rack, from a real ball
 		void                PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden);
 		bool                IsOurs(const RE::TESObjectREFR* a_ref) const;
 		static std::string  ModelPath(const RE::TESObjectREFR* a_ref);

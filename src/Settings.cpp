@@ -1,5 +1,7 @@
 #include "Settings.h"
 
+#include "SettingsMenu.h"
+
 namespace fp
 {
 	namespace
@@ -68,6 +70,7 @@ namespace fp
 		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
 		keyCallPocket = static_cast<int>(ReadInt(L"Keys", L"iCallPocket", keyCallPocket));
+		gameMode = ReadInt(L"Rules", L"iGameMode", gameMode) == 1 ? 1 : 0;
 		callEight = ReadBool(L"Rules", L"bCallEight", callEight);
 		placeSpeed = std::clamp(ReadFloat(L"Rules", L"fPlaceSpeed", placeSpeed), 0.005f, 1.0f);
 
@@ -140,5 +143,10 @@ namespace fp
 		log::info("settings: ball {}|{:X} r={} autoscale={} | table {}x{} surfaceZ={} axis={} offset=({}, {}) | max shot {}",
 			ballPlugin, ballFormID, spec.ballRadius, ballAutoScale, spec.length, spec.width, surfaceZ, lengthAxis, offsetX, offsetY,
 			maxSpeed);
+	}
+
+	std::string Settings::Key(int a_vk)
+	{
+		return SettingsMenu::KeyName(a_vk);
 	}
 }

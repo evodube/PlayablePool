@@ -19,7 +19,8 @@ or opponents yet.
 3. **Numpad 4**: calibration markers appear on the felt corners, side pockets, head and foot spots and centre.
    If they don't sit on the felt, edit `[Table]` in `fo4pool.ini` (length, width, height, offsets, axis), then
    press Numpad 4 twice to see the change. The INI is re-read every time.
-4. **Numpad 7**: rack a game of 8-ball (players take turns to break; you play both sides for now).
+4. **Numpad 7**: rack a game of 8-ball (players take turns to break; you play both sides for now), or Solo Play.
+   Pressing it again at the same table (even from the shot camera) starts a new game there.
 5. **Numpad 8**: aim. The camera moves behind the cue ball; turn it with the mouse and you aim where it faces.
    Dots show the cue ball's path, where it meets the first ball, and where both go next.
    - Hold the **left mouse button**: the camera freezes. Pull the mouse back for power (push forward for less);
@@ -40,6 +41,18 @@ hits one of your own balls first (the 8 once your group is cleared), and then so
 cushion. Fouls (scratch, hitting nothing, the wrong ball first, no cushion after contact) give the other player ball
 in hand anywhere. You carry on after potting one of yours. Potting the 8 wins once your group is cleared, on a legal
 shot, into the called pocket; potting it any other way loses.
+
+### Solo Play
+
+Set **Game mode** to Solo Play (settings menu, Rules page, or `iGameMode=1`). Pot all 14 balls in any order, then
+the 8 into the called pocket. You lose if the 8 goes in on the break, before the 14, or in another pocket, or if you
+scratch while shooting the 8. Any other scratch just gives ball in hand. Misses don't matter, and there's no score.
+
+### Settings menu
+
+Every setting is also on fo4pool's pages in the F4SE Menu Framework menu (HUD, Shot & camera, Guide & cue stick,
+Rules, Sound, Table & pockets, Physics, Balls, Keys). Changes are saved to the INI as you make them; keys are
+rebound by clicking and pressing the new key.
 
 ### HUD
 

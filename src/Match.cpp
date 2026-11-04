@@ -23,6 +23,23 @@ namespace fp
 		}
 	}
 
+	void Game::StartGame()
+	{
+		const auto& s = Settings::Get();
+		const auto  mode = s.gameMode == 1 ? pool::Mode::kSolo : pool::Mode::kEightBall;
+		_rules.NewGame(_nextBreaker, mode);
+		if (mode == pool::Mode::kEightBall) {
+			_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
+		}
+		_shotLive = false;
+		_manualPocket = _autoPocket = -1;
+		_placing = false;
+		_log = {};
+		_banner = 0;
+		Say(mode == pool::Mode::kSolo ? "racked. Solo Play: all 14, then the 8" : std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
+		Audio::PlayUI(Audio::Bank::kStart, 0.8f);
+	}
+
 	void Game::Say(const std::string& a_message)
 	{
 		_message = a_message;
@@ -74,34 +91,44 @@ namespace fp
 			_dropTime[8] = 0.0f;
 		}
 
+		const bool        solo = _rules.GameMode() == pool::Mode::kSolo;
 		const std::string shooter = PlayerName(r.shooter);
 		const std::string other = PlayerName((r.shooter + 1) % 2);
+		const std::string rack = Settings::Key(Settings::Get().keyRack);
 		std::string       line;
+		const char*       why = "";
 		switch (r.end) {
 		case pool::GameEnd::kWon:
-			line = std::format("{} sinks the 8 and wins!", shooter);
+			why = Settings::Get().callEight ? "8 BALL IN THE CALLED POCKET" : "8 BALL DOWN";
+			line = solo ? "you sink the 8. You win!" : std::format("{} sinks the 8 and wins!", shooter);
 			break;
 		case pool::GameEnd::kEightEarly:
-			line = std::format("the 8 went down too early. {} wins", other);
+			why = "THE 8 WENT DOWN EARLY";
+			line = solo ? "the 8 went down too early. You lose" : std::format("the 8 went down too early. {} wins", other);
 			break;
 		case pool::GameEnd::kEightOnFoul:
+			why = "THE 8 WENT DOWN ON A FOUL";
 			line = std::format("the 8 went down on a foul. {} wins", other);
 			break;
 		case pool::GameEnd::kEightWrongPocket:
-			line = std::format("the 8 went in the wrong pocket. {} wins", other);
+			why = "THE 8 WENT IN THE WRONG POCKET";
+			line = solo ? "the 8 went in the wrong pocket. You lose" : std::format("the 8 went in the wrong pocket. {} wins", other);
+			break;
+		case pool::GameEnd::kEightOnBreak:
+			why = "THE 8 WENT IN ON THE BREAK";
+			line = "the 8 went in on the break. You lose";
+			break;
+		case pool::GameEnd::kScratchOnEight:
+			why = "SCRATCHED ON THE 8";
+			line = "scratched on the 8. You lose";
 			break;
 		default:
 			break;
 		}
 		if (r.end != pool::GameEnd::kNone) {
-			const bool playerOneWon = r.winner == 0;
-			const char* why = r.end == pool::GameEnd::kWon ? "8 BALL IN THE CALLED POCKET" : r.end == pool::GameEnd::kEightEarly ? "THE 8 WENT DOWN EARLY" :
-			                  r.end == pool::GameEnd::kEightOnFoul ? "THE 8 WENT DOWN ON A FOUL" : "THE 8 WENT IN THE WRONG POCKET";
-			if (!Settings::Get().callEight && r.end == pool::GameEnd::kWon) {
-				why = "8 BALL DOWN";
-			}
-			Banner(playerOneWon ? 2 : 3, playerOneWon ? "YOU WIN" : "THEY WIN", why);
-			Say(line + ". Numpad 7 racks again");
+			const bool won = r.winner == 0;
+			Banner(won ? 2 : 3, won ? "YOU WIN" : (solo ? "YOU LOSE" : "THEY WIN"), why);
+			Say(std::format("{}. {} racks again", line, rack));
 			log::info("game over: {}", line);
 			return;
 		}
@@ -124,7 +151,16 @@ namespace fp
 			break;
 		}
 
-		if (!foul.empty()) {
+		if (solo) {
+			if (r.foul == pool::Foul::kScratch) {
+				Banner(1, "SCRATCH", "BALL IN HAND · CARRY ON");
+				line = "scratch: ball in hand";
+			} else if (r.ownPotted > 0) {
+				line = std::format("{} to go", _rules.Remaining(0, *_sim));
+			} else {
+				line = "shoot again";
+			}
+		} else if (!foul.empty()) {
 			line = std::format("Foul: {}. {} has ball in hand", foul, PlayerName(_rules.Shooter()));
 			static constexpr std::array<const char*, 5> subs{ "", "CUE BALL POTTED · BALL IN HAND", "NOTHING HIT · BALL IN HAND",
 				"WRONG BALL FIRST · BALL IN HAND", "NO CUSHION AFTER CONTACT · BALL IN HAND" };
@@ -141,7 +177,8 @@ namespace fp
 			line = "the 8 on the break is spotted. " + line;
 		}
 		if (_rules.OnEight(_rules.Shooter(), *_sim)) {
-			line += Settings::Get().callEight ? ". On the 8: aim, and Numpad 5 to change the called pocket" : ". On the 8";
+			line += Settings::Get().callEight ? std::format(". On the 8: aim, and {} to change the called pocket", Settings::Key(Settings::Get().keyCallPocket))
+			                                  : std::string(". On the 8");
 		}
 		Say(line);
 		if (!r.turnContinues) {
@@ -228,6 +265,7 @@ namespace fp
 		HudState h;
 		if (_sim) {
 			h.game = true;
+			h.solo = _rules.GameMode() == pool::Mode::kSolo;
 			h.shooter = _rules.Shooter();
 			for (int p = 0; p < 2; ++p) {
 				const auto g = _rules.GroupOf(p);

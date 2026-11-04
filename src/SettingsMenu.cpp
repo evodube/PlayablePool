@@ -99,8 +99,11 @@ namespace fp::SettingsMenu
 						{ L"Stick", L"sPlugin", "Stick plugin", Kind::kText, &s.stickPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Stick", L"iFormID", "Stick form ID", Kind::kHex, &s.stickFormID, 0, 0, nullptr, "0 = no stick", {}, true },
 					} },
-				{ "Rules", "8-ball.",
+				{ "Rules", "The game mode is used from the next rack.",
 					{
+						{ L"Rules", L"iGameMode", "Game mode", Kind::kChoice, &s.gameMode, 0, 0, nullptr,
+							"8-Ball: two players. Solo Play: pot all 14, then the 8 into the called pocket",
+							{ { "8-Ball (two players)", 0 }, { "Solo Play", 1 } }, true },
 						{ L"Rules", L"bCallEight", "Call the pocket for the 8", Kind::kBool, &s.callEight, 0, 0, nullptr,
 							"the 8 must go in the marked pocket; off = any pocket wins" },
 						{ L"Rules", L"fPlaceSpeed", "Ball in hand speed", Kind::kFloat, &s.placeSpeed, 0.005f, 0.5f, "%.3f", "how far the cue ball moves per bit of mouse movement" },

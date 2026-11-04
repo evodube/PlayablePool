@@ -240,11 +240,41 @@ namespace fp::Hud
 
 		// ------------------------------------------------------------ the pieces
 
+		std::string KeyLabel(int a_vk)
+		{
+			auto name = Upper(SettingsMenu::KeyName(a_vk));
+			if (name.rfind("NUMPAD ", 0) == 0) {
+				name = "NUM " + name.substr(7);
+			}
+			return name;
+		}
+
 		void Scoreboard(const View& a_v, const Game::HudState& a_st)
 		{
 			constexpr float x0 = 28.0f, y0 = 28.0f;
 			Panel(a_v, HudAtlas::k_score, x0, y0);
 			const float cx = x0 + 29.0f;
+			if (a_st.solo) {
+				// Solo Play: the 14, solids on top, stripes below, and the 8 waiting at the end
+				const int left = a_st.remaining[0];
+				for (int p = 0; p < 2; ++p) {
+					const float row = y0 + 25.0f + p * 92.0f;
+					if (p == 0) {
+						DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
+						Print(a_v, Title(), "SOLO PLAY", cx + 18, row - 2, 19, kGreen.text, kGreen.glow, 1.5f);
+						Print(a_v, Mono(), std::format("{} LEFT", left), x0 + 380 - 29, row + 1, 13, kGreen.dim, 0, 0.0f, Align::kRight);
+					} else {
+						const bool onEight = left == 0;
+						Print(a_v, Title(), "THEN THE 8", cx + 18, row - 2, 19, onEight ? kGreen.text : kGreen.off, onEight ? kGreen.glow : 0, 1.5f);
+						Ball(a_v, 8, x0 + 380 - 29 - 24, row - 2, 24, !a_st.onTable[8]);
+					}
+					for (int i = 0; i < 7; ++i) {
+						const int n = (p == 0 ? 1 : 9) + i;
+						Ball(a_v, n, cx + 18 + i * 43.0f, row + 33, 36, !a_st.onTable[n]);
+					}
+				}
+				return;
+			}
 			for (int p = 0; p < 2; ++p) {
 				const float row = y0 + 25.0f + p * 92.0f;
 				const bool  up = !a_st.over && a_st.shooter == p;
@@ -273,7 +303,10 @@ namespace fp::Hud
 			std::string sub;
 			if (a_st.over) {
 				title = "GAME OVER";
-				sub = "NUMPAD 7 TO RACK AGAIN";
+				sub = KeyLabel(Settings::Get().keyRack) + " TO RACK AGAIN";
+			} else if (a_st.solo) {
+				title = "SOLO PLAY";
+				sub = a_st.breakShot ? "BREAK" : a_st.ballInHand ? "BALL IN HAND" : a_st.onEight ? "SHOOTING THE 8" : std::format("{} TO GO", a_st.remaining[0]);
 			} else {
 				title = a_st.shooter == 0 ? "YOUR SHOT" : "THEIR SHOT";
 				const char* group = a_st.group[a_st.shooter] == 1 ? "SOLIDS" : a_st.group[a_st.shooter] == 2 ? "STRIPES" : "";
@@ -355,15 +388,17 @@ namespace fp::Hud
 
 		void Keys(const View& a_v, const Game::HudState& a_st)
 		{
-			std::vector<std::pair<const char*, const char*>> keys;
+			const auto& set = Settings::Get();
+			const std::string aim = KeyLabel(set.keyShoot), rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(set.keyCallPocket);
+			std::vector<std::pair<std::string, std::string>> keys;
 			if (a_st.placing) {
-				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { "NUM 8", "LEAVE TABLE" } };
+				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { aim, "LEAVE TABLE" } };
 			} else if (a_st.over) {
-				keys = { { "NUM 7", "RACK AGAIN" }, { "NUM 9", "CLEAR TABLE" }, { "NUM 8", "LEAVE TABLE" } };
+				keys = { { rack, "RACK AGAIN" }, { clear, "CLEAR TABLE" }, { aim, "LEAVE TABLE" } };
 			} else if (a_st.calling) {
-				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "NUM 5", "CHANGE CALLED POCKET" }, { "RMB", "OVERHEAD" } };
+				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { call, "CHANGE CALLED POCKET" }, { "RMB", "OVERHEAD" } };
 			} else {
-				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { "NUM 8", "LEAVE TABLE" } };
+				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { aim, "LEAVE TABLE" } };
 			}
 			// measure, then centre the row
 			float total = 0.0f;
@@ -381,7 +416,7 @@ namespace fp::Hud
 				DL::AddRectFilledMultiColor(a_v.dl, a_v.P(x + 6, y + 15), a_v.P(x + capW[i] - 6, y + 28), Rgba(58, 62, 59, 0.0f), Rgba(58, 62, 59, 0.0f),
 					Rgba(42, 45, 43, 0.9f), Rgba(42, 45, 43, 0.9f));
 				DL::AddLine(a_v.dl, a_v.P(x + 6, y + 1.5f), a_v.P(x + capW[i] - 6, y + 1.5f), Rgba(255, 255, 255, 0.25f), a_v.s);
-				Print(a_v, Mono(), keys[i].first, x + capW[i] * 0.5f, y + 5, 14, Rgba(233, 236, 231), 0, 0.0f, Align::kCentre);
+				Print(a_v, Mono(), keys[i].first.c_str(), x + capW[i] * 0.5f, y + 5, 14, Rgba(233, 236, 231), 0, 0.0f, Align::kCentre);
 				x += capW[i] + 10.0f;
 				Print(a_v, Title(), keys[i].second, x, y + 4, 15, kGreen.text, Fade(kGreen.glow, 0.7f), 1.5f);
 				x += TextWidth(Title(), keys[i].second, 15, 1.5f) + 26.0f;
@@ -489,8 +524,8 @@ namespace fp::Hud
 		{
 			const auto st = Game::Get().Hud();
 			auto*      viewport = GetMainViewport();
-			if (!viewport || !st.game) {
-				return;
+			if (!viewport || !st.game || !st.aiming) {
+				return;  // only at the table: leaving aim mode puts the normal HUD back
 			}
 			if (g_artMissing) {
 				DrawPlain(st, viewport);

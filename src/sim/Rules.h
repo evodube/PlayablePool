@@ -14,6 +14,10 @@
 //  - The shooter carries on after a legal shot that pots one of their own balls.
 //  - Potting the 8 wins only once the shooter's group was already cleared before the shot, on a legal shot, and (if
 //    calling is on) into the called pocket. Otherwise potting the 8 loses.
+//
+// Solo Play: one player, no turns and no scoring. Pot all 14 (any order, misses don't matter), then the 8 into the
+// called pocket to win. Lost: the 8 on the break, the 8 before the 14, the 8 in another pocket, or a scratch while
+// shooting the 8. Any other scratch just gives ball in hand.
 
 #include "sim/Sim.h"
 
@@ -38,13 +42,21 @@ namespace pool
 		kNoRail,          // nothing potted and nothing touched a cushion after the contact
 	};
 
+	enum class Mode : std::uint8_t
+	{
+		kEightBall,  // two players, the rules above
+		kSolo,       // Solo Play: one player pots all 14, then the 8 into the called pocket (see Rules::EndShot)
+	};
+
 	enum class GameEnd : std::uint8_t
 	{
 		kNone,
 		kWon,            // potted the 8 legally
 		kEightEarly,     // lost: potted the 8 before clearing their group
 		kEightOnFoul,    // lost: potted the 8 on a foul
-		kEightWrongPocket // lost: the 8 went in a pocket other than the called one
+		kEightWrongPocket, // lost: the 8 went in a pocket other than the called one
+		kEightOnBreak,     // lost (Solo Play): the 8 went in on the break
+		kScratchOnEight,   // lost (Solo Play): scratched while shooting the 8
 	};
 
 	struct ShotResult
@@ -73,7 +85,8 @@ namespace pool
 		static constexpr int kPlayers = 2;
 
 		// A fresh game: a_breaker breaks with the cue ball behind the head string (the game places it).
-		void NewGame(int a_breaker);
+		void NewGame(int a_breaker, Mode a_mode = Mode::kEightBall);
+		Mode GameMode() const { return _mode; }
 
 		int   Shooter() const { return _shooter; }
 		Group GroupOf(int a_player) const { return _groups[a_player]; }
@@ -98,9 +111,15 @@ namespace pool
 		// Once everything is at rest: judges the shot and moves the game on.
 		ShotResult EndShot(const Sim& a_sim);
 
+	private:
+		ShotResult EndSoloShot(const Sim& a_sim, ShotResult a_result);
+
+	public:
+
 		bool InShot() const { return _inShot; }
 
 	private:
+		Mode                 _mode{ Mode::kEightBall };
 		int                  _shooter{ 0 };
 		std::array<Group, 2> _groups{ Group::kNone, Group::kNone };
 		bool                 _break{ true };

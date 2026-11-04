@@ -119,7 +119,7 @@ namespace fp
 	void Game::EnterAim()
 	{
 		if (!_sim) {
-			Notify("Pool: rack first (Numpad 7)");
+			Notify(std::format("Pool: rack first ({})", Settings::Key(Settings::Get().keyRack)));
 			return;
 		}
 		if (!_sim->AtRest()) {
@@ -153,7 +153,8 @@ namespace fp
 		_aiming = true;
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
-		Notify("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. Numpad 8: stop");
+		Notify(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. {}: stop",
+			Settings::Key(Settings::Get().keyShoot)));
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
 		}
@@ -199,7 +200,7 @@ namespace fp
 			return;
 		}
 		if (_rules.Over()) {
-			Notify("Pool: the game's over. Numpad 7 racks again");
+			Notify(std::format("Pool: the game's over. {} racks again", Settings::Key(Settings::Get().keyRack)));
 			return;
 		}
 		if (a_power < 0.02f) {
