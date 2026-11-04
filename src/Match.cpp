@@ -46,6 +46,7 @@ namespace fp
 			_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
 		}
 		_shotLive = false;
+		_overTime = 0.0f;
 		_manualPocket = _autoPocket = -1;
 		_placing = false;
 		_log = {};

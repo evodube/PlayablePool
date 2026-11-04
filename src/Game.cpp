@@ -15,6 +15,7 @@ namespace fp
 		constexpr double kReturnShortest = 1.5;  // seconds of rolling from the pockets nearest the ball return
 		constexpr double kReturnLongest = 5.5;   // from the far corners (the whole sound)
 		constexpr float kMaxFrame = 0.05f;    // longer frames (hitches) are clamped so balls don't jump through things
+		constexpr float kOverSeconds = 3.0f;  // after a game ends: the result shows this long, then the table clears
 
 		using util::FromRows;
 		using util::GameWindow;
@@ -699,6 +700,23 @@ namespace fp
 			JudgeShot();
 		}
 		TickOpponent(frame, dt);
+
+		// the game's over: the result stays up for a moment, then the normal camera comes back and the table clears
+		if (_rules.Over() && !_shotLive && _sim->AtRest()) {
+			_overTime += dt;
+			if (_overTime >= kOverSeconds) {
+				_overTime = 0.0f;
+				log::info("game over: back to the game camera, table cleared");
+				ReleaseOpponent();  // let them go before the balls (and their spot) disappear
+				ExitAim();
+				Clear();
+				_watching = false;
+				UpdateHud();  // nothing racked: the HUD goes
+				return;       // no balls left to place
+			}
+		} else {
+			_overTime = 0.0f;
+		}
 
 		for (int i = 0; i < pool::Sim::kBalls; ++i) {
 			auto ref = _balls[i].get();

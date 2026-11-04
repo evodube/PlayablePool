@@ -212,6 +212,7 @@ namespace fp
 		pool::Rules                                         _rules;
 		int                                                 _nextBreaker{ 0 };
 		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
+		float                                               _overTime{ 0.0f };   // seconds since the game ended
 		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
 		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
 		bool                                                _overheadBeforePlacing{ false };
