@@ -28,7 +28,7 @@ namespace fp
 		int keyChallenge{ 0x66 };  // Numpad 6: challenge the NPC you're looking at (again: they stop playing)
 
 		// [Rules] 8-ball
-		int   gameMode{ 0 };        // 0 = 8-Ball (two players), 1 = Solo Play
+		int   gameMode{ 1 };        // 0 = 8-Ball (two players), 1 = Solo Play (the default; a challenged NPC always plays 8-ball)
 		bool  callEight{ true };    // the 8 must go in the called pocket (the one marked on the table)
 		float placeSpeed{ 0.06f };  // ball in hand: how far the cue ball moves per mouse count
 

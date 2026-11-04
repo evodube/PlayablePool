@@ -713,7 +713,11 @@ namespace fp
 			if (_overTime >= kOverSeconds) {
 				_overTime = 0.0f;
 				log::info("game over: back to the game camera, table cleared");
-				ReleaseOpponent();  // let them go before the balls (and their spot) disappear
+				if (_opponent) {
+					// the match is over: let them go (before the balls and their spot disappear), and the next rack is
+					// your own game (iGameMode, Solo Play by default) until you challenge someone again
+					EndChallenge(std::format("{} is done playing", _opponentName));
+				}
 				ExitAim();
 				Clear();
 				_watching = false;
