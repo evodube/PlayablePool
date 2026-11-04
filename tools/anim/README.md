@@ -21,20 +21,21 @@ Shot geometry, in the actor's own space (root at the origin, facing +Y; game uni
 
 Exports are checked by re-importing them: within 0.05 units and 0.1 degrees of the Blender clip.
 
-**In game the cue is placed from the hands, not from the reference cue above**: its butt end through the right palm
-(between the wrist and the middle finger's base), resting 3.0 above the left hand's thumb-index V (clear of the knuckles). Measured that way at
-contact (PoolStrike frame 35), the tip is at (5.17, 74.87) in the actor's space and the cue points 2.77 degrees to
-their left; `src/Opponent.cpp` stands them from those numbers (ball 79.5 ahead along the shot, root 8.8 left of the
-line, turned 2.8 degrees towards it). The 66.1 / 8.5 above were for the reference cue and left the hand-placed cue
-about 13 units through the ball.
+**The shipped PoolAim / PoolStrike are an edit of these originals** (PoolAim_edit / PoolStrike_edit in
+`pool_anims_v2.blend`; nothing above the torso changed): the right hand 8.8 out and 9 up from the shoulder
+(collarbone +4 degrees, arm re-solved, the hand keeping its orientation), the right hand's fingers 2-5 wrapped round
+the cue (radius 2 from its centre line; the thumb as in the original), and the left hand rolled 22 degrees flatter.
 
-An edit of both clips (PoolAim_edit / PoolStrike_edit in `pool_anims_v2.blend`) moves the right hand 8.8 out and 4
-up from the shoulder (collarbone +4 degrees, arm re-solved; the hand keeps its orientation) and rolls the left hand
-22 degrees flatter; nothing above the torso changes. Its contact numbers: tip (-0.47, 72.72), yaw -13.01, cue sloping
-4.2 degrees down to the tip, its centre line 2.5 above the bridge hand's knuckle joints.
+**In game the cue is placed from the hands, not from the reference cue above**:
+- grip: a fixed point in the right hand's frame (origin the wrist, e1 = wrist -> the fingers' bases' average,
+  e2 = little finger base -> index base across it, e3 = e1 x e2): 6.478 e1 + 0.133 e2 - 1.488 e3, inside the
+  wrapped fingers;
+- bridge: 3.0 above the midpoint of the left thumb's and index finger's bases (on top of the knuckles).
 
-PoolAim and PoolStrike are the hand-keyed originals above. A scripted re-pose of both (an open stance, PoolAim2 and
-PoolStrike2 in `pool_anims_v2.blend`) was tried and dropped in favour of these.
+Measured that way at contact (PoolStrike frame 35): the tip at (0.59, 73.37) in the actor's space, the cue pointing
+10.85 degrees to their left and sloping 7.3 degrees down to the tip, which meets the ball 0.4 below its centre.
+`src/Opponent.cpp` stands them from those numbers (ball 77.0 ahead along the shot, root 14.4 left of the line,
+turned 10.9 degrees towards it).
 
 ## PoolWait
 

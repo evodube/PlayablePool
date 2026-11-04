@@ -16,11 +16,11 @@ namespace fp
 	{
 		// Where the cue is at the moment it meets the ball (PoolStrike frame 35), in the actor's own space (root at the
 		// origin, facing +Y), as the game places it from their hands: the tip, and the cue's direction as a yaw (+ =
-		// to their right). Measured in Blender (tools/anim/README.md). The edited clip (PoolAim_edit/PoolStrike_edit,
-		// right hand 8.8 out and 9 up) would be tip (0.92, 73.85), yaw -10.11, the cue sloping 6.4 degrees down.
-		constexpr float kTipX = 5.17f;
-		constexpr float kTipY = 74.87f;
-		constexpr float kCueYaw = -2.77f * 0.017453292f;
+		// to their right). Measured in Blender for the clips as shipped (tools/anim/README.md): right hand 8.8 out and
+		// 9 up, fingers wrapped round the cue, which slopes 7.3 degrees down to the tip.
+		constexpr float kTipX = 0.59f;
+		constexpr float kTipY = 73.37f;
+		constexpr float kCueYaw = -10.85f * 0.017453292f;
 		constexpr float kTipGap = 1.5f;  // between the tip and the ball at contact
 		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
 		const float     kStanceBack = kTipX * std::sin(kCueYaw) + kTipY * std::cos(kCueYaw) + 3.51f + kTipGap;
@@ -35,7 +35,11 @@ namespace fp
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
 		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
-		constexpr float kGripInFingers = 0.8f;   // the cue sits this far from the palm towards the curled fingers' middle joints
+		// where the cue runs through the right hand, in the hand's own frame: along the wrist -> finger-bases line,
+		// across it (towards the index finger), and out of the palm; from the clips (tools/anim/README.md)
+		constexpr float kGripAlong = 6.478f;
+		constexpr float kGripAcross = 0.133f;
+		constexpr float kGripOut = -1.488f;
 		constexpr float kBridgeLift = 3.0f;      // the cue rests this far above the bridge hand's thumb-index V (clear of the knuckles)
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
 		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
@@ -464,22 +468,28 @@ namespace fp
 		if (!rHand || !lHand) {
 			return false;
 		}
-		// grip: in the right hand's curled fingers, most of the way from the palm (between the wrist and the middle
-		// finger's base) to the fingers' middle joints, so the hand wraps the cue from above rather than the cue
-		// running through it; bridge: on top of the left hand, over the V between thumb and index finger
-		auto*        midR = node("RArm_Finger31");
-		RE::NiPoint3 grip = midR ? (rHand->world.translate + midR->world.translate) * 0.5f : rHand->world.translate;
-		RE::NiPoint3 curl{};
-		int          joints = 0;
-		for (const char* n : { "RArm_Finger22", "RArm_Finger32", "RArm_Finger42", "RArm_Finger52" }) {
+		// grip: a fixed point in the right hand (inside the fingers wrapped round the cue), from the hand's frame:
+		// the wrist, the line to the fingers' bases, and the line across them from the little finger to the index;
+		// the fingers themselves move in the clip, so they don't decide it. Bridge: on top of the left hand, over the
+		// V between thumb and index finger
+		RE::NiPoint3 grip = rHand->world.translate;
+		auto*        index = node("RArm_Finger21");
+		auto*        little = node("RArm_Finger51");
+		RE::NiPoint3 bases{};
+		int          found = 0;
+		for (const char* n : { "RArm_Finger21", "RArm_Finger31", "RArm_Finger41", "RArm_Finger51" }) {
 			if (auto* j = node(n)) {
-				curl += j->world.translate;
-				++joints;
+				bases += j->world.translate;
+				++found;
 			}
 		}
-		if (joints > 0) {
-			curl = curl * (1.0f / static_cast<float>(joints));
-			grip = grip + (curl - grip) * kGripInFingers;
+		if (found == 4 && index && little) {
+			bases = bases * 0.25f;
+			const RE::NiPoint3 e1 = util::Normalized(bases - rHand->world.translate);
+			const RE::NiPoint3 side = index->world.translate - little->world.translate;
+			const RE::NiPoint3 e2 = util::Normalized(side - e1 * side.Dot(e1));
+			const RE::NiPoint3 e3 = e1.Cross(e2);
+			grip = rHand->world.translate + e1 * kGripAlong + e2 * kGripAcross + e3 * kGripOut;
 		}
 		auto*        thumb = node("LArm_Finger11");
 		auto*        index = node("LArm_Finger21");
