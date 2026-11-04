@@ -35,18 +35,14 @@ namespace fp
 		};
 		HudState Hud() const;
 
-		enum class LookSource
-		{
-			kMouse,   // the free camera's mouse handler: input in mouse counts
-			kUpdate,  // its update, applying the camera's queued look input
-		};
-		// Before the game's free camera code sees look input (CameraHook.cpp). While charging the input becomes power
-		// and true is returned: the hook then drops it, so the view can't turn.
-		bool OnFreeCameraMouse(std::int32_t a_x, std::int32_t a_y);
-		bool OnFreeCameraInput(float a_x, float a_y);
-		// Right after the game's free camera code turned the view: keeps the pitch in range and learns how far the
-		// view turns per unit of input. While charging it also puts the angles back to a_before, in case anything slipped through.
-		void OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before, float a_inX, float a_inY, LookSource a_source);
+		// Mouse movement, from the player's look handler or the free camera's (CameraHook.cpp). While charging it
+		// becomes power and true is returned: the hook then drops it, so the view can't turn.
+		bool OnLookMouse(const RE::MouseMoveEvent* a_event);
+		// Before the free camera update: while charging, empties the queued look input and the look spring.
+		void BeforeFreeCameraUpdate(RE::FreeCameraState* a_free);
+		// Right after the game's free camera code turned the view: keeps the pitch in range and notes how far it
+		// tilted (to learn the mouse sensitivity). While charging it puts the angles back to a_before instead.
+		void OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before);
 		// Right after the game's free camera update: moves the camera, the cue stick and the guide for this frame.
 		void OnFreeCameraUpdate(RE::FreeCameraState* a_free);
 		// The camera position while aiming, from the camera's angles right now; false = leave the game's own.
@@ -143,22 +139,15 @@ namespace fp
 		RE::ObjectRefHandle              _stick;
 		bool                             _stickLogged{ false };
 		bool                             _stickWarned{ false };
-		// how many degrees the view tilts per unit of look input, learned while aiming (least squares: sum xy / sum xx)
-		struct Fit
-		{
-			double xy{ 0.0 };
-			double xx{ 0.0 };
-			void   Add(double a_x, double a_y)
-			{
-				xy = xy * 0.995 + a_x * a_y;  // slowly forgets, in case the sensitivity is changed
-				xx = xx * 0.995 + a_x * a_x;
-			}
-			bool   Ready() const { return xx > 1e-6; }
-			double Slope() const { return xy / xx; }
-		};
-		Fit                              _mouseFitY;    // degrees per mouse count (vertical)
-		Fit                              _inputFitX;    // degrees per unit of queued look input
-		Fit                              _inputFitY;
+		// mouse sensitivity, learned while aiming: degrees the view tilts per vertical mouse count
+		double                           _sumAbsCounts{ 0.0 };
+		double                           _sumAbsTilt{ 0.0 };
+		double                           _sumCross{ 0.0 };   // sign: does moving the mouse back tilt the view down
+		double                           _frameCounts{ 0.0 };
+		double                           _frameTilt{ 0.0 };
+		const void*                      _lastMouseEvent{ nullptr };
+		std::uint32_t                    _lastMouseTime{ 0 };
+		double                           DegreesPerCount() const;
 		int                              _chargeMouseEvents{ 0 };
 		int                              _chargeInputs{ 0 };
 		std::size_t                      _dotsWanted{ 0 };  // guide dots the camera update needed; the tick spawns them

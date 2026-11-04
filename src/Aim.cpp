@@ -191,8 +191,8 @@ namespace fp
 			Audio::Play(Audio::Bank::kCue, ToWorld(frame, _strikePos, static_cast<float>(s.spec.ballRadius)), 0.25f + 0.75f * a_power);
 		}
 		_sim->Strike(_lastDir, speed);
-		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f}); charge input: {} mouse events, {} camera inputs; learned {:.4f} deg/count",
-			a_power * 100.0f, speed, _lastDir.x, _lastDir.y, _chargeMouseEvents, _chargeInputs, _mouseFitY.Ready() ? _mouseFitY.Slope() : 0.0);
+		log::info("shot: power {:.0f}% speed {:.0f} table dir ({:.3f}, {:.3f}); charge input: {} mouse events, {} camera turns; {:.4f} deg/count",
+			a_power * 100.0f, speed, _lastDir.x, _lastDir.y, _chargeMouseEvents, _chargeInputs, DegreesPerCount());
 	}
 
 	void Game::TickAim(const Frame& a_frame, [[maybe_unused]] float a_dt)
@@ -277,10 +277,8 @@ namespace fp
 
 	namespace
 	{
-		// Before anything has been learned (charging straight away without having aimed): the vanilla mouse
-		// sensitivity turns the view roughly this much per count.
+		// until something has been learned (charging straight away without having aimed)
 		constexpr double kDefaultDegreesPerCount = 0.05;
-		constexpr double kDefaultDegreesPerInput = 57.29578;  // look input in radians
 	}
 
 	void Game::AddPull(double a_degrees)
@@ -290,46 +288,62 @@ namespace fp
 		_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
 	}
 
-	bool Game::OnFreeCameraMouse(std::int32_t a_x, std::int32_t a_y)
+	double Game::DegreesPerCount() const
 	{
-		if (!_aiming || !_charging) {
+		if (_sumAbsCounts < 300.0 || _sumAbsTilt < 1e-3) {
+			return kDefaultDegreesPerCount;
+		}
+		const double slope = _sumAbsTilt / _sumAbsCounts;
+		return _sumCross < 0.0 ? -slope : slope;
+	}
+
+	bool Game::OnLookMouse(const RE::MouseMoveEvent* a_event)
+	{
+		if (!_aiming || !a_event) {
 			return false;
 		}
 		std::scoped_lock lock(_camMutex);
 		if (!_camMapped) {
 			return false;
 		}
-		++_chargeMouseEvents;
-		// mouse moved back = the view would tilt down = more power
-		const double perCount = _mouseFitY.Ready() ? _mouseFitY.Slope() : kDefaultDegreesPerCount;
-		AddPull(static_cast<double>(a_y) * perCount);
-		(void)a_x;
+		// the same event can reach both handlers; count it once
+		const bool repeat = a_event == _lastMouseEvent && a_event->timeCode == _lastMouseTime;
+		_lastMouseEvent = a_event;
+		_lastMouseTime = a_event->timeCode;
+
+		if (!_charging) {
+			if (!repeat) {
+				_frameCounts += a_event->mouseInputY;
+			}
+			return false;
+		}
+		if (!repeat) {
+			++_chargeMouseEvents;
+			AddPull(static_cast<double>(a_event->mouseInputY) * DegreesPerCount());  // back = view would tilt down = more
+		}
 		return true;
 	}
 
-	bool Game::OnFreeCameraInput(float a_x, float a_y)
+	void Game::BeforeFreeCameraUpdate(RE::FreeCameraState* a_free)
 	{
-		if (!_aiming || !_charging) {
-			return false;
+		if (!_aiming || !_charging || !a_free) {
+			return;
 		}
-		std::scoped_lock lock(_camMutex);
-		if (!_camMapped) {
-			return false;
+		if (auto* camera = a_free->camera) {
+			camera->rotationInput.x = 0.0f;
+			camera->rotationInput.y = 0.0f;
 		}
-		if (a_x != 0.0f || a_y != 0.0f) {
-			++_chargeInputs;
-			double degrees;
-			if (_inputFitX.Ready() || _inputFitY.Ready()) {
-				degrees = (_inputFitX.Ready() ? a_x * _inputFitX.Slope() : 0.0) + (_inputFitY.Ready() ? a_y * _inputFitY.Slope() : 0.0);
-			} else {
-				degrees = (_yawIndex == 0 ? a_y : a_x) * kDefaultDegreesPerInput * _pitchSign;
-			}
-			AddPull(degrees);
+		if (auto* controls = RE::PlayerControls::GetSingleton()) {
+			auto& d = controls->data;
+			d.lookInputVec = {};
+			d.lookInputVecNormalized = {};
+			d.prevLookVec = {};
+			d.rotationSpeedSpring.position = {};
+			d.rotationSpeedSpring.velocity = {};
 		}
-		return true;  // always swallow it while charging, so the view can't drift
 	}
 
-	void Game::OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before, float a_inX, float a_inY, LookSource a_source)
+	void Game::OnFreeCameraLook(RE::FreeCameraState* a_free, const RE::BSTPoint2<float>& a_before)
 	{
 		if (!_aiming || !a_free) {
 			return;
@@ -340,30 +354,23 @@ namespace fp
 		}
 		const auto& s = Settings::Get();
 		const int   pitchIndex = 1 - _yawIndex;
+		const float before = pitchIndex == 0 ? a_before.x : a_before.y;
+		const double tilted = _pitchSign * (Component(a_free, pitchIndex) - before) / kDegToRad;
 
 		if (_charging) {
-			a_free->rotation = a_before;  // whatever got through, the view stays where it was
+			// If the mouse never reached a handler we could catch, the turn that got through is the pull instead
+			// (how 0.2 did it). Either way the view goes back to where it was.
+			if (_chargeMouseEvents == 0 && tilted != 0.0 && std::abs(tilted) < 30.0) {
+				++_chargeInputs;
+				AddPull(tilted);
+			}
+			a_free->rotation = a_before;
 			return;
 		}
 
-		// how far the view just tilted (positive = down), for converting pulls into power later
-		const float  before = pitchIndex == 0 ? a_before.x : a_before.y;
-		const double tilted = _pitchSign * (Component(a_free, pitchIndex) - before) / kDegToRad;
-		if (tilted != 0.0 && std::abs(tilted) < 30.0) {
-			if (a_source == LookSource::kMouse) {
-				if (a_inY != 0.0f) {
-					_mouseFitY.Add(a_inY, tilted);
-				}
-			} else {
-				if (a_inX != 0.0f) {
-					_inputFitX.Add(a_inX, tilted);
-				}
-				if (a_inY != 0.0f) {
-					_inputFitY.Add(a_inY, tilted);
-				}
-			}
+		if (std::abs(tilted) < 30.0) {
+			_frameTilt += tilted;
 		}
-
 		const float pitch = _pitchSign * Component(a_free, pitchIndex);
 		const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
 		if (wanted != pitch) {
@@ -432,6 +439,16 @@ namespace fp
 				}
 			}
 			camDt = dt;
+
+			// learn the mouse sensitivity from this frame's movement and tilt (only while not charging)
+			if (!_charging && (_frameCounts != 0.0 || _frameTilt != 0.0)) {
+				constexpr double kForget = 0.995;
+				_sumAbsCounts = _sumAbsCounts * kForget + std::abs(_frameCounts);
+				_sumAbsTilt = _sumAbsTilt * kForget + std::abs(_frameTilt);
+				_sumCross = _sumCross * kForget + _frameCounts * _frameTilt;
+			}
+			_frameCounts = 0.0;
+			_frameTilt = 0.0;
 
 			yaw = Component(a_free, _yawIndex);
 			_camYaw = yaw;

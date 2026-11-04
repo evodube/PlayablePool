@@ -1,10 +1,12 @@
 // Hooks the free camera ("tfc") state so aim mode runs inside the game's own camera code.
 //
-// The free camera can turn in two places: its mouse handler (OnMouseMoveEvent) and its Update (which applies the
-// camera's queued look input). While a shot is being charged the mouse movement is taken before either sees it, so
-// the game never turns the view at all, not even for one frame. The rest of the time the game turns it as usual and
-// Game::OnFreeCameraLook keeps the pitch in range and learns how far the view turns per unit of mouse movement,
-// which is what converts a pull into power at the player's own mouse sensitivity.
+// Mouse movement reaches the view through the player's LookHandler (which feeds look input and a smoothing spring
+// that keeps turning the view for a moment after the mouse stops) and possibly the free camera's own mouse handler.
+// While a shot is being charged both handlers drop the movement (it becomes power instead), and before each camera
+// update the look input and the spring are zeroed, so nothing can turn the view. Whatever still slips through is
+// undone right after the update. The rest of the time the game turns the view as usual and Game::OnFreeCameraLook
+// keeps the pitch in range and learns how far it turns per mouse count, so a pull gives power at the player's own
+// sensitivity.
 // GetTranslation is where the game reads the camera position for the frame; it is worked out there, from the
 // angles as they are at that moment, so position and angle can never come from different frames.
 
@@ -25,30 +27,34 @@ namespace fp::CameraHook
 		MouseMove_t      g_mouseMove{ nullptr };
 		bool             g_installed{ false };
 
+		using LookMouse_t = void (*)(RE::LookHandler*, const RE::MouseMoveEvent*);
+		LookMouse_t g_lookMouse{ nullptr };
+
+		// The player's look handler: where FO4 turns mouse movement into look input (and a smoothing spring).
+		void HookedLookMouse(RE::LookHandler* a_this, const RE::MouseMoveEvent* a_event)
+		{
+			if (Game::Get().OnLookMouse(a_event)) {
+				return;  // charging: the movement became power and never reaches the camera
+			}
+			g_lookMouse(a_this, a_event);
+		}
+
 		void HookedMouseMove(RE::FreeCameraState* a_this, const RE::MouseMoveEvent* a_event)
 		{
-			if (a_event && Game::Get().OnFreeCameraMouse(a_event->mouseInputX, a_event->mouseInputY)) {
-				return;  // charging: the movement became power, the view stays put
+			if (Game::Get().OnLookMouse(a_event)) {
+				return;
 			}
 			const auto before = a_this->rotation;
 			g_mouseMove(a_this, a_event);
-			Game::Get().OnFreeCameraLook(a_this, before, a_event ? static_cast<float>(a_event->mouseInputX) : 0.0f,
-				a_event ? static_cast<float>(a_event->mouseInputY) : 0.0f, Game::LookSource::kMouse);
+			Game::Get().OnFreeCameraLook(a_this, before);
 		}
 
 		void HookedUpdate(RE::FreeCameraState* a_this, RE::BSTSmartPointer<RE::TESCameraState>& a_next)
 		{
-			RE::BSTPoint2<float> input{};
-			if (auto* camera = a_this->camera) {
-				input = camera->rotationInput;
-				if (Game::Get().OnFreeCameraInput(input.x, input.y)) {
-					camera->rotationInput.x = 0.0f;  // charging: the look input became power
-					camera->rotationInput.y = 0.0f;
-				}
-			}
+			Game::Get().BeforeFreeCameraUpdate(a_this);
 			const auto before = a_this->rotation;
 			g_update(a_this, a_next);
-			Game::Get().OnFreeCameraLook(a_this, before, input.x, input.y, Game::LookSource::kUpdate);
+			Game::Get().OnFreeCameraLook(a_this, before);
 			Game::Get().OnFreeCameraUpdate(a_this);
 		}
 
@@ -69,6 +75,8 @@ namespace fp::CameraHook
 		g_mouseMove = reinterpret_cast<MouseMove_t>(vtable.write_vfunc(0x06, &HookedMouseMove));
 		g_update = reinterpret_cast<Update_t>(vtable.write_vfunc(0x0B, &HookedUpdate));
 		g_getTranslation = reinterpret_cast<GetTranslation_t>(vtable.write_vfunc(0x0D, &HookedGetTranslation));
+		REL::Relocation<std::uintptr_t> look{ RE::VTABLE::LookHandler[0] };
+		g_lookMouse = reinterpret_cast<LookMouse_t>(look.write_vfunc(0x06, &HookedLookMouse));
 		g_installed = true;
 		log::info("free camera hooks installed");
 	}
