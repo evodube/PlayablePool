@@ -45,12 +45,29 @@ namespace fp
 		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
 		constexpr float kStallSeconds = 2.5f;    // ...but is, once they've gone this long without getting closer
 		constexpr float kProgress = 10.0f;       // closer by this much counts as progress
-		constexpr float kWaitBeyondRail = 30.0f; // the first wait spot: this far outside the felt, on their side
+		constexpr float kWaitBeyondRail = 55.0f; // the first wait spot: this far outside the felt, on their side
+		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
+		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
+		constexpr float kApproachBeyondFelt = 55.0f;
+		constexpr float kStepIn = 75.0f;         // this close to the shot spot: near enough to step onto it
+		constexpr float kWalkingAway = 60.0f;    // further than this from their best: their own package has them, not our walk
 		constexpr float kAlreadyThere = 120.0f;  // at the start, this close to that spot already: they wait where they are
 
 		float Distance2D(const RE::NiPoint3& a, const RE::NiPoint3& b)
 		{
 			return std::hypot(a.x - b.x, a.y - b.y);
+		}
+
+		// the AI package they're on, and which plugin it's from, for the log
+		std::string PackageName(RE::Actor* a_actor)
+		{
+			auto* proc = a_actor ? a_actor->currentProcess : nullptr;
+			auto* pkg = proc ? proc->currentPackage.package : nullptr;
+			if (!pkg) {
+				return "none";
+			}
+			auto* file = pkg->GetFile(0);
+			return std::format("{:08X} ({})", pkg->GetFormID(), file ? std::string(file->GetFilename()) : std::string("?"));
 		}
 
 		void RemoveRef(RE::ObjectRefHandle& a_handle)
@@ -185,30 +202,54 @@ namespace fp
 		}
 	}
 
-	void Game::KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt)
+	bool Game::KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt)
 	{
 		auto target = a_target.get();
 		if (!a_actor || !target) {
-			return;
+			return true;
 		}
 		if (a_target != _npcPathTarget) {
 			PathOpponent(a_actor, a_target, a_walkRun);
-			return;
+			return false;
 		}
+		const char* where = a_target == _npcWaitMarker ? "wait spot" : "shot";
 		const float d = Distance2D(a_actor->data.location, target->data.location);
 		if (d < _npcBestDist - kProgress) {
 			_npcBestDist = d;
 			_npcStall = 0.0f;
-			return;
+		} else {
+			_npcStall += a_dt;
 		}
-		_npcStall += a_dt;
-		if (_npcStall >= kStallSeconds) {
-			log::info("{}: no closer to the {} in {:.1f} s ({:.0f} away, best {:.0f}): sending the walk again", _opponentName,
-				a_target == _npcWaitMarker ? "wait spot" : "shot", _npcStall, d, _npcBestDist);
-			_npcStall = 0.0f;
-			_npcBestDist = d;
-			PathOpponent(a_actor, a_target, a_walkRun, true);
+
+		// is the walk working? PathToReference says false when there's no path (or the walk was cut short); and if
+		// they're heading away, the walk's over and their own package (sandbox, work, bed...) is walking them
+		std::string why;
+		const int   result = Anim::PathResult(_npcPathId);
+		if (result == 0) {
+			why = "PathToReference failed (no path there)";
+		} else if (result == 1 && d > kArrivedDistance * 2.0f) {
+			why = std::format("PathToReference says they got there, but they're {:.0f} away", d);
+		} else if (d > _npcBestDist + kWalkingAway) {
+			why = std::format("walking away from it ({:.0f} away, got to {:.0f}): their package has them", d, _npcBestDist);
+		} else if (_npcStall >= kStallSeconds) {
+			if (_npcResends < 1) {
+				log::info("{}: no closer to the {} in {:.1f} s ({:.0f} away, best {:.0f}): sending the walk again", _opponentName, where,
+					_npcStall, d, _npcBestDist);
+				++_npcResends;
+				_npcStall = 0.0f;
+				_npcBestDist = d;
+				PathOpponent(a_actor, a_target, a_walkRun, true);
+				return false;
+			}
+			why = std::format("stuck {:.0f} away", d);
 		}
+		if (why.empty()) {
+			return false;
+		}
+		log::warn("{}: the walk to the {} isn't working: {}; package {}. Putting them there", _opponentName, where, why, PackageName(a_actor));
+		_npcPathTarget = {};
+		_npcPathId = 0;
+		return true;
 	}
 
 	namespace
@@ -233,13 +274,12 @@ namespace fp
 
 		// what they're doing, and which AI package the game has them on
 		auto*         proc = a_actor->currentProcess;
-		auto*         pkg = proc ? proc->currentPackage.package : nullptr;
 		const auto    wait = _npcWaitMarker.get();
 		const auto    shot = _npcMarker.get();
 		const char*   turn = _rules.Over() ? "over" : OpponentsTurn() ? "theirs" : "yours";
-		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : "old";
-		const std::string state = std::format("step {} turn {} held {} look {} path {} pkg {:08X} level {} combat {} furniture {}",
-			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, pkg ? pkg->GetFormID() : 0u,
+		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : _npcPathTarget == _npcApproach ? "approach" : "old";
+		const std::string state = std::format("step {} turn {} held {} look {} path {} pkg {} level {} combat {} furniture {}",
+			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, PackageName(a_actor),
 			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no");
 
 		_npcLogTimer += a_dt;
@@ -271,17 +311,18 @@ namespace fp
 		if (a_target != _npcPathTarget) {
 			_npcBestDist = Distance2D(a_actor->data.location, target->data.location);
 			_npcStall = 0.0f;
+			_npcResends = 0;
 		}
 		if (_npcWaitIdle) {
 			_npcWaitIdle = false;
 			Anim::Stop(a_actor);  // out of PoolWait before walking off
 		}
 		HoldOpponent(a_actor, false);  // a restrained actor can't walk
-		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : "shot",
+		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : a_target == _npcApproach ? "shot (clear of the table)" : "shot",
 			Distance2D(a_actor->data.location, target->data.location), a_target == _npcPathTarget ? ", again" : "");
 		_npcPathTarget = a_target;
 		_npcPathAge = 0.0f;
-		Anim::PathTo(a_actor, target.get(), a_walkRun);
+		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun);
 	}
 
 	void Game::OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look)
@@ -322,6 +363,7 @@ namespace fp
 	{
 		ReleaseOpponent();
 		RemoveRef(_npcMarker);
+		RemoveRef(_npcApproach);
 		RemoveRef(_npcWaitMarker);
 		RemoveRef(_npcStick);
 		_npcStickReady = false;
@@ -437,7 +479,10 @@ namespace fp
 				Anim::MoveTo(a_actor, marker.get());
 				return;
 			}
-			KeepWalking(a_actor, _npcWaitMarker, 0.0f, a_dt);
+			if (KeepWalking(a_actor, _npcWaitMarker, 0.0f, a_dt)) {
+				_npcWaitWalk = 0.0f;
+				Anim::MoveTo(a_actor, marker.get());
+			}
 		} else if (!_npcFacing) {
 			// there (anywhere within kWaitRadius: there's no gap between "walk back" and "hold")
 			_npcWaitWalk = 0.0f;
@@ -582,11 +627,35 @@ namespace fp
 		if (marker) {
 			marker->data.angle = { 0.0f, 0.0f, _npcHeading };
 		}
+		// the walk goes to a spot clear of the table, straight out from the shot spot
+		RemoveRef(_npcApproach);
+		{
+			const RE::NiPoint3 rel = (_npcStance - a_frame.origin) * (1.0f / std::max(0.01f, a_frame.scale));
+			const RE::NiPoint3 t = a_frame.rot * RE::NiPoint3{ rel.x, rel.y, 0.0f };
+			const double       hx = s.spec.length * 0.5 + kApproachBeyondFelt;
+			const double       hy = s.spec.width * 0.5 + kApproachBeyondFelt;
+			pool::Vec2         p{ t.x, t.y };
+			if (std::abs(p.x) < hx && std::abs(p.y) < hy) {
+				if (hx - std::abs(p.x) < hy - std::abs(p.y)) {
+					p.x = p.x < 0 ? -hx : hx;
+				} else {
+					p.y = p.y < 0 ? -hy : hy;
+				}
+			}
+			RE::NiPoint3 approach = ToWorld(a_frame, p, 0.0f);
+			approach.z = a_frame.origin.z;
+			if (bound && table && Distance2D(approach, _npcStance) > 15.0f) {
+				_npcApproach = Spawn(bound, table, approach);
+				if (auto a = _npcApproach.get()) {
+					a->data.angle = { 0.0f, 0.0f, _npcHeading };
+				}
+			}
+		}
 		_npcTimer = 0.0f;
 		OpponentLooksAtPlayer(actor, false);
 		_npcFacing = false;
 		if (actor && marker) {
-			PathOpponent(actor, _npcMarker, s.opponentRun ? 1.0f : 0.0f);
+			PathOpponent(actor, _npcApproach ? _npcApproach : _npcMarker, s.opponentRun ? 1.0f : 0.0f);
 			_npcStep = NpcStep::kWalking;
 		} else {
 			// can't make them walk: straight to lining up the shot
@@ -684,19 +753,33 @@ namespace fp
 			break;
 
 		case NpcStep::kWalking:
-			KeepWalking(actor, _npcMarker, s.opponentRun ? 1.0f : 0.0f, a_dt);
-			if (Distance2D(actor->data.location, _npcStance) < kArrivedDistance || _npcTimer > s.opponentWalkTimeout) {
-				if (_npcTimer > s.opponentWalkTimeout) {
-					log::info("{} didn't reach the shot in {:.0f} s: putting them there", _opponentName, s.opponentWalkTimeout);
+			{
+				auto        approach = _npcApproach.get();
+				const float toSpot = Distance2D(actor->data.location, _npcStance);
+				const float toApproach = approach ? Distance2D(actor->data.location, approach->data.location) : toSpot;
+				const bool  there = toSpot < kStepIn || toApproach < kArrivedDistance;
+				const bool  late = _npcTimer > s.opponentWalkTimeout;
+				const bool  failed = !there && !late && KeepWalking(actor, approach ? _npcApproach : _npcMarker, s.opponentRun ? 1.0f : 0.0f, a_dt);
+				if (!there && !late && !failed) {
+					break;
 				}
+				if (late) {
+					log::warn("{} didn't reach the shot in {:.0f} s ({:.0f} away; package {}): putting them there", _opponentName,
+						s.opponentWalkTimeout, toSpot, PackageName(actor));
+				} else if (there) {
+					log::info("{}: at the table ({:.0f} from the spot after {:.1f} s): stepping onto it", _opponentName, toSpot, _npcTimer);
+				}
+				_npcPathTarget = {};
+				_npcPathId = 0;
+				RemoveRef(_npcApproach);  // and the walk there (if it's still going) has nowhere to go
 				if (marker) {
 					Anim::MoveTo(actor, marker.get());  // exactly on the spot, facing the shot
 				}
 				Anim::SetHeadTracking(actor, false);  // eyes on the shot, not on whoever walks by
 				_npcStep = NpcStep::kAiming;
 				_npcTimer = 0.0f;
+				break;
 			}
-			break;
 
 		case NpcStep::kAiming:
 			if (_npcTimer >= kSettleSeconds && _npcTimer - a_dt < kSettleSeconds) {

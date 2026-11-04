@@ -38,6 +38,41 @@ namespace fp::Anim
 			std::string _what;
 		};
 
+		// The last few walks' results, written on the script thread: id and result together in one word
+		constexpr std::size_t                                     kPaths = 16;
+		std::array<std::atomic<std::uint64_t>, kPaths>            g_paths{};
+		std::atomic<std::uint32_t>                                g_pathId{ 0 };
+
+		class PathDone final : public RE::BSScript::IStackCallbackFunctor
+		{
+		public:
+			PathDone(std::string a_what, std::uint32_t a_id) :
+				_what(std::move(a_what)),
+				_id(a_id)
+			{}
+
+			void CallQueued() override {}
+			void CallCanceled() override
+			{
+				log::info("papyrus {} (walk {}): canceled", _what, _id);
+				Store(false);
+			}
+			void StartMultiDispatch() override {}
+			void EndMultiDispatch() override {}
+			void operator()(RE::BSScript::Variable a_result) override
+			{
+				const bool ok = a_result.is<bool>() && RE::BSScript::get<bool>(a_result);
+				log::info("papyrus {} (walk {}) -> {}", _what, _id, ok);
+				Store(ok);
+			}
+
+		private:
+			void Store(bool a_ok) { g_paths[_id % kPaths].store((std::uint64_t{ _id } << 1) | (a_ok ? 1u : 0u)); }
+
+			std::string   _what;
+			std::uint32_t _id;
+		};
+
 		RE::TESIdleForm* Idle(std::uint32_t a_rawID)
 		{
 			const auto& s = Settings::Get();
@@ -66,7 +101,7 @@ namespace fp::Anim
 
 		// Calls a Papyrus function on an actor's script object; the call runs on the script thread, later.
 		template <class... Args>
-		bool CallActor(RE::Actor* a_actor, const char* a_function, Args... a_args)
+		bool CallActorWith(RE::Actor* a_actor, const char* a_function, const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback, Args... a_args)
 		{
 			auto* game = RE::GameVM::GetSingleton();
 			auto  vm = game ? game->GetVM() : nullptr;
@@ -81,8 +116,7 @@ namespace fp::Anim
 			}
 			const RE::BSFixedString script{ "Actor" };
 			const RE::BSFixedString function{ a_function };
-			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(
-				std::format("{} ({:08X}).{}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function)) };
+			const auto& callback = a_callback;
 			const bool ok = vm->DispatchMethodCall(
 				handle, script, function,
 				[&](RE::BSScrapArray<RE::BSScript::Variable>& a_out) {
@@ -92,6 +126,18 @@ namespace fp::Anim
 				callback);
 			log::info("{} ({:08X}): {} {}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function, ok ? "sent" : "failed");
 			return ok;
+		}
+
+		std::string What(RE::Actor* a_actor, const char* a_function)
+		{
+			return a_actor ? std::format("{} ({:08X}).{}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function) : std::string(a_function);
+		}
+
+		template <class... Args>
+		bool CallActor(RE::Actor* a_actor, const char* a_function, Args... a_args)
+		{
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(What(a_actor, a_function)) };
+			return CallActorWith(a_actor, a_function, callback, a_args...);
 		}
 	}
 
@@ -117,10 +163,25 @@ namespace fp::Anim
 		}
 	}
 
-	bool PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun)
+	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun)
 	{
 		// Actor.PathToReference(ObjectReference aTarget, float afWalkRunFactor)
-		return CallActor(a_actor, "PathToReference", a_target, a_walkRun);
+		std::uint32_t id = ++g_pathId;
+		if (id == 0) {
+			id = ++g_pathId;
+		}
+		g_paths[id % kPaths].store(0);
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new PathDone(What(a_actor, "PathToReference"), id) };
+		return CallActorWith(a_actor, "PathToReference", callback, a_target, a_walkRun) ? id : 0;
+	}
+
+	int PathResult(std::uint32_t a_id)
+	{
+		if (a_id == 0) {
+			return -1;
+		}
+		const std::uint64_t v = g_paths[a_id % kPaths].load();
+		return (v >> 1) == a_id ? static_cast<int>(v & 1) : -1;
 	}
 
 	bool MoveTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target)

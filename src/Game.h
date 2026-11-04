@@ -134,7 +134,7 @@ namespace fp
 		void        HoldOpponent(RE::Actor* a_actor, bool a_hold);       // SetRestrained, only when it changes
 		void        PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, bool a_force = false);
 		// each tick of a walk: re-sends it when they stop getting closer (their sandbox package took over)
-		void        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt);
+		bool        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt);  // true: the walk isn't working
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
 		void        LogOpponent(RE::Actor* a_actor, float a_dt);  // the status line, once a second and on every change
@@ -282,6 +282,9 @@ namespace fp
 		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
 		bool                _npcHeld{ false };   // SetRestrained(true) is on them
 		RE::ObjectRefHandle _npcPathTarget;      // where they were last sent walking
+		std::uint32_t       _npcPathId{ 0 };     // that walk's id (Anim::PathResult)
+		int                 _npcResends{ 0 };    // times that walk was re-sent after stalling
+		RE::ObjectRefHandle _npcApproach;        // where they walk to for a shot: clear of the table, by the spot
 		float               _npcPathAge{ 0.0f }; // seconds since
 		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack
 		float               _npcLogTimer{ 0.0f };

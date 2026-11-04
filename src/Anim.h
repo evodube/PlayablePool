@@ -9,8 +9,11 @@ namespace fp::Anim
 	bool PlayWait(RE::Actor* a_actor);    // PoolWait: standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
 
-	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once; the walk goes on.
-	bool PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun);
+	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once with an id for the walk (0 =
+	// couldn't send it); the walk goes on.
+	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun);
+	// How that walk ended: -1 not yet (or unknown), 0 it failed (no path, or it was cut short), 1 they got there.
+	int PathResult(std::uint32_t a_id);
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.
 	bool MoveTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target);
 	// Papyrus Actor.SetRestrained: true keeps them where they are, so their sandbox package can't walk them off.
