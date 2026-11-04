@@ -281,17 +281,17 @@ namespace fp
 			float      radius;
 		};
 		std::vector<Dot> dots;
-		const float      small = s.guideDotRadius;
+		const float      dotRadius = s.guideDotRadius;
 		auto line = [&](pool::Vec2 a_from, pool::Vec2 a_dir2, double a_start, double a_length) {
 			for (double t = a_start; t <= a_length && dots.size() < kMaxDots - 1; t += s.guideSpacing) {
-				dots.push_back({ a_from + a_dir2 * t, small });
+				dots.push_back({ a_from + a_dir2 * t, dotRadius });
 			}
 		};
 
 		const double travel = std::min(prediction.distance, static_cast<double>(s.guideMaxLength));
 		line(cue.pos, a_dir, r + s.guideSpacing, travel - r);
 		if (prediction.distance <= s.guideMaxLength) {
-			dots.push_back({ prediction.contact, small * 2.5f });  // where the cue ball will be at contact
+			dots.push_back({ prediction.contact, dotRadius * 2.5f });  // where the cue ball will be at contact
 			if (prediction.hitBall) {
 				const auto& target = _sim->Balls()[prediction.ball].pos;
 				line(target, prediction.objectDir, r + s.guideSpacing, r + s.guideObjectLength);
@@ -305,7 +305,7 @@ namespace fp
 		auto* table = _table.get().get();
 		auto* form = BallForm(0);
 		while (_dots.size() < dots.size() && table && form) {
-			_dots.push_back(Spawn(form, table, ToWorld(a_frame, cue.pos, small)));
+			_dots.push_back(Spawn(form, table, ToWorld(a_frame, cue.pos, dotRadius)));
 		}
 
 		for (std::size_t i = 0; i < _dots.size(); ++i) {
