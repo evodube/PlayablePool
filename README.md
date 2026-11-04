@@ -26,7 +26,7 @@ HUD, rules or opponents yet.
 
 Balls are removed automatically before the game saves.
 
-`Data/F4SE/Plugins/fo4pool.log` records what happened (form IDs, the ball mesh's measured size, every shot).
+`Documents\My Games\Fallout4\F4SE\fo4pool.log` records what happened (form IDs, the ball mesh's measured size, every shot).
 
 ## The balls
 
