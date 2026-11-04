@@ -64,11 +64,11 @@ namespace fp
 		float guideCueLength{ 25.0f };    // the cue ball's path after it (scaled by how much speed it keeps)
 
 		// [Stick] the cue stick. Off until iFormID is set.
-		std::string   stickPlugin{ "Fallout4.esm" };
-		std::uint32_t stickFormID{ 0x0FA3E8 };  // the vanilla Pool Cue
+		std::string   stickPlugin{ "fo4pool.esl" };
+		std::uint32_t stickFormID{ 0x810 };  // a static made from the vanilla Weapons\PoolCue\PoolCue.nif
 		int           stickAxis{ 1 };        // mesh axis the stick runs along: 0 X, 1 Y, 2 Z
-		float         stickTip{ 0.0f };      // tip's coordinate on that axis
-		float         stickButt{ -140.0f };  // butt's coordinate on that axis
+		float         stickTip{ 83.0f };     // tip's coordinate on that axis
+		float         stickButt{ -11.0f };   // butt's coordinate on that axis
 		float         stickElevation{ 6.0f };  // degrees the butt is raised
 		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
 		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest

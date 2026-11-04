@@ -359,6 +359,15 @@ namespace fp
 		if (!_stickLogged && ref->Get3D()) {
 			_stickLogged = true;
 			LogShape(ref.get(), "cue stick");
+			// weapon meshes carry a blood overlay shape for when they've hit someone; a pool cue doesn't need it
+			RE::BSVisit::TraverseScenegraphGeometries(ref->Get3D(), [](RE::BSGeometry* a_geom) {
+				std::string name = a_geom->name.c_str();
+				std::ranges::transform(name, name.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+				if (name.find("blood") != std::string::npos) {
+					a_geom->SetAppCulled(true);
+				}
+				return RE::BSVisitControl::kContinue;
+			});
 		}
 		if (!a_show) {
 			PlaceNode(ref.get(), {}, {}, 1.0f, true);

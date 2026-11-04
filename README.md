@@ -46,10 +46,11 @@ objects, so fo4pool uses collision-free copies of them:
 ```
 python tools/strip_collision.py Poolball_Cue.nif Data/Meshes/fo4pool/Ball_Cue.nif
 python tools/strip_collision.py Poolball_01.nif  Data/Meshes/fo4pool/Ball_01.nif   (and so on to 15)
-python tools/make_esl.py Data/fo4pool.esl
+python tools/strip_collision.py PoolCue.nif      Data/Meshes/fo4pool/CueStick.nif  (Meshes\Weapons\PoolCue)
+python tools/make_esl.py Data/fo4pool.esl --stick
 ```
 
-`fo4pool.esl` holds 16 statics: the cue ball at `xx000800` and ball n at `xx000800 + n`. Bethesda's meshes aren't
+`fo4pool.esl` holds 17 statics: the cue ball at `xx000800`, ball n at `xx000800 + n`, and the cue stick at `xx000810`. Bethesda's meshes aren't
 in this repository; run the tools on the ones from your own game.
 
 Any other static works too: point `[Ball]` in the INI at it. If an object with Havok is used anyway, the plugin
