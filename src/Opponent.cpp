@@ -14,10 +14,17 @@ namespace fp
 {
 	namespace
 	{
-		// The pool clips' shot geometry, in the actor's own space (root at the origin, facing +Y): the cue runs
-		// along x = 8.5 and the cue ball sits 66.1 ahead of the root (tools/anim/README.md).
-		constexpr float kStanceBack = 66.1f;
-		constexpr float kStanceSide = 8.5f;
+		// Where the cue is at the moment it meets the ball (PoolStrike frame 35), in the actor's own space (root at the
+		// origin, facing +Y), as the game places it from their hands: the tip, and the cue's direction as a yaw (+ =
+		// to their right). Measured in Blender (tools/anim/README.md). The edited clip (PoolAim_edit/PoolStrike_edit,
+		// right arm out) would be tip (-0.43, 72.53), yaw -13.01.
+		constexpr float kTipX = 5.17f;
+		constexpr float kTipY = 74.87f;
+		constexpr float kCueYaw = -2.77f * 0.017453292f;
+		constexpr float kTipGap = 1.5f;  // between the tip and the ball at contact
+		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
+		const float     kStanceBack = kTipX * std::sin(kCueYaw) + kTipY * std::cos(kCueYaw) + 3.51f + kTipGap;
+		const float     kStanceSide = kTipX * std::cos(kCueYaw) - kTipY * std::sin(kCueYaw);
 		constexpr float kContactSeconds = 35.0f / 30.0f;  // PoolStrike: the cue reaches the ball on frame 35
 		constexpr float kStrikeLength = 60.0f / 30.0f;
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
@@ -28,6 +35,7 @@ namespace fp
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
 		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
+		constexpr float kBridgeLift = 1.6f;      // the cue rests this far above the bridge hand's knuckles
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
 		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
 		constexpr float kStallSeconds = 2.5f;    // ...but is, once they've gone this long without getting closer
@@ -329,8 +337,9 @@ namespace fp
 		const auto&  s = Settings::Get();
 		const double scale = std::max(0.01f, a_frame.scale);
 
-		// how far back along the shot line the root goes: the clip's distance, or further if that's still over
-		// the table (they lean in from the rail and the cue reaches less far than the clip shows)
+		// how far back along the shot line the cue ball is from the root: the clip's distance, or further if that's
+		// over the table (they lean in from the rail and the cue reaches less far than the clip shows; the shot
+		// picker avoids those shots where it can)
 		double       back = kStanceBack / scale;
 		const double hx = s.spec.length * 0.5 + kTableMargin;
 		const double hy = s.spec.width * 0.5 + kTableMargin;
@@ -344,10 +353,11 @@ namespace fp
 
 		const RE::NiPoint3 dirWorld = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(a_dir.x), static_cast<float>(a_dir.y), 0.0f });
 		const RE::NiPoint3 flat = util::Normalized(RE::NiPoint3{ dirWorld.x, dirWorld.y, 0.0f });
-		const RE::NiPoint3 right{ flat.y, -flat.x, 0.0f };  // the actor's right, facing along the shot
-		a_heading = std::atan2(flat.x, flat.y);
+		const RE::NiPoint3 left{ -flat.y, flat.x, 0.0f };
+		// they face a little off the shot line, so that the cue (which points kCueYaw off their facing) lies along it
+		a_heading = std::atan2(flat.x, flat.y) - kCueYaw;
 
-		RE::NiPoint3 root = ToWorld(a_frame, a_cue - a_dir * back, 0.0f) - right * kStanceSide;
+		RE::NiPoint3 root = ToWorld(a_frame, a_cue - a_dir * back, 0.0f) + left * kStanceSide;
 		root.z = a_frame.origin.z;  // the clip has the felt 70.4 above the feet: the table's own height
 		return root;
 	}
@@ -453,15 +463,14 @@ namespace fp
 		if (!rHand || !lHand) {
 			return false;
 		}
-		// grip: the right palm (between the wrist and the middle finger's base); bridge: the left hand's V between
-		// thumb and index finger
-		auto mid = [&](RE::NiAVObject* a_a, RE::NiAVObject* a_b) {
-			return a_b ? (a_a->world.translate + a_b->world.translate) * 0.5f : a_a->world.translate;
-		};
-		const RE::NiPoint3 grip = mid(rHand, node("RArm_Finger31"));
-		auto*              thumb = node("LArm_Finger11");
-		auto*              index = node("LArm_Finger21");
-		const RE::NiPoint3 bridge = thumb && index ? (thumb->world.translate + index->world.translate) * 0.5f : lHand->world.translate;
+		// grip: the right palm (between the wrist and the middle finger's base); bridge: on top of the left hand,
+		// over the V between thumb and index finger (the cue rests on the knuckles, not through them)
+		auto*              midR = node("RArm_Finger31");
+		const RE::NiPoint3 grip = midR ? (rHand->world.translate + midR->world.translate) * 0.5f : rHand->world.translate;
+		auto*        thumb = node("LArm_Finger11");
+		auto*        index = node("LArm_Finger21");
+		RE::NiPoint3 bridge = thumb && index ? (thumb->world.translate + index->world.translate) * 0.5f : lHand->world.translate;
+		bridge.z += kBridgeLift;
 		const RE::NiPoint3 along = bridge - grip;
 		if (along.Length() < 10.0f) {
 			return false;  // hands together: not a pool pose
