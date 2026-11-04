@@ -3,11 +3,40 @@
 #include "Settings.h"
 #include "Util.h"
 
+// The base class's destructor is declared in CommonLibF4 but not defined there; our functor needs one to link.
+RE::BSScript::IStackCallbackFunctor::~IStackCallbackFunctor() = default;
+
 namespace fp::Anim
 {
 	namespace
 	{
 		bool g_warned{ false };
+
+		// Logs what a Papyrus call returned (it runs on the script thread, later): SetRestrained says whether it
+		// took, and PathToReference only returns once the walk is over, true if they got there.
+		class LogResult final : public RE::BSScript::IStackCallbackFunctor
+		{
+		public:
+			explicit LogResult(std::string a_what) :
+				_what(std::move(a_what))
+			{}
+
+			void CallQueued() override {}
+			void CallCanceled() override { log::info("papyrus {}: canceled", _what); }
+			void StartMultiDispatch() override {}
+			void EndMultiDispatch() override {}
+			void operator()(RE::BSScript::Variable a_result) override
+			{
+				if (a_result.is<bool>()) {
+					log::info("papyrus {} -> {}", _what, RE::BSScript::get<bool>(a_result));
+				} else {
+					log::info("papyrus {} -> done", _what);
+				}
+			}
+
+		private:
+			std::string _what;
+		};
 
 		RE::TESIdleForm* Idle(std::uint32_t a_rawID)
 		{
@@ -52,13 +81,15 @@ namespace fp::Anim
 			}
 			const RE::BSFixedString script{ "Actor" };
 			const RE::BSFixedString function{ a_function };
-			const bool              ok = vm->DispatchMethodCall(
-                handle, script, function,
-                [&](RE::BSScrapArray<RE::BSScript::Variable>& a_out) {
-                    a_out = RE::BSScript::detail::PackVariables(a_args...);
-                    return true;
-                },
-                nullptr);
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(
+				std::format("{} ({:08X}).{}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function)) };
+			const bool ok = vm->DispatchMethodCall(
+				handle, script, function,
+				[&](RE::BSScrapArray<RE::BSScript::Variable>& a_out) {
+					a_out = RE::BSScript::detail::PackVariables(a_args...);
+					return true;
+				},
+				callback);
 			log::info("{} ({:08X}): {} {}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_function, ok ? "sent" : "failed");
 			return ok;
 		}

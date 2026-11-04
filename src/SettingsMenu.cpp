@@ -106,6 +106,8 @@ namespace fp::SettingsMenu
 						{ L"Opponent", L"fSkill", "Skill", Kind::kFloat, &s.opponentSkill, 0.0f, 1.0f, "%.2f", "0 = hopeless, 1 = never misses its aim" },
 						{ L"Opponent", L"fAimSeconds", "Time to line up", Kind::kFloat, &s.opponentAimSeconds, 0.0f, 10.0f, "%.1f", "seconds they aim before striking" },
 						{ L"Opponent", L"bRun", "Run to the shot", Kind::kBool, &s.opponentRun, 0, 0, nullptr, "off = walk" },
+						{ L"Opponent", L"bLog", "Status log", Kind::kBool, &s.opponentLog, 0, 0, nullptr,
+							"a line about them in fo4pool.log every second: where they are, what they're doing, their AI package" },
 						{ L"Opponent", L"fWalkTimeout", "Walk time limit", Kind::kFloat, &s.opponentWalkTimeout, 1.0f, 60.0f, "%.0f", "seconds before they're put at the shot" },
 						{ L"Opponent", L"fPickDistance", "Challenge distance", Kind::kFloat, &s.opponentPickDistance, 50.0f, 3000.0f, "%.0f", "how far away the NPC can be" },
 						{ L"Anim", L"bEnabled", "Pool animations", Kind::kBool, &s.anim, 0, 0, nullptr, "they lean over the table and strike" },

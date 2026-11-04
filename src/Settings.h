@@ -89,6 +89,7 @@ namespace fp
 		float opponentPickDistance{ 600.0f }; // how far away the NPC you challenge can be
 		float opponentWalkTimeout{ 20.0f }; // seconds to reach the shot before they're put there
 		bool  opponentRun{ false };         // run to the shot instead of walking
+		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
 
 		// [Anim] the pool idles (fo4pool.esl) the opponent plays
 		bool          anim{ true };

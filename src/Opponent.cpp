@@ -29,8 +29,11 @@ namespace fp
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
 		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
-		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this
+		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
+		constexpr float kStallSeconds = 2.5f;    // ...but is, once they've gone this long without getting closer
+		constexpr float kProgress = 10.0f;       // closer by this much counts as progress
 		constexpr float kWaitBeyondRail = 30.0f; // the first wait spot: this far outside the felt, on their side
+		constexpr float kAlreadyThere = 120.0f;  // at the start, this close to that spot already: they wait where they are
 
 		float Distance2D(const RE::NiPoint3& a, const RE::NiPoint3& b)
 		{
@@ -162,22 +165,103 @@ namespace fp
 	{
 		if (a_actor && a_hold != _npcHeld) {
 			_npcHeld = a_hold;
+			_npcHeldAt = a_actor->data.location;
+			_npcMovedWarned = false;
+			log::info("{}: hold {}", _opponentName, a_hold ? "on" : "off");
 			Anim::SetRestrained(a_actor, a_hold);
 		}
 	}
 
-	void Game::PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun)
+	void Game::KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt)
 	{
 		auto target = a_target.get();
 		if (!a_actor || !target) {
 			return;
 		}
-		// PathToReference is latent: sending it again while a walk is under way fights the walk already going, so
-		// the same target is only re-sent after a good while (in case their AI dropped it)
-		if (a_target == _npcPathTarget && _npcPathAge < kRepathSeconds) {
+		if (a_target != _npcPathTarget) {
+			PathOpponent(a_actor, a_target, a_walkRun);
 			return;
 		}
+		const float d = Distance2D(a_actor->data.location, target->data.location);
+		if (d < _npcBestDist - kProgress) {
+			_npcBestDist = d;
+			_npcStall = 0.0f;
+			return;
+		}
+		_npcStall += a_dt;
+		if (_npcStall >= kStallSeconds) {
+			log::info("{}: no closer to the {} in {:.1f} s ({:.0f} away, best {:.0f}): sending the walk again", _opponentName,
+				a_target == _npcWaitMarker ? "wait spot" : "shot", _npcStall, d, _npcBestDist);
+			_npcStall = 0.0f;
+			_npcBestDist = d;
+			PathOpponent(a_actor, a_target, a_walkRun, true);
+		}
+	}
+
+	namespace
+	{
+		const char* StepName(int a_step)
+		{
+			static constexpr std::array<const char*, 5> names{ "none", "walking", "aiming", "striking", "follow" };
+			return a_step >= 0 && a_step < 5 ? names[a_step] : "?";
+		}
+	}
+
+	void Game::LogOpponent(RE::Actor* a_actor, float a_dt)
+	{
+		if (!Settings::Get().opponentLog || !a_actor) {
+			return;
+		}
+		const auto pos = a_actor->data.location;
+		if (_npcHeld && !_npcMovedWarned && Distance2D(pos, _npcHeldAt) > 25.0f) {
+			_npcMovedWarned = true;
+			log::warn("{}: moved {:.0f} while held (SetRestrained isn't stopping them)", _opponentName, Distance2D(pos, _npcHeldAt));
+		}
+
+		// what they're doing, and which AI package the game has them on
+		auto*         proc = a_actor->currentProcess;
+		auto*         pkg = proc ? proc->currentPackage.package : nullptr;
+		const auto    wait = _npcWaitMarker.get();
+		const auto    shot = _npcMarker.get();
+		const char*   turn = _rules.Over() ? "over" : OpponentsTurn() ? "theirs" : "yours";
+		const char*   pathTo = !_npcPathTarget ? "-" : _npcPathTarget == _npcWaitMarker ? "wait" : _npcPathTarget == _npcMarker ? "shot" : "old";
+		const std::string state = std::format("step {} turn {} held {} look {} path {} pkg {:08X} level {} combat {} furniture {}",
+			StepName(static_cast<int>(_npcStep)), turn, _npcHeld, _npcLooking, pathTo, pkg ? pkg->GetFormID() : 0u,
+			proc ? proc->processLevel : 255, a_actor->IsInCombat(), proc && static_cast<bool>(proc->GetOccupiedFurniture()) ? "yes" : "no");
+
+		_npcLogTimer += a_dt;
+		if (state == _npcLogLast && _npcLogTimer < 1.0f) {
+			return;
+		}
+		const float speed = _npcLogTimer > 0.0f ? Distance2D(pos, _npcLastPos) / _npcLogTimer : 0.0f;
+		log::info("npc {}: {} | at ({:.0f}, {:.0f}) speed {:.0f} | to wait spot {} | to shot {} | walk sent {:.1f}s ago",
+			_opponentName, state, pos.x, pos.y, speed,
+			wait ? std::format("{:.0f}", Distance2D(pos, wait->data.location)) : std::string("-"),
+			shot ? std::format("{:.0f}", Distance2D(pos, shot->data.location)) : std::string("-"),
+			_npcPathAge);
+		_npcLogLast = state;
+		_npcLogTimer = 0.0f;
+		_npcLastPos = pos;
+	}
+
+	void Game::PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, bool a_force)
+	{
+		auto target = a_target.get();
+		if (!a_actor || !target) {
+			return;
+		}
+		// PathToReference is latent: sending it again while a walk is under way and working fights the walk already
+		// going, so the same target is only re-sent after a good while, or when KeepWalking sees it isn't working
+		if (!a_force && a_target == _npcPathTarget && _npcPathAge < kRepathSeconds) {
+			return;
+		}
+		if (a_target != _npcPathTarget) {
+			_npcBestDist = Distance2D(a_actor->data.location, target->data.location);
+			_npcStall = 0.0f;
+		}
 		HoldOpponent(a_actor, false);  // a restrained actor can't walk
+		log::info("{}: walk to the {} ({:.0f} away){}", _opponentName, a_target == _npcWaitMarker ? "wait spot" : "shot",
+			Distance2D(a_actor->data.location, target->data.location), a_target == _npcPathTarget ? ", again" : "");
 		_npcPathTarget = a_target;
 		_npcPathAge = 0.0f;
 		Anim::PathTo(a_actor, target.get(), a_walkRun);
@@ -300,6 +384,9 @@ namespace fp
 		}
 		RE::NiPoint3 spot = ToWorld(frame, p, 0.0f);
 		spot.z = frame.origin.z;
+		if (Distance2D(actor->data.location, spot) < kAlreadyThere) {
+			spot = actor->data.location;  // near enough: no walk, they're held where they stand
+		}
 		SetWaitSpot(frame, spot);
 	}
 
@@ -314,10 +401,20 @@ namespace fp
 		}
 		const float away = Distance2D(a_actor->data.location, marker->data.location);
 		if (away > kWaitRadius) {
-			// not there yet (or pulled off it): walk back
+			// not there yet (or pulled off it): walk there, and if the walk doesn't get them there in time (their
+			// sandbox package can keep winning), put them there
 			_npcFacing = false;
-			PathOpponent(a_actor, _npcWaitMarker, 0.0f);
-		} else if (!_npcFacing && away < kWaitRadius * 0.5f) {
+			_npcWaitWalk += a_dt;
+			if (_npcWaitWalk > Settings::Get().opponentWalkTimeout) {
+				log::info("{}: didn't reach the wait spot in {:.0f} s ({:.0f} away): putting them there", _opponentName, _npcWaitWalk, away);
+				_npcWaitWalk = 0.0f;
+				Anim::MoveTo(a_actor, marker.get());
+				return;
+			}
+			KeepWalking(a_actor, _npcWaitMarker, 0.0f, a_dt);
+		} else if (!_npcFacing) {
+			// there (anywhere within kWaitRadius: there's no gap between "walk back" and "hold")
+			_npcWaitWalk = 0.0f;
 			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
 			a_actor->SetHeading(_npcWaitHeading);
@@ -447,6 +544,7 @@ namespace fp
 		if (a_dt <= 0.0f) {
 			return;  // paused
 		}
+		LogOpponent(actor, a_dt);
 
 		if (!OpponentsTurn()) {
 			if (_npcStep != NpcStep::kNone && _npcStep != NpcStep::kFollow) {
@@ -489,6 +587,7 @@ namespace fp
 			break;
 
 		case NpcStep::kWalking:
+			KeepWalking(actor, _npcMarker, s.opponentRun ? 1.0f : 0.0f, a_dt);
 			if (Distance2D(actor->data.location, _npcStance) < kArrivedDistance || _npcTimer > s.opponentWalkTimeout) {
 				if (_npcTimer > s.opponentWalkTimeout) {
 					log::info("{} didn't reach the shot in {:.0f} s: putting them there", _opponentName, s.opponentWalkTimeout);

@@ -131,9 +131,12 @@ namespace fp
 		void        SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos);
 		void        WaitByTable();  // a wait spot at the table on the side they're on
 		void        HoldOpponent(RE::Actor* a_actor, bool a_hold);       // SetRestrained, only when it changes
-		void        PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun);  // one walk at a time
+		void        PathOpponent(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, bool a_force = false);
+		// each tick of a walk: re-sends it when they stop getting closer (their sandbox package took over)
+		void        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt);
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
+		void        LogOpponent(RE::Actor* a_actor, float a_dt);  // the status line, once a second and on every change
 		void        TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt);
 		RE::NiPoint3 StanceFor(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float& a_heading) const;
 
@@ -269,6 +272,14 @@ namespace fp
 		RE::ObjectRefHandle _npcPathTarget;      // where they were last sent walking
 		float               _npcPathAge{ 0.0f }; // seconds since
 		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack
+		float               _npcLogTimer{ 0.0f };
+		std::string         _npcLogLast;          // the last line's state part, to log changes at once
+		RE::NiPoint3        _npcHeldAt;           // where they were when the hold went on
+		RE::NiPoint3        _npcLastPos;          // for their speed
+		bool                _npcMovedWarned{ false };
+		float               _npcWaitWalk{ 0.0f };  // seconds they've been on their way to the wait spot
+		float               _npcBestDist{ 0.0f };  // closest they've got to where they're walking
+		float               _npcStall{ 0.0f };     // seconds without getting closer
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
