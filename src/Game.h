@@ -183,6 +183,8 @@ namespace fp
 		RE::ObjectRefHandle Spawn(RE::TESBoundObject* a_form, RE::TESObjectREFR* a_table, const RE::NiPoint3& a_pos) const;
 		float               BallScale(RE::NiAVObject* a_root);
 		void                MeasureBall(RE::NiAVObject* a_root);  // once per rack, from a real ball
+		void                UpdateGlow();                          // your balls' glow, when it changes
+		void                SetGlow(RE::NiAVObject* a_root, float a_strength);
 		void                PlaceNode(RE::TESObjectREFR* a_ref, const RE::NiPoint3& a_pos, const RE::NiMatrix3& a_rot, float a_scale, bool a_hidden);
 		bool                IsOurs(const RE::TESObjectREFR* a_ref) const;
 		static std::string  ModelPath(const RE::TESObjectREFR* a_ref);
@@ -204,6 +206,9 @@ namespace fp
 		bool                                                _scratch{ false };
 		bool                                                _warned3D{ false };
 		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
+		std::array<float, pool::Sim::kBalls>                _glow{};  // the glow each ball has now (-1: not set yet)
+		std::array<RE::NiAVObject*, pool::Sim::kBalls>      _glow3D{}; // the 3D it was set on (a reload needs it again)
+		bool                                                _glowLogged{ false };
 		pool::Rules                                         _rules;
 		int                                                 _nextBreaker{ 0 };
 		bool                                                _shotLive{ false };  // a shot is rolling and will be judged

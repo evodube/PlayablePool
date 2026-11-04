@@ -99,6 +99,8 @@ namespace fp
 		overheadHeight = std::max(50.0f, ReadFloat(L"Camera", L"fOverheadHeight", overheadHeight));
 
 		guide = ReadBool(L"Guide", L"bEnabled", guide);
+		glowOwn = ReadBool(L"Ball", L"bGlowOwn", glowOwn);
+		glowStrength = std::clamp(ReadFloat(L"Ball", L"fGlowStrength", glowStrength), 0.0f, 5.0f);
 		guideDotRadius = std::max(0.05f, ReadFloat(L"Guide", L"fDotRadius", guideDotRadius));
 		guideSpacing = std::max(1.0f, ReadFloat(L"Guide", L"fSpacing", guideSpacing));
 		guideMaxLength = ReadFloat(L"Guide", L"fMaxLength", guideMaxLength);

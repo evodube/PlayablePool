@@ -146,6 +146,7 @@ namespace fp
 		_balls.fill({});
 		_markers.clear();
 		_frozen.clear();
+		_glow3D.fill(nullptr);
 		_haveLast = false;
 		_scratch = false;
 		// the camera is reset with the load; just drop our side of aim mode
@@ -563,6 +564,7 @@ namespace fp
 		}
 		_markers.clear();
 		_frozen.clear();
+		_glow3D.fill(nullptr);
 		_sim.reset();
 		_table = {};
 		_shotLive = false;
@@ -715,11 +717,64 @@ namespace fp
 			MeasureBall(ref->Get3D());
 		}
 
+		UpdateGlow();
 		_rolling = !_sim->AtRest();
 		if (_aiming) {
 			TickAim(frame, dt);
 		}
 		UpdateHud();
+	}
+
+	// ---------------------------------------------------------------- your balls glow
+
+	void Game::SetGlow(RE::NiAVObject* a_root, float a_strength)
+	{
+		static const RE::NiColor kGreen{ 0.35f, 1.0f, 0.45f };  // the HUD's green
+		RE::BSVisit::TraverseScenegraphGeometries(a_root, [&](RE::BSGeometry* a_geom) {
+			auto* prop = RE::netimmerse_cast<RE::BSLightingShaderProperty*>(a_geom->properties[1].get());
+			if (!prop) {
+				return RE::BSVisitControl::kContinue;
+			}
+			if (!_glowLogged) {
+				_glowLogged = true;
+				log::info("glow: ball shader on '{}': emit colour {}, own emit {}, scale {:.2f}", a_geom->name.c_str(),
+					prop->emitColor ? "yes" : "none", prop->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit), prop->emitColorScale);
+			}
+			if (a_strength > 0.0f) {
+				prop->SetFlag(RE::BSShaderProperty::EShaderPropertyFlag::kOwnEmit, true);
+				if (prop->emitColor) {
+					*prop->emitColor = kGreen;  // may be shared by every ball: the others keep scale 0, so stay dark
+				}
+			}
+			prop->emitColorScale = a_strength;
+			return RE::BSVisitControl::kContinue;
+		});
+	}
+
+	void Game::UpdateGlow()
+	{
+		const auto& s = Settings::Get();
+		// whose balls: yours against an NPC, the shooter's in hotseat; none in Solo Play or before groups are set
+		const bool solo = _rules.GameMode() == pool::Mode::kSolo;
+		const int  who = _opponent ? 0 : _rules.Shooter();
+		const auto group = _rules.GroupOf(who);
+		const bool onEight = !solo && _rules.OnEight(who, *_sim);
+		for (int i = 1; i < pool::Sim::kBalls; ++i) {
+			auto  ref = _balls[i].get();
+			auto* root = ref ? ref->Get3D() : nullptr;
+			if (!root) {
+				continue;
+			}
+			const bool  mine = s.glowOwn && !solo && !_rules.Over() &&
+			                  ((group != pool::Group::kNone && pool::GroupOfBall(i) == group) || (onEight && i == 8));
+			const float want = mine ? s.glowStrength : 0.0f;
+			if (_glow3D[i] == root && _glow[i] == want) {
+				continue;
+			}
+			SetGlow(root, want);
+			_glow[i] = want;
+			_glow3D[i] = root;
+		}
 	}
 
 	void Game::PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events)

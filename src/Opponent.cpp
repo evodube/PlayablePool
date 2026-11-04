@@ -518,7 +518,13 @@ namespace fp
 		p.skill = s.opponentSkill;
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;
+		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)
+		p.stanceBack = kStanceBack / std::max(0.01f, a_frame.scale);
+		p.tableMargin = kTableMargin;
 		_npcShot = pool::ChooseShot(*_sim, _rules, 1, p, _npcRng);
+		if (const double over = pool::Overreach(*_sim, _npcShot.placeCue ? _npcShot.cuePos : _sim->Balls()[0].pos, _npcShot.dir, p); over > p.reachSlack) {
+			log::info("{}: no shot they can stand behind from here; this one needs {:.0f} more reach", _opponentName, over);
+		}
 		if (_npcShot.placeCue) {
 			_sim->Place(0, _npcShot.cuePos);
 			_rules.PlacedCueBall();

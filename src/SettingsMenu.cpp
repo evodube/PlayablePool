@@ -86,6 +86,8 @@ namespace fp::SettingsMenu
 				{ "Guide & cue stick", "The aiming dots and the cue stick behind the cue ball.",
 					{
 						{ L"Guide", L"bEnabled", "Show the aiming guide", Kind::kBool, &s.guide },
+						{ L"Ball", L"bGlowOwn", "Your balls glow", Kind::kBool, &s.glowOwn, 0, 0, nullptr, "your group (solids or stripes) glows a little; in hotseat, the shooter's" },
+						{ L"Ball", L"fGlowStrength", "Glow strength", Kind::kFloat, &s.glowStrength, 0.0f, 3.0f, "%.2f" },
 						{ L"Guide", L"fDotRadius", "Dot size", Kind::kFloat, &s.guideDotRadius, 0.1f, 2.0f, "%.2f" },
 						{ L"Guide", L"fSpacing", "Dot spacing", Kind::kFloat, &s.guideSpacing, 1.0f, 20.0f, "%.1f" },
 						{ L"Guide", L"fMaxLength", "Cue ball line length", Kind::kFloat, &s.guideMaxLength, 0.0f, 1000.0f, "%.0f", "how far the cue ball's path is shown" },

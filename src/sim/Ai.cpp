@@ -33,6 +33,11 @@ namespace pool
 			return (a_p - (a_a + ab * t)).Length();
 		}
 
+		bool Reachable(const Sim& a_sim, Vec2 a_cue, Vec2 a_dir, const AiParams& a_p)
+		{
+			return a_p.stanceBack <= 0.0 || Overreach(a_sim, a_cue, a_dir, a_p) <= a_p.reachSlack;
+		}
+
 		bool OnTable(const Sim& a_sim, int a_index)
 		{
 			return a_sim.Balls()[a_index].state == BallState::kOnTable;
@@ -100,7 +105,21 @@ namespace pool
 			return out;
 		}
 
-		// every pot that's geometrically on from the cue ball where it is, best first (no play-out yet)
+		// plays a shot out on a copy: true if it's no foul and doesn't lose the game
+		bool NoFoul(const Sim& a_sim, const Rules& a_rules, int a_player, const AiShot& a_shot)
+		{
+			Sim   sim = a_sim;
+			Rules rules = a_rules;
+			rules.BeginShot(sim, -1);
+			sim.Strike(a_shot.dir, a_shot.speed);
+			for (int i = 0; i < 60 * 40 && !sim.AtRest(); ++i) {
+				rules.OnEvents(sim.Step(1.0 / 60.0));
+			}
+			const ShotResult r = rules.EndShot(sim);
+			return r.foul == Foul::kNone && (r.end == GameEnd::kNone || (r.end == GameEnd::kWon && r.winner == a_player));
+		}
+
+				// every pot that's geometrically on from the cue ball where it is, best first (no play-out yet)
 		std::vector<AiShot> Candidates(const Sim& a_sim, const Rules& a_rules, int a_player, const AiParams& a_p)
 		{
 			std::vector<AiShot> out;
@@ -128,6 +147,9 @@ namespace pool
 					const double cutCos = aim.Dot(toPocket);
 					if (cutCos < kMinCutCos) {
 						continue;
+					}
+					if (!Reachable(a_sim, cue, aim, a_p)) {
+						continue;  // they'd have to stand on the table
 					}
 					const auto pred = a_sim.Predict(aim);
 					if (!pred.hitBall || pred.ball != t) {
@@ -162,23 +184,55 @@ namespace pool
 		AiShot Safety(const Sim& a_sim, const Rules& a_rules, int a_player, const AiParams& a_p)
 		{
 			AiShot      best;
-			double      bestDist = 1e18;
+			double      bestCost = 1e18;
 			const auto& balls = a_sim.Balls();
 			const Vec2  cue = balls[0].pos;
 			for (const int t : Targets(a_sim, a_rules, a_player)) {
-				// straight at it, then a few slightly off-centre hits in case something is in the way
-				for (const double off : { 0.0, 0.03, -0.03, 0.07, -0.07, 0.12, -0.12 }) {
+				// straight at it, then off-centre hits in case something is in the way or they can't reach the
+				// straight one; reachable hits always beat ones they'd have to lean across the table for
+				for (const double off : { 0.0, 0.03, -0.03, 0.07, -0.07, 0.12, -0.12, 0.2, -0.2, 0.3, -0.3 }) {
 					const Vec2 dir = Rotate(Unit(balls[t].pos - cue), off);
 					const auto pred = a_sim.Predict(dir);
-					if (pred.hitBall && pred.ball == t && pred.distance < bestDist) {
-						bestDist = pred.distance;
+					if (!pred.hitBall || pred.ball != t) {
+						continue;
+					}
+					const double over = a_p.stanceBack > 0.0 ? std::max(0.0, Overreach(a_sim, cue, dir, a_p) - a_p.reachSlack) : 0.0;
+					const double cost = pred.distance + over * 1000.0;
+					if (cost < bestCost) {
+						bestCost = cost;
 						best.dir = dir;
 						best.target = -1;
 						best.speed = std::clamp(SpeedFor(a_sim, pred.distance, 120.0, 0.8, a_p), a_p.minSpeed, a_p.maxSpeed);
-						break;
 					}
 				}
 			}
+			// nothing reachable straight at a ball: a reachable direction that still hits a legal ball first (off a
+			// cushion), played out on a copy of the table so it's no foul
+			if (a_p.stanceBack > 0.0 && bestCost >= 1000.0 * 0.5) {
+				AiShot kick;
+				double kickCost = 1e18;
+				for (int i = 0; i < 72; ++i) {
+					const Vec2 dir = Rotate(Vec2{ 1.0, 0.0 }, i * (2.0 * kPi / 72.0));
+					if (!Reachable(a_sim, cue, dir, a_p)) {
+						continue;
+					}
+					AiShot s;
+					s.dir = dir;
+					s.speed = std::clamp((a_p.minSpeed + a_p.maxSpeed) * 0.55, a_p.minSpeed, a_p.maxSpeed);
+					if (!NoFoul(a_sim, a_rules, a_player, s)) {
+						continue;
+					}
+					const double cost = std::abs(Rotate(dir, 0.0).Dot(Unit(a_sim.FootSpot() - cue)));  // any; prefer nothing in particular
+					if (cost < kickCost) {
+						kickCost = cost;
+						kick = s;
+					}
+				}
+				if (kickCost < 1e17) {
+					return kick;
+				}
+			}
+			const double bestDist = bestCost;
 			if (bestDist > 1e17) {  // nothing hittable directly: at least send it somewhere
 				best.dir = Unit(a_sim.FootSpot() - cue);
 				best.speed = (a_p.minSpeed + a_p.maxSpeed) * 0.5;
@@ -189,7 +243,18 @@ namespace pool
 		AiShot Break(const Sim& a_sim, const AiParams& a_p)
 		{
 			AiShot s;
-			s.dir = Unit(a_sim.FootSpot() - a_sim.Balls()[0].pos);
+			// with a reach limit, break from far enough back behind the head string that they can stand behind it
+			if (a_p.stanceBack > 0.0) {
+				const auto&  spec = a_sim.Spec();
+				const double x = -(spec.length * 0.5 + a_p.tableMargin) + a_p.stanceBack - 1.0;
+				const Vec2   pos{ std::max(x, -spec.length * 0.5 + spec.ballRadius * 2.0), 0.0 };
+				if (pos.x < a_sim.HeadSpot().x && a_sim.CanPlace(0, pos)) {
+					s.placeCue = true;
+					s.cuePos = pos;
+				}
+			}
+			const Vec2 from = s.placeCue ? s.cuePos : a_sim.Balls()[0].pos;
+			s.dir = Unit(a_sim.FootSpot() - from);
 			s.speed = a_p.maxSpeed * 0.95;
 			s.checked = true;
 			return s;
@@ -219,6 +284,26 @@ namespace pool
 			}
 			return cands.front();
 		}
+	}
+
+	double Overreach(const Sim& a_sim, Vec2 a_cue, Vec2 a_dir, const AiParams& a_params)
+	{
+		if (a_params.stanceBack <= 0.0) {
+			return 0.0;
+		}
+		const auto&  spec = a_sim.Spec();
+		const double hx = spec.length * 0.5 + a_params.tableMargin;
+		const double hy = spec.width * 0.5 + a_params.tableMargin;
+		const Vec2   d = Unit(a_dir);
+		auto inside = [&](double k) {
+			const Vec2 p = a_cue - d * k;
+			return std::abs(p.x) < hx && std::abs(p.y) < hy;
+		};
+		double back = a_params.stanceBack;
+		while (inside(back) && back < a_params.stanceBack + 600.0) {
+			back += 1.0;
+		}
+		return back - a_params.stanceBack;
 	}
 
 	AiShot BestShot(const Sim& a_sim, const Rules& a_rules, int a_player, const AiParams& a_params)

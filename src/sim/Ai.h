@@ -21,7 +21,18 @@ namespace pool
 		double minSpeed{ 28.0 };  // the shot speed range, as the player's ([Shot] fMinSpeed / fMaxSpeed)
 		double maxSpeed{ 365.0 };
 		int    validate{ 8 };     // how many of the best shots are played out on a copy of the table
+
+		// Reach: a shot is only on if the shooter can stand behind the cue ball. They stand `stanceBack` behind it
+		// along the shot line; that spot has to be outside the table (felt plus `tableMargin`), give or take
+		// `reachSlack`. 0 = no limit (any shot goes, as if they could lean across the table).
+		double stanceBack{ 0.0 };
+		double tableMargin{ 22.0 };
+		double reachSlack{ 6.0 };
 	};
+
+	// How much further back than `stanceBack` they'd have to stand to be clear of the table for this shot (0 = they
+	// can reach it). Table space, same units as the spec.
+	double Overreach(const Sim& a_sim, Vec2 a_cue, Vec2 a_dir, const AiParams& a_params);
 
 	struct AiShot
 	{

@@ -121,11 +121,53 @@ namespace
 			Check(checkedShots == 0 || checkedGood * 10 >= checkedShots * 7, "a near-perfect player makes most of its checked shots");
 		}
 	}
+
+	// with a reach limit (the opponent's stance), every pot it goes for can be played from outside the table
+	void Reach()
+	{
+		std::printf("reach\n");
+		int shots = 0;
+		int pots = 0;
+		int potsOver = 0;
+		int safeties = 0;
+		int safetiesOver = 0;
+		for (int g = 0; g < 10; ++g) {
+			Sim   sim(kSpec);
+			Rules rules;
+			sim.Rack(300 + g);
+			rules.NewGame(g % 2);
+			std::mt19937 rng(11 + g);
+			AiParams     p;
+			p.skill = 0.8;
+			p.stanceBack = 66.1;
+			for (int n = 0; n < 300 && !rules.Over(); ++n) {
+				const auto shot = ChooseShot(sim, rules, rules.Shooter(), p, rng);
+				if (!rules.IsBreak()) {
+					AiParams exact = p;  // judged on the shot before the aim error
+					const Vec2 cue = shot.placeCue ? shot.cuePos : sim.Balls()[0].pos;
+					const bool over = Overreach(sim, cue, shot.dir, exact) > p.reachSlack + 3.0;  // the aim error turns it a little
+					if (shot.target >= 0) {
+						++pots;
+						potsOver += over;
+					} else {
+						++safeties;
+						safetiesOver += over;
+					}
+				}
+				Play(sim, rules, shot);
+				++shots;
+			}
+			Check(rules.Over(), "a reach-limited game still finishes");
+		}
+		std::printf("    %d shots: %d pots (%d out of reach), %d safeties (%d out of reach)\n", shots, pots, potsOver, safeties, safetiesOver);
+		Check(potsOver == 0, "no pot needs them to lean across the table");
+	}
 }
 
 int main()
 {
 	EasyPot();
+	Reach();
 	Games(1.0, 20);
 	Games(0.6, 20);
 	Games(0.2, 10);
