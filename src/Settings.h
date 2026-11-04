@@ -42,8 +42,35 @@ namespace fp
 		float         ballScale{ 1.0f };      // used when bAutoScale=0
 		float         ballZOffset{ 0.0f };    // if the mesh's centre isn't the ball's centre
 
-		// [Shot]
-		float shotSpeed{ 880.0f };  // units per second
+		// [Shot] hold the left mouse button to charge: power goes 0 -> 100% over chargeTime
+		float minSpeed{ 40.0f };     // cue ball speed at 0% power, units per second
+		float maxSpeed{ 1400.0f };   // at 100%
+		float chargeTime{ 1.2f };    // seconds to full power
+
+		// [Camera] the shot camera orbits the cue ball
+		float camDistance{ 75.0f };
+		float camPitch{ 20.0f };      // degrees below horizontal when aiming starts
+		float camMinPitch{ 4.0f };
+		float camMaxPitch{ 80.0f };
+		float overheadHeight{ 240.0f };
+
+		// [Guide]
+		bool  guide{ true };
+		float guideDotRadius{ 0.45f };
+		float guideSpacing{ 5.0f };
+		float guideMaxLength{ 400.0f };  // cue ball path before the first contact
+		float guideObjectLength{ 45.0f }; // the hit ball's path after it
+		float guideCueLength{ 25.0f };    // the cue ball's path after it (scaled by how much speed it keeps)
+
+		// [Stick] the cue stick. Off until iFormID is set.
+		std::string   stickPlugin{ "fo4pool.esl" };
+		std::uint32_t stickFormID{ 0 };
+		int           stickAxis{ 1 };        // mesh axis the stick runs along: 0 X, 1 Y, 2 Z
+		float         stickTip{ 0.0f };      // tip's coordinate on that axis
+		float         stickButt{ -140.0f };  // butt's coordinate on that axis
+		float         stickElevation{ 6.0f };  // degrees the butt is raised
+		float         stickMaxPull{ 18.0f };   // how far it draws back at full power
+		float         stickGap{ 1.5f };        // gap between tip and cue ball at rest
 
 		// [Table] the felt, in the table mesh's own space (before the table's scale). The defaults are measured
 		// from the vanilla SetDressing\PoolTable\PoolTable01.nif.

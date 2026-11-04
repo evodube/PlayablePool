@@ -1,6 +1,7 @@
 #include "Game.h"
 
 #include "Settings.h"
+#include "Util.h"
 
 namespace fp
 {
@@ -9,11 +10,8 @@ namespace fp
 		constexpr float kDropSeconds = 0.3f;  // a pocketed ball sinks out of sight over this long
 		constexpr float kMaxFrame = 0.05f;    // longer frames (hitches) are clamped so balls don't jump through things
 
-		HWND GameWindow()
-		{
-			auto* data = RE::BSGraphics::GetRendererData();
-			return data ? reinterpret_cast<HWND>(data->renderWindow[0].hwnd) : nullptr;
-		}
+		using util::FromRows;
+		using util::GameWindow;
 
 		template <class F>
 		void ForEachLoadedCell(F&& a_fn)
@@ -45,14 +43,6 @@ namespace fp
 					}
 				}
 			}
-		}
-
-		RE::NiMatrix3 FromRows(const double a_m[3][3])
-		{
-			return RE::NiMatrix3(
-				static_cast<float>(a_m[0][0]), static_cast<float>(a_m[0][1]), static_cast<float>(a_m[0][2]), 0.0f,
-				static_cast<float>(a_m[1][0]), static_cast<float>(a_m[1][1]), static_cast<float>(a_m[1][2]), 0.0f,
-				static_cast<float>(a_m[2][0]), static_cast<float>(a_m[2][1]), static_cast<float>(a_m[2][2]), 0.0f);
 		}
 
 		// Table x/y -> mesh x/y. With iLengthAxis=1 the table's length runs along the mesh's Y axis.
@@ -88,6 +78,7 @@ namespace fp
 	void Game::OnPresent()
 	{
 		PollKeys();
+		PollMouse();
 		if (_tickPending.exchange(true)) {
 			return;
 		}
@@ -116,16 +107,14 @@ namespace fp
 			}
 			const bool down = (::GetAsyncKeyState(keys[i]) & 0x8000) != 0;
 			if (down && !_keyWasDown[i]) {
-				const bool shift = (::GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-				const bool ctrl = (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 				if (auto* tasks = F4SE::GetTaskInterface()) {
-					tasks->AddTask([this, i, shift, ctrl]() {
+					tasks->AddTask([this, i]() {
 						if (IsGamePaused()) {
 							return;  // menus, console (typing numbers), loading
 						}
 						switch (i) {
 						case 0: Rack(); break;
-						case 1: Shoot(shift ? 0.4f : ctrl ? 1.6f : 1.0f); break;
+						case 1: ToggleAim(); break;
 						case 2: Clear(); break;
 						default: ToggleCalibrate(); break;
 						}
@@ -169,6 +158,13 @@ namespace fp
 		_frozen.clear();
 		_haveLast = false;
 		_scratch = false;
+		// the camera is reset with the load; just drop our side of aim mode
+		_aiming = false;
+		_charging = false;
+		_overhead = false;
+		_rolling = false;
+		_dots.clear();
+		_stick = {};
 	}
 
 	void Game::ClearForSave()
@@ -194,7 +190,12 @@ namespace fp
 				return true;
 			}
 		}
-		return false;
+		for (const auto& h : _dots) {
+			if (h && h.get().get() == a_ref) {
+				return true;
+			}
+		}
+		return _stick && _stick.get().get() == a_ref;
 	}
 
 	RE::TESObjectREFR* Game::PickTable() const
@@ -289,23 +290,13 @@ namespace fp
 	RE::TESBoundObject* Game::BallForm(int a_number) const
 	{
 		const auto& s = Settings::Get();
-		auto*       dh = RE::TESDataHandler::GetSingleton();
-		if (!dh) {
-			return nullptr;
-		}
-		auto* file = dh->LookupModByName(s.ballPlugin);
-		if (!file || file->compileIndex == 0xFF) {
-			return nullptr;
-		}
-		const std::uint32_t raw = s.FormIDFor(a_number);
-		RE::TESFormID       id;
-		if (file->compileIndex == 0xFE) {  // light plugin
-			id = (0xFEu << 24) | (static_cast<std::uint32_t>(file->smallFileCompileIndex) << 12) | (raw & 0xFFF);
-		} else {
-			id = (static_cast<std::uint32_t>(file->compileIndex) << 24) | (raw & 0xFFFFFF);
-		}
-		auto* form = RE::TESForm::GetFormByID(id);
-		return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
+		return util::ResolveForm(s.ballPlugin, s.FormIDFor(a_number));
+	}
+
+	RE::TESBoundObject* Game::StickForm() const
+	{
+		const auto& s = Settings::Get();
+		return s.stickFormID ? util::ResolveForm(s.stickPlugin, s.stickFormID) : nullptr;
 	}
 
 	void Game::FreezePhysics(RE::TESObjectREFR* a_ref)
@@ -474,32 +465,10 @@ namespace fp
 		Notify(spawned == pool::Sim::kBalls ? "Pool: racked" : std::format("Pool: only {} of 16 balls could be placed", spawned));
 	}
 
-	void Game::Shoot(float a_power)
-	{
-		if (!_sim) {
-			Notify("Pool: rack first");
-			return;
-		}
-		if (!_sim->AtRest()) {
-			return;
-		}
-		Frame frame;
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		if (!player || !GetFrame(frame)) {
-			return;
-		}
-
-		// where the player faces, flattened onto the table and turned into table space
-		const float        yaw = player->data.angle.z;
-		const RE::NiPoint3 world{ std::sin(yaw), std::cos(yaw), 0.0f };
-		const RE::NiPoint3 table = frame.rot * world;
-		const float        speed = Settings::Get().shotSpeed * a_power;
-		_sim->Strike({ table.x, table.y }, speed);
-		log::info("shot: table dir ({:.3f}, {:.3f}) speed {:.0f}", table.x, table.y, speed);
-	}
-
 	void Game::Clear()
 	{
+		ExitAim();
+		RemoveAimObjects();
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
@@ -650,6 +619,11 @@ namespace fp
 			b.rot.ToMatrix(m);
 			PlaceNode(ref.get(), ToWorld(frame, b.pos, r + s.ballZOffset - sink), FromRows(m).Transpose() * frame.rot, BallScale(ref->Get3D()) * frame.scale,
 				hidden);
+		}
+
+		_rolling = !_sim->AtRest();
+		if (_aiming) {
+			TickAim(frame, dt);
 		}
 	}
 }

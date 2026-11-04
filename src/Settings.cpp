@@ -80,7 +80,31 @@ namespace fp
 		ballZOffset = ReadFloat(L"Ball", L"fZOffset", ballZOffset);
 		spec.ballRadius = std::max(0.5f, ReadFloat(L"Ball", L"fRadius", static_cast<float>(spec.ballRadius)));
 
-		shotSpeed = ReadFloat(L"Shot", L"fSpeed", shotSpeed);
+		minSpeed = ReadFloat(L"Shot", L"fMinSpeed", minSpeed);
+		maxSpeed = std::max(minSpeed, ReadFloat(L"Shot", L"fMaxSpeed", maxSpeed));
+		chargeTime = std::max(0.1f, ReadFloat(L"Shot", L"fChargeTime", chargeTime));
+
+		camDistance = std::max(10.0f, ReadFloat(L"Camera", L"fDistance", camDistance));
+		camPitch = ReadFloat(L"Camera", L"fPitch", camPitch);
+		camMinPitch = ReadFloat(L"Camera", L"fMinPitch", camMinPitch);
+		camMaxPitch = std::max(camMinPitch, ReadFloat(L"Camera", L"fMaxPitch", camMaxPitch));
+		overheadHeight = std::max(50.0f, ReadFloat(L"Camera", L"fOverheadHeight", overheadHeight));
+
+		guide = ReadBool(L"Guide", L"bEnabled", guide);
+		guideDotRadius = std::max(0.05f, ReadFloat(L"Guide", L"fDotRadius", guideDotRadius));
+		guideSpacing = std::max(1.0f, ReadFloat(L"Guide", L"fSpacing", guideSpacing));
+		guideMaxLength = ReadFloat(L"Guide", L"fMaxLength", guideMaxLength);
+		guideObjectLength = ReadFloat(L"Guide", L"fObjectLength", guideObjectLength);
+		guideCueLength = ReadFloat(L"Guide", L"fCueLength", guideCueLength);
+
+		stickPlugin = Narrow(ReadString(L"Stick", L"sPlugin", std::wstring(stickPlugin.begin(), stickPlugin.end())));
+		stickFormID = static_cast<std::uint32_t>(ReadInt(L"Stick", L"iFormID", stickFormID));
+		stickAxis = std::clamp(static_cast<int>(ReadInt(L"Stick", L"iAxis", stickAxis)), 0, 2);
+		stickTip = ReadFloat(L"Stick", L"fTip", stickTip);
+		stickButt = ReadFloat(L"Stick", L"fButt", stickButt);
+		stickElevation = ReadFloat(L"Stick", L"fElevation", stickElevation);
+		stickMaxPull = ReadFloat(L"Stick", L"fMaxPull", stickMaxPull);
+		stickGap = ReadFloat(L"Stick", L"fGap", stickGap);
 
 		useConsolePick = ReadBool(L"Table", L"bUseConsolePick", useConsolePick);
 		aimDistance = ReadFloat(L"Table", L"fAimDistance", aimDistance);
@@ -97,8 +121,8 @@ namespace fp
 		spec.ballRestitution = ReadFloat(L"Physics", L"fBallRestitution", static_cast<float>(spec.ballRestitution));
 		spec.cushionRestitution = ReadFloat(L"Physics", L"fCushionRestitution", static_cast<float>(spec.cushionRestitution));
 
-		log::info("settings: ball {}|{:X} r={} autoscale={} | table {}x{} surfaceZ={} axis={} offset=({}, {}) | shot {}",
+		log::info("settings: ball {}|{:X} r={} autoscale={} | table {}x{} surfaceZ={} axis={} offset=({}, {}) | max shot {}",
 			ballPlugin, ballFormID, spec.ballRadius, ballAutoScale, spec.length, spec.width, surfaceZ, lengthAxis, offsetX, offsetY,
-			shotSpeed);
+			maxSpeed);
 	}
 }

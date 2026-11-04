@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "Hook.h"
+#include "Hud.h"
 #include "Settings.h"
 
 namespace
@@ -12,6 +13,9 @@ namespace
 			return;
 		}
 		switch (a_msg->type) {
+		case F4SE::MessagingInterface::kPostPostLoad:
+			fp::Hud::Install();  // F4SE Menu Framework is loaded by now, if it's installed
+			break;
 		case F4SE::MessagingInterface::kGameDataReady:
 			fp::log::info("game data ready");
 			fp::Settings::Get().Load();

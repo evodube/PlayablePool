@@ -292,6 +292,67 @@ namespace
 		Check(same, "identical");
 	}
 
+	void Predictions()
+	{
+		std::puts("prediction: straight hit");
+		{
+			Sim sim;
+			sim.Place(0, { -20.0, 0.0 });
+			sim.Place(3, { 0.0, 0.0 });
+			const auto p = sim.Predict({ 1.0, 0.0 });
+			Check(p.hitBall && p.ball == 3, "hits ball 3");
+			Check(std::abs(p.contact.x + 4.0) < 1e-9 && std::abs(p.contact.y) < 1e-9, Fmt("contact at (-4, 0), got (%.3f, %.3f)", p.contact.x, p.contact.y));
+			Check(std::abs(p.objectDir.x - 1.0) < 1e-9, "object ball goes straight on");
+			Check(p.cueSpeed < 0.05, Fmt("cue ball nearly stops (%.3f of its speed)", p.cueSpeed));
+		}
+
+		std::puts("prediction: cushion");
+		{
+			Sim sim;
+			sim.Place(0, { 0.0, 0.0 });
+			const auto p = sim.Predict({ 1.0, 1.0 });
+			const double hw = sim.Spec().width * 0.5 - sim.Spec().ballRadius;
+			Check(!p.hitBall, "hits a cushion");
+			Check(std::abs(p.contact.y - hw) < 1e-9, Fmt("on the long cushion line (y %.3f)", p.contact.y));
+			Check(p.cueDir.x > 0.0 && p.cueDir.y < 0.0, "bounces back off it");
+		}
+
+		std::puts("prediction: misses a ball just off the line");
+		{
+			Sim sim;
+			sim.Place(0, { -20.0, 0.0 });
+			sim.Place(4, { 0.0, 4.2 });  // just over two radii off the line
+			const auto p = sim.Predict({ 1.0, 0.0 });
+			Check(!p.hitBall, "goes past it");
+		}
+
+		std::puts("prediction: matches the simulation for cut shots");
+		for (const double offset : { 0.5, 1.5, 2.5, 3.5 }) {
+			Sim sim;
+			sim.Place(0, { -30.0, 0.0 });
+			sim.Place(7, { 0.0, offset });
+			const auto p = sim.Predict({ 1.0, 0.0 });
+			sim.Strike({ 1.0, 0.0 }, 250.0);
+			bool hit = false;
+			Vec2 cueAtHit;
+			for (int f = 0; f < 120 && !hit; ++f) {
+				for (const auto& e : sim.Step(kFrame)) {
+					if (e.type == Event::Type::kBallBall && !hit) {
+						hit = true;
+					}
+				}
+			}
+			const Vec2   v = sim.Balls()[7].vel;
+			const double cosErr = v.Dot(p.objectDir) / v.Length();
+			Check(hit && p.hitBall && p.ball == 7, Fmt("offset %.1f: hit predicted and happened", offset));
+			Check(cosErr > 0.999, Fmt("offset %.1f: object ball direction within 2.5 degrees (cos %.5f)", offset, cosErr));
+			const Vec2 cv = sim.Balls()[0].vel;
+			if (cv.Length() > 1.0 && p.cueDir.Length() > 0.5) {
+				Check(cv.Dot(p.cueDir) / cv.Length() > 0.999, Fmt("offset %.1f: cue ball direction matches", offset));
+			}
+		}
+	}
+
 	void Respot()
 	{
 		std::puts("respot: cue ball goes back to the head spot, or next to it if taken");
@@ -330,6 +391,7 @@ int main()
 	Break(7, 1408.0, vanilla, "PoolTable01");
 	Break(8, 352.0, vanilla, "PoolTable01");
 	Deterministic();
+	Predictions();
 	Respot();
 
 	std::printf("\n%d checks, %d failed\n", g_checks, g_failed);

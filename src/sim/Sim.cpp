@@ -216,6 +216,80 @@ namespace pool
 		cue.vel = a_dir * (a_speed / len);
 	}
 
+	Prediction Sim::Predict(Vec2 a_dir) const
+	{
+		Prediction  out;
+		const auto& cue = _balls[0];
+		const double len = a_dir.Length();
+		if (cue.state != BallState::kOnTable || len <= 0.0) {
+			return out;
+		}
+		const Vec2   d = a_dir * (1.0 / len);
+		const Vec2   p = cue.pos;
+		const double r = _spec.ballRadius;
+
+		// the cushions, as the lines the cue ball's centre can't cross
+		const double hl = _spec.length * 0.5 - r;
+		const double hw = _spec.width * 0.5 - r;
+		double       best = 1e30;
+		Vec2         cushionNormal;
+		auto wall = [&](double a_pos, double a_limit, double a_dir2, Vec2 a_normal) {
+			if (a_dir2 > 1e-12) {
+				const double t = (a_limit - a_pos) / a_dir2;
+				if (t >= 0.0 && t < best) {
+					best = t;
+					cushionNormal = a_normal;
+				}
+			}
+		};
+		wall(p.x, hl, d.x, { -1.0, 0.0 });
+		wall(-p.x, hl, -d.x, { 1.0, 0.0 });
+		wall(p.y, hw, d.y, { 0.0, -1.0 });
+		wall(-p.y, hw, -d.y, { 0.0, 1.0 });
+
+		// balls: the cue ball's centre comes within two radii of theirs
+		const double reach = 2.0 * r;
+		for (int i = 1; i < kBalls; ++i) {
+			const auto& b = _balls[i];
+			if (b.state != BallState::kOnTable) {
+				continue;
+			}
+			const Vec2   m = p - b.pos;
+			const double bq = m.Dot(d);
+			const double c = m.LengthSq() - reach * reach;
+			const double disc = bq * bq - c;
+			if (disc < 0.0) {
+				continue;
+			}
+			const double t = -bq - std::sqrt(disc);
+			if (t >= 0.0 && t < best) {
+				best = t;
+				out.hitBall = true;
+				out.ball = i;
+			}
+		}
+		if (best >= 1e29) {
+			return out;
+		}
+
+		out.distance = best;
+		out.contact = p + d * best;
+		if (out.hitBall) {
+			const Vec2 toBall = _balls[out.ball].pos - out.contact;
+			const double l = toBall.Length();
+			out.objectDir = l > 0.0 ? toBall * (1.0 / l) : d;
+			// the cue ball keeps its motion along the tangent, plus what the imperfect bounce leaves of the rest
+			const double along = d.Dot(out.objectDir);
+			const Vec2   after = d - out.objectDir * (along * 0.5 * (1.0 + _spec.ballRestitution));
+			const double al = after.Length();
+			out.cueSpeed = al;
+			out.cueDir = al > 1e-9 ? after * (1.0 / al) : Vec2{};
+		} else {
+			out.cueDir = d - cushionNormal * (2.0 * d.Dot(cushionNormal));
+		}
+		return out;
+	}
+
 	bool Sim::AtRest() const
 	{
 		return std::ranges::none_of(_balls, [](const Ball& b) {
@@ -407,13 +481,27 @@ namespace pool
 				if (dist2 >= r2 * r2) {
 					continue;
 				}
-				const double dist = std::sqrt(dist2);
-				const Vec2   n = dist > 1e-9 ? d * (1.0 / dist) : Vec2{ 1.0, 0.0 };
+				// They overlap because the step overshot. Rewind both to the moment they touched, so the contact
+				// direction (and with it the angle the balls leave at) is exact, then replay the rest of the step.
+				const Vec2   rel = a.vel - b.vel;  // a's motion relative to b
+				double       rewind = 0.0;
+				const double rv2 = rel.LengthSq();
+				if (rv2 > 1e-12) {
+					// |d + rel * s| = r2, smallest s >= 0 (d grows back to r2 as we go back in time)
+					const double bq = d.Dot(rel);
+					const double c = dist2 - r2 * r2;
+					const double disc = bq * bq - rv2 * c;
+					if (disc >= 0.0) {
+						rewind = std::max(0.0, (-bq + std::sqrt(disc)) / rv2);
+						rewind = std::min(rewind, 0.05);  // never further back than a few frames' worth
+					}
+				}
+				a.pos -= a.vel * rewind;
+				b.pos -= b.vel * rewind;
 
-				// separate them
-				const double overlap = r2 - dist;
-				a.pos -= n * (overlap * 0.5);
-				b.pos += n * (overlap * 0.5);
+				Vec2         dd = b.pos - a.pos;
+				const double dist = dd.Length();
+				const Vec2   n = dist > 1e-9 ? dd * (1.0 / dist) : Vec2{ 1.0, 0.0 };
 
 				// equal masses: exchange the normal component (scaled by restitution)
 				const double vn = (a.vel - b.vel).Dot(n);
@@ -422,6 +510,19 @@ namespace pool
 					a.vel -= n * impulse;
 					b.vel += n * impulse;
 					a_events.push_back({ Event::Type::kBallBall, i, j, vn });
+				}
+
+				a.pos += a.vel * rewind;
+				b.pos += b.vel * rewind;
+
+				// anything still overlapping (resting contact, packed rack) is pushed apart
+				dd = b.pos - a.pos;
+				const double after = dd.Length();
+				if (after < r2) {
+					const Vec2   nn = after > 1e-9 ? dd * (1.0 / after) : n;
+					const double overlap = r2 - after;
+					a.pos -= nn * (overlap * 0.5);
+					b.pos += nn * (overlap * 0.5);
 				}
 			}
 		}

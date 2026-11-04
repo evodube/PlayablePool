@@ -86,6 +86,18 @@ namespace pool
 		double speed{ 0.0 };  // impact speed, for sounds
 	};
 
+	// Where a shot would go, for the aiming guide. Straight lines only: no friction, spin or later collisions.
+	struct Prediction
+	{
+		bool   hitBall{ false };     // true: first hits a ball; false: first hits a cushion
+		int    ball{ -1 };           // the ball it hits
+		Vec2   contact;              // where the cue ball's centre is at the first contact
+		Vec2   objectDir;            // the hit ball's direction afterwards
+		Vec2   cueDir;               // the cue ball's direction afterwards
+		double cueSpeed{ 1.0 };      // the cue ball's speed afterwards, as a fraction of its speed before
+		double distance{ 0.0 };      // how far the cue ball travels to the contact
+	};
+
 	class Sim
 	{
 	public:
@@ -115,6 +127,9 @@ namespace pool
 
 		// Hits the cue ball in direction a_dir (any length) at a_speed units/s.
 		void Strike(Vec2 a_dir, double a_speed);
+
+		// The first thing the cue ball would touch if hit in direction a_dir.
+		Prediction Predict(Vec2 a_dir) const;
 
 		// Advances the simulation. Splits a_dt into small enough sub-steps internally.
 		std::vector<Event> Step(double a_dt);

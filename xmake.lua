@@ -39,7 +39,8 @@ target("fo4pool", function()
         "NOMINMAX",
         "_CRT_SECURE_NO_WARNINGS",
         "_WIN32_WINNT=0x0A00",
-        "WINVER=0x0A00"
+        "WINVER=0x0A00",
+        "_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING"
     )
 
     add_cxxflags(
