@@ -159,6 +159,7 @@ namespace fp
 		_haveLast = false;
 		_scratch = false;
 		// the camera is reset with the load; just drop our side of aim mode
+		BlockControls(false);
 		_aiming = false;
 		_charging = false;
 		_overhead = false;

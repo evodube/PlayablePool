@@ -73,7 +73,9 @@ namespace fp
 		void  PlaceStick(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float a_pull, bool a_show);
 		void  HideAimObjects();
 		void  RemoveAimObjects();
+		void  BlockControls(bool a_block);
 		float PowerNow() const;
+		static void LogShape(RE::TESObjectREFR* a_ref, const char* a_what);
 
 		RE::TESObjectREFR*  PickTable() const;
 		RE::TESBoundObject* BallForm(int a_number) const;
@@ -118,13 +120,19 @@ namespace fp
 		pool::Vec2                       _strikePos;
 		std::vector<RE::ObjectRefHandle> _dots;
 		RE::ObjectRefHandle              _stick;
+		bool                             _stickLogged{ false };
+		bool                             _chargeLocked{ false };  // camera angles frozen for this charge
+		float                            _lockYaw{ 0.0f };
+		float                            _lockPitch{ 0.0f };
+		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
+		bool                             _controlsBlocked{ false };
 
 		// shared with the render and UI threads
 		std::atomic<bool>          _aiming{ false };
 		std::atomic<bool>          _charging{ false };
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _rolling{ false };
-		std::atomic<std::int64_t>  _chargeStart{ 0 };  // steady_clock ticks
+		std::atomic<float>         _power{ 0.0f };     // 0..1 while charging
 
 		// render thread
 		std::array<bool, 4> _keyWasDown{};

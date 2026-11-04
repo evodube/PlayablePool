@@ -42,10 +42,11 @@ namespace fp
 		float         ballScale{ 1.0f };      // used when bAutoScale=0
 		float         ballZOffset{ 0.0f };    // if the mesh's centre isn't the ball's centre
 
-		// [Shot] hold the left mouse button to charge: power goes 0 -> 100% over chargeTime
-		float minSpeed{ 40.0f };     // cue ball speed at 0% power, units per second
-		float maxSpeed{ 1400.0f };   // at 100%
-		float chargeTime{ 1.2f };    // seconds to full power
+		// [Shot] hold the left mouse button (the camera freezes), pull the mouse back for power, release to shoot
+		float minSpeed{ 40.0f };      // cue ball speed at the smallest power, units per second
+		float maxSpeed{ 1400.0f };    // at 100%
+		float pullPerDegree{ 0.04f }; // power gained per degree the mouse tries to tilt the view (0.04 = full at 25)
+		bool  invertPull{ false };    // true: push the mouse forward for power instead
 
 		// [Camera] the shot camera orbits the cue ball
 		float camDistance{ 75.0f };
@@ -63,8 +64,8 @@ namespace fp
 		float guideCueLength{ 25.0f };    // the cue ball's path after it (scaled by how much speed it keeps)
 
 		// [Stick] the cue stick. Off until iFormID is set.
-		std::string   stickPlugin{ "fo4pool.esl" };
-		std::uint32_t stickFormID{ 0 };
+		std::string   stickPlugin{ "Fallout4.esm" };
+		std::uint32_t stickFormID{ 0x0FA3E8 };  // the vanilla Pool Cue
 		int           stickAxis{ 1 };        // mesh axis the stick runs along: 0 X, 1 Y, 2 Z
 		float         stickTip{ 0.0f };      // tip's coordinate on that axis
 		float         stickButt{ -140.0f };  // butt's coordinate on that axis

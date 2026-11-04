@@ -22,7 +22,9 @@ or opponents yet.
 4. **Numpad 7**: rack.
 5. **Numpad 8**: aim. The camera moves behind the cue ball; turn it with the mouse and you aim where it faces.
    Dots show the cue ball's path, where it meets the first ball, and where both go next.
-   - Hold the **left mouse button** to charge (the cue draws back, a power bar fills), release to shoot.
+   - Hold the **left mouse button**: the camera freezes. Pull the mouse back for power (push forward for less);
+     the cue draws back and a power bar fills. Release to shoot; releasing at 0% cancels.
+   - While aiming, weapons, movement, activating and the Pip-Boy are off.
    - **Right mouse button**: overhead view and back.
    - **Numpad 8** again stops aiming and gives you the normal camera back.
    A scratched cue ball goes back on the head spot.

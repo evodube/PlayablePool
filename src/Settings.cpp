@@ -82,7 +82,8 @@ namespace fp
 
 		minSpeed = ReadFloat(L"Shot", L"fMinSpeed", minSpeed);
 		maxSpeed = std::max(minSpeed, ReadFloat(L"Shot", L"fMaxSpeed", maxSpeed));
-		chargeTime = std::max(0.1f, ReadFloat(L"Shot", L"fChargeTime", chargeTime));
+		pullPerDegree = std::max(0.001f, ReadFloat(L"Shot", L"fPullPerDegree", pullPerDegree));
+		invertPull = ReadBool(L"Shot", L"bInvertPull", invertPull);
 
 		camDistance = std::max(10.0f, ReadFloat(L"Camera", L"fDistance", camDistance));
 		camPitch = ReadFloat(L"Camera", L"fPitch", camPitch);

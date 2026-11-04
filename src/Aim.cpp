@@ -35,11 +35,6 @@ namespace fp
 			return a_index == 0 ? a_state->rotation.x : a_state->rotation.y;
 		}
 
-		std::int64_t NowTicks()
-		{
-			return std::chrono::steady_clock::now().time_since_epoch().count();
-		}
-
 		RE::NiPoint3 Normalized(const RE::NiPoint3& a_v)
 		{
 			const float l = std::sqrt(a_v.x * a_v.x + a_v.y * a_v.y + a_v.z * a_v.z);
@@ -51,12 +46,7 @@ namespace fp
 
 	float Game::PowerNow() const
 	{
-		if (!_charging) {
-			return 0.0f;
-		}
-		const auto  elapsed = std::chrono::steady_clock::duration(NowTicks() - _chargeStart.load());
-		const float seconds = std::chrono::duration<float>(elapsed).count();
-		return std::clamp(seconds / Settings::Get().chargeTime, 0.0f, 1.0f);
+		return _charging ? _power.load() : 0.0f;
 	}
 
 	Game::HudState Game::Hud() const
@@ -78,8 +68,8 @@ namespace fp
 		auto*      tasks = F4SE::GetTaskInterface();
 
 		if (lmb && !_lmbWasDown && !_rolling) {
-			_chargeStart = NowTicks();
-			_charging = true;
+			_power = 0.0f;
+			_charging = true;  // the main thread freezes the camera and turns mouse pulls into power
 		}
 		if (!lmb && _lmbWasDown && _charging) {
 			const float power = PowerNow();
@@ -135,9 +125,11 @@ namespace fp
 		_overhead = false;
 		_charging = false;
 		_strikeShow = 0.0f;
+		_chargeLocked = false;
 		_aiming = true;
+		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
-		Notify("Pool: aim with the mouse. Hold left button to charge, release to shoot. Right button: overhead. Numpad 8: stop");
+		Notify("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. Numpad 8: stop");
 	}
 
 	void Game::ExitAim()
@@ -148,12 +140,13 @@ namespace fp
 		_aiming = false;
 		_charging = false;
 		_overhead = false;
+		BlockControls(false);
 		if (InFreeCamera()) {
 			if (auto* camera = RE::PlayerCamera::GetSingleton()) {
 				camera->ToggleFreeCameraMode(false);
 			}
 		}
-		HideAimObjects();
+		RemoveAimObjects();  // the stick is a real Pool Cue: don't leave it lying on the table
 		log::info("aim mode off");
 	}
 
@@ -175,6 +168,10 @@ namespace fp
 		if (!_aiming || !_sim || !_sim->AtRest() || IsGamePaused()) {
 			return;
 		}
+		if (a_power < 0.02f) {
+			Notify("Pool: no power, no shot");
+			return;
+		}
 		const auto& s = Settings::Get();
 		const float speed = s.minSpeed + (s.maxSpeed - s.minSpeed) * std::pow(a_power, 1.5f);
 		_strikePos = _sim->Balls()[0].pos;
@@ -192,7 +189,8 @@ namespace fp
 			_aiming = false;
 			_charging = false;
 			_overhead = false;
-			HideAimObjects();
+			BlockControls(false);
+			RemoveAimObjects();
 			return;
 		}
 
@@ -221,12 +219,31 @@ namespace fp
 			_camMapped = true;
 		}
 
-		const float yaw = Component(free, _yawIndex);
-		float       pitch = _pitchSign * Component(free, 1 - _yawIndex);
-		const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
-		if (wanted != pitch) {
-			pitch = wanted;
+		float yaw = Component(free, _yawIndex);
+		float pitch = _pitchSign * Component(free, 1 - _yawIndex);
+
+		if (_charging) {
+			// The camera holds still while charging. Whatever the mouse did to the view since last frame is read as
+			// the pull: back (view tilts down) adds power, forward takes it away. Then the view is put back.
+			if (!_chargeLocked) {
+				_lockYaw = yaw;
+				_lockPitch = pitch;
+				_chargeLocked = true;
+			} else {
+				const float degrees = (pitch - _lockPitch) / kDegToRad * (s.invertPull ? -1.0f : 1.0f);
+				_power = std::clamp(_power.load() + degrees * s.pullPerDegree, 0.0f, 1.0f);
+			}
+			yaw = _lockYaw;
+			pitch = _lockPitch;
+			Component(free, _yawIndex) = yaw;
 			Component(free, 1 - _yawIndex) = _pitchSign * pitch;
+		} else {
+			_chargeLocked = false;
+			const float wanted = _overhead ? kOverheadPitch : std::clamp(pitch, s.camMinPitch * kDegToRad, s.camMaxPitch * kDegToRad);
+			if (wanted != pitch) {
+				pitch = wanted;
+				Component(free, 1 - _yawIndex) = _pitchSign * pitch;
+			}
 		}
 
 		// what the camera looks at
@@ -339,6 +356,10 @@ namespace fp
 		if (!ref) {
 			return;
 		}
+		if (!_stickLogged && ref->Get3D()) {
+			_stickLogged = true;
+			LogShape(ref.get(), "cue stick");
+		}
 		if (!a_show) {
 			PlaceNode(ref.get(), {}, {}, 1.0f, true);
 			return;
@@ -388,6 +409,52 @@ namespace fp
 		}
 	}
 
+	void Game::BlockControls(bool a_block)
+	{
+		if (a_block == _controlsBlocked) {
+			return;
+		}
+		auto* manager = RE::BSInputEnableManager::GetSingleton();
+		if (!manager) {
+			return;
+		}
+		if (!_inputLayer && !manager->AllocateNewLayer(_inputLayer, "fo4pool aiming")) {
+			log::warn("could not get an input layer; controls stay on while aiming");
+			return;
+		}
+		// Mouse look stays on (it aims). Everything that would draw a weapon, fire, walk off or open the Pip-Boy
+		// is off while aiming.
+		using Flag = RE::UserEvents::USER_EVENT_FLAG;
+		const auto flags = static_cast<Flag>(
+			std::to_underlying(Flag::kMovement) | std::to_underlying(Flag::kActivate) | std::to_underlying(Flag::kPOVSwitch) |
+			std::to_underlying(Flag::kFighting) | std::to_underlying(Flag::kSneaking) | std::to_underlying(Flag::kMainFour) |
+			std::to_underlying(Flag::kWheelZoom) | std::to_underlying(Flag::kJumping) | std::to_underlying(Flag::kVATS));
+		manager->EnableUserEvent(_inputLayer->layerID, flags, !a_block, RE::UserEvents::SENDER_ID::kGameplay);
+		_controlsBlocked = a_block;
+		log::info("player controls {}", a_block ? "blocked for aiming" : "restored");
+	}
+
+	void Game::LogShape(RE::TESObjectREFR* a_ref, const char* a_what)
+	{
+		auto* root = a_ref ? a_ref->Get3D() : nullptr;
+		if (!root) {
+			return;
+		}
+		const auto& w = root->GetWorldTransform();
+		const float s = w.scale != 0.0f ? w.scale : 1.0f;
+		log::info("{}: base {:08X} '{}'", a_what, a_ref->GetObjectReference() ? a_ref->GetObjectReference()->GetFormID() : 0,
+			ModelPath(a_ref));
+		RE::BSVisit::TraverseScenegraphGeometries(root, [&](RE::BSGeometry* a_geom) {
+			const auto& b = a_geom->worldBound;
+			const auto  c = (w.rotate * (b.center - w.translate)) * (1.0f / s);
+			const auto& gw = a_geom->GetWorldTransform();
+			const auto  gl = (w.rotate * (gw.translate - w.translate)) * (1.0f / s);
+			log::info("  shape '{}': bound centre ({:.2f}, {:.2f}, {:.2f}) radius {:.2f} | node at ({:.2f}, {:.2f}, {:.2f})",
+				a_geom->name.c_str(), c.x, c.y, c.z, b.fRadius / s, gl.x, gl.y, gl.z);
+			return RE::BSVisitControl::kContinue;
+		});
+	}
+
 	void Game::RemoveAimObjects()
 	{
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
@@ -402,5 +469,6 @@ namespace fp
 		}
 		_dots.clear();
 		remove(_stick);
+		_stickLogged = false;
 	}
 }

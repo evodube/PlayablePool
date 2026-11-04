@@ -33,8 +33,9 @@ namespace fp::Hud
 					char label[16];
 					std::snprintf(label, sizeof(label), "%d%%", static_cast<int>(state.power * 100.0f + 0.5f));
 					ProgressBar(state.power, ImVec2{ 320.0f, 22.0f }, label);
+					Text("Pull back for more, push forward for less. Release to shoot (0%% cancels)");
 				} else {
-					Text("Hold the left mouse button to charge, release to shoot");
+					Text("Hold the left mouse button and pull the mouse back for power, release to shoot");
 				}
 				Text("Right mouse: %s   |   Numpad 8: stop aiming", state.overhead ? "back to the cue ball" : "overhead view");
 			}
