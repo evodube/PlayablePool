@@ -17,7 +17,7 @@ namespace fp
 		// Where the cue is at the moment it meets the ball (PoolStrike frame 35), in the actor's own space (root at the
 		// origin, facing +Y), as the game places it from their hands: the tip, and the cue's direction as a yaw (+ =
 		// to their right). Measured in Blender (tools/anim/README.md). The edited clip (PoolAim_edit/PoolStrike_edit,
-		// right arm out) would be tip (-0.43, 72.53), yaw -13.01.
+		// right arm out) would be tip (-0.47, 72.72), yaw -13.01.
 		constexpr float kTipX = 5.17f;
 		constexpr float kTipY = 74.87f;
 		constexpr float kCueYaw = -2.77f * 0.017453292f;
@@ -35,7 +35,7 @@ namespace fp
 		constexpr float kWatchDistance = 1500.0f;
 		constexpr RE::TESFormID kXMarkerHeading = 0x00000034;
 		constexpr float kGripFromButt = 12.0f;   // where the grip hand holds the cue
-		constexpr float kBridgeLift = 1.6f;      // the cue rests this far above the bridge hand's knuckles
+		constexpr float kBridgeLift = 3.0f;      // the cue rests this far above the bridge hand's thumb-index V (clear of the knuckles)
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
 		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
 		constexpr float kStallSeconds = 2.5f;    // ...but is, once they've gone this long without getting closer

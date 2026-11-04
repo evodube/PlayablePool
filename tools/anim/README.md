@@ -22,7 +22,7 @@ Shot geometry, in the actor's own space (root at the origin, facing +Y; game uni
 Exports are checked by re-importing them: within 0.05 units and 0.1 degrees of the Blender clip.
 
 **In game the cue is placed from the hands, not from the reference cue above**: its butt end through the right palm
-(between the wrist and the middle finger's base), resting 1.6 above the left hand's thumb-index V. Measured that way at
+(between the wrist and the middle finger's base), resting 3.0 above the left hand's thumb-index V (clear of the knuckles). Measured that way at
 contact (PoolStrike frame 35), the tip is at (5.17, 74.87) in the actor's space and the cue points 2.77 degrees to
 their left; `src/Opponent.cpp` stands them from those numbers (ball 79.5 ahead along the shot, root 8.8 left of the
 line, turned 2.8 degrees towards it). The 66.1 / 8.5 above were for the reference cue and left the hand-placed cue
@@ -30,8 +30,8 @@ about 13 units through the ball.
 
 An edit of both clips (PoolAim_edit / PoolStrike_edit in `pool_anims_v2.blend`) moves the right hand 8.8 out and 4
 up from the shoulder (collarbone +4 degrees, arm re-solved; the hand keeps its orientation) and rolls the left hand
-22 degrees flatter; nothing above the torso changes. Its contact numbers: tip (-0.43, 72.53), yaw -13.01, cue sloping
-5.8 degrees down to the tip.
+22 degrees flatter; nothing above the torso changes. Its contact numbers: tip (-0.47, 72.72), yaw -13.01, cue sloping
+4.2 degrees down to the tip, its centre line 2.5 above the bridge hand's knuckle joints.
 
 PoolAim and PoolStrike are the hand-keyed originals above. A scripted re-pose of both (an open stance, PoolAim2 and
 PoolStrike2 in `pool_anims_v2.blend`) was tried and dropped in favour of these.
