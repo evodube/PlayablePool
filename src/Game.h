@@ -60,6 +60,7 @@ namespace fp
 			std::string             bannerTitle;
 			std::string             bannerSub;
 			float                   bannerAge{ 0.0f };
+			std::string             prompt;           // looking at a pool table, no shot camera: "F) PLAY POOL" etc.
 		};
 		HudState Hud() const;
 
@@ -332,6 +333,14 @@ namespace fp
 
 		// render thread
 		std::array<bool, 6> _keyWasDown{};
+		// The activate key (F by default; read from the game's controls): on a pool table it racks or takes your shot
+		std::atomic<int>    _activateVk{ 'F' };
+		bool                _activateWasDown{ false };
+		RE::ObjectRefHandle _lookTable;            // the pool table under the crosshair (UpdateLook), if any
+		std::chrono::steady_clock::time_point _lookTime{};
+		void                UpdateLook();          // main thread: which table you're looking at, and the prompt
+		void                OnActivate();          // main thread: the activate key went down
+		bool                ActorInView(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_dir, float a_upTo) const;
 		bool                _lmbWasDown{ false };
 		bool                _rmbWasDown{ false };
 		std::atomic<bool>   _tickPending{ false };

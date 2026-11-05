@@ -107,6 +107,107 @@ namespace fp
 			}
 			_keyWasDown[i] = down;
 		}
+		// the game's activate key, on a pool table (OnActivate checks it's one)
+		if (const int vk = _activateVk.load(); vk > 0) {
+			const bool down = (::GetAsyncKeyState(vk) & 0x8000) != 0;
+			if (down && !_activateWasDown) {
+				if (auto* tasks = F4SE::GetTaskInterface()) {
+					tasks->AddTask([this]() { OnActivate(); });
+				}
+			}
+			_activateWasDown = down;
+		}
+	}
+
+	namespace
+	{
+		float Distance(const RE::NiPoint3& a, const RE::NiPoint3& b) { return (a - b).Length(); }
+	}
+
+	bool Game::ActorInView(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_dir, float a_upTo) const
+	{
+		// someone under the crosshair before a_upTo: the activate key is theirs (talk), not the table's
+		bool found = false;
+		ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReferenceInRange(a_origin, a_upTo, [&](RE::TESObjectREFR* a_ref) {
+				if (!a_ref || !a_ref->IsActor() || a_ref == RE::PlayerCharacter::GetSingleton() || a_ref->IsDisabled()) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				const RE::NiPoint3 at = a_ref->data.location + RE::NiPoint3{ 0.0f, 0.0f, 80.0f };
+				const auto         oc = at - a_origin;
+				const float        t = oc.Dot(a_dir);
+				if (t > 0.0f && t < a_upTo && oc.SqrLength() - t * t < 40.0f * 40.0f) {
+					found = true;
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		return found;
+	}
+
+	void Game::UpdateLook()
+	{
+		// a few times a second: the activate key's binding, the pool table under the crosshair, the prompt
+		const auto now = std::chrono::steady_clock::now();
+		if (now - _lookTime < std::chrono::milliseconds(150)) {
+			return;
+		}
+		_lookTime = now;
+		if (auto* map = RE::ControlMap::GetSingleton()) {
+			const auto scan = map->GetMappedKey("Activate", RE::INPUT_DEVICE::kKeyboard);
+			if (scan != RE::ControlMap::kInvalid && scan > 0) {
+				if (const UINT vk = ::MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX); vk) {
+					_activateVk = static_cast<int>(vk);
+				}
+			}
+		}
+		std::string prompt;
+		_lookTable = {};
+		const auto& s = Settings::Get();
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		auto*       camera = RE::PlayerCamera::GetSingleton();
+		if (s.activateTable && !_aiming && !IsGamePaused() && player && camera && camera->cameraRoot) {
+			auto* table = PickTable();
+			if (table && IsPoolTable(table) && Distance(table->data.location, player->data.location) < s.activateDistance) {
+				const auto         origin = camera->cameraRoot->GetWorldTranslate();
+				const float        pitch = player->data.angle.x;
+				const float        yaw = player->data.angle.z;
+				const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
+				if (!ActorInView(origin, dir, Distance(table->data.location, origin))) {
+					_lookTable = table->GetHandle();
+					const std::string key = Settings::Key(_activateVk.load());
+					const bool        here = _sim && _table.get().get() == table;
+					if (!here || _rules.Over()) {
+						prompt = key + ") PLAY POOL";
+					} else if (_opponent && OpponentsTurn()) {
+						prompt.clear();  // their shot: nothing to do
+					} else {
+						prompt = key + ") TAKE YOUR SHOT";
+					}
+				}
+			}
+		}
+		std::scoped_lock lock(_hudMutex);
+		_hud.prompt = std::move(prompt);
+	}
+
+	void Game::OnActivate()
+	{
+		if (IsGamePaused() || _aiming) {
+			return;
+		}
+		auto table = _lookTable.get();
+		if (!table) {
+			return;  // not looking at a pool table: the key does what the game does with it
+		}
+		const bool here = _sim && _table.get().get() == table.get();
+		if (!here || _rules.Over()) {
+			Rack();  // the table under the crosshair, your own game (Solo Play by default)
+		} else if (!(_opponent && OpponentsTurn())) {
+			ToggleAim();
+		}
+		_lookTime = {};  // the prompt follows straight away
 	}
 
 	// ---------------------------------------------------------------- main thread
@@ -641,6 +742,7 @@ namespace fp
 
 	void Game::Tick()
 	{
+		UpdateLook();
 		if (!_sim && _markers.empty()) {
 			return;
 		}

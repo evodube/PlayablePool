@@ -66,6 +66,8 @@ namespace fp
 	void Settings::Load()
 	{
 		keyRack = static_cast<int>(ReadInt(L"Keys", L"iRack", keyRack));
+		activateTable = ReadBool(L"Keys", L"bActivateTable", activateTable);
+		activateDistance = ReadFloat(L"Keys", L"fActivateDistance", activateDistance);
 		keyShoot = static_cast<int>(ReadInt(L"Keys", L"iShoot", keyShoot));
 		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));

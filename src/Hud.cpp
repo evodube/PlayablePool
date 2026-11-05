@@ -538,12 +538,30 @@ namespace fp::Hud
 			End();
 		}
 
+		// "F) PLAY POOL" under the crosshair, like the game's own activate prompt
+		void Prompt(ImGuiViewport* a_viewport, const std::string& a_text)
+		{
+			View v;
+			v.dl = GetBackgroundDrawList();
+			if (!v.dl) {
+				return;
+			}
+			v.s = std::max(0.1f, a_viewport->Size.y / 720.0f * Settings::Get().hudScale);
+			v.origin = a_viewport->Pos;
+			v.w = a_viewport->Size.x / v.s;
+			v.h = a_viewport->Size.y / v.s;
+			Print(v, Title(), a_text, v.w * 0.5f + 40.0f, v.h * 0.5f - 12.0f, 20, kGreen.bright, kGreen.glow, 1.5f);
+		}
+
 		// ------------------------------------------------------------
 
 		void __stdcall Draw()
 		{
 			const auto st = Game::Get().Hud();
 			auto*      viewport = GetMainViewport();
+			if (viewport && !st.prompt.empty() && !st.aiming && !g_artMissing) {
+				Prompt(viewport, st.prompt);
+			}
 			if (!viewport || !st.game || !(st.aiming || st.watching)) {
 				return;  // only at the table: leaving aim mode puts the normal HUD back
 			}

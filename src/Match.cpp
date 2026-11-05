@@ -316,6 +316,7 @@ namespace fp
 			h.messageAge = std::chrono::duration<float>(std::chrono::steady_clock::now() - _messageTime).count();
 		}
 		std::scoped_lock lock(_hudMutex);
+		h.prompt = std::move(_hud.prompt);  // UpdateLook's
 		_hud = std::move(h);
 	}
 }

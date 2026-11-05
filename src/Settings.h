@@ -21,6 +21,8 @@ namespace fp
 
 		// [Keys] virtual-key codes
 		int keyRack{ 0x67 };       // Numpad 7
+		bool  activateTable{ true };        // the game's activate key (F) on a pool table racks / takes your shot
+		float activateDistance{ 260.0f };   // ...within this far
 		int keyShoot{ 0x68 };      // Numpad 8 (Shift = soft, Ctrl = hard)
 		int keyClear{ 0x69 };      // Numpad 9
 		int keyCalibrate{ 0x64 };  // Numpad 4
