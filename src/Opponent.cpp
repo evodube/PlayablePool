@@ -593,15 +593,15 @@ namespace fp
 	{
 		// The stance comes from one body measured in Blender; NPCs differ (height, proportions, the skeleton the
 		// clip lands on), so where the cue really points is measured here, from their hands, once the aim pose is
-		// in: they're turned until the cue runs along the shot line and slid sideways until it's on the middle of
-		// the cue ball. The cue's distance to the ball is left alone (the aim loop strokes along the cue).
+		// in, and they're slid sideways until the tip is on the line through the middle of the cue ball (turning
+		// them doesn't turn the cue once the aim idle plays). The distance to the ball is left alone (the aim loop
+		// strokes along the cue).
 		RE::NiPoint3 tip;
 		RE::NiPoint3 dir;
 		if (!PlaceStickInHands(a_actor, &tip, &dir)) {
 			return;
 		}
-		if (_npcAligned || _npcAligns >= 6) {
-			KeepLearned(a_actor);
+		if (_npcAligned || _npcAligns >= 4) {
 			return;
 		}
 		if (_npcAlignWait > 0.0f) {
@@ -625,49 +625,25 @@ namespace fp
 		const RE::NiPoint3 cueH = util::Normalized(RE::NiPoint3{ dir.x, dir.y, 0.0f });
 		const RE::NiPoint3 ball = ToWorld(a_frame, _sim->Balls()[0].pos, static_cast<float>(s.spec.ballRadius));
 
-		// turn: the cue's heading onto the shot's (heading: 0 = +Y, clockwise)
+		// how far the cue's heading is off the shot's (for the log; heading: 0 = +Y, clockwise)
 		const float  yaw = util::AngleDiff(std::atan2(shot.x, shot.y), std::atan2(cueH.x, cueH.y));
 		const auto   root = a_actor->data.location;
-		const float  c = std::cos(yaw);
-		const float  sn = std::sin(yaw);
-		const RE::NiPoint3 rel = tip - root;
-		const RE::NiPoint3 turnedTip = root + RE::NiPoint3{ rel.x * c + rel.y * sn, -rel.x * sn + rel.y * c, rel.z };
 		// slide: across the shot line, so the tip's on the line through the ball's centre
 		const RE::NiPoint3 across{ -shot.y, shot.x, 0.0f };
-		const float        side = (ball - turnedTip).Dot(across);
+		const float        side = (ball - tip).Dot(across);
 
 		++_npcAligns;
-		log::info("{}: cue {:.1f} deg off the shot, tip {:.1f} off the ball's line (correction {})", _opponentName, yaw / 0.017453292f, side, _npcAligns);
-		if (std::abs(yaw) < 0.01f && std::abs(side) < 0.6f) {
+		log::info("{}: cue {:.1f} deg off the shot, tip {:.1f} off the ball's line (check {})", _opponentName, yaw / 0.017453292f, side, _npcAligns);
+		// Only the slide: turning them once the aim idle is playing doesn't turn the cue (0.9.13 log: the cue stayed
+		// 10 degrees off through six turns, and those turns, kept for the next stance, made it worse)
+		if (std::abs(side) < 0.6f) {
 			_npcAligned = true;
-			KeepLearned(a_actor);
 			return;
 		}
-		_npcHeading = _npcHeading + yaw;
-		_npcAlignYaw += yaw;
-		a_actor->SetHeading(_npcHeading);
-		if (std::abs(side) >= 0.6f && std::abs(side) < 40.0f) {
+		if (std::abs(side) < 40.0f) {
 			Anim::SetPosition(a_actor, root + across * side);
-			_npcAlignSide += side;
 		}
 		_npcAlignWait = 0.12f;
-	}
-
-	void Game::KeepLearned(RE::Actor* a_actor)
-	{
-		// what this shot needed goes into what the next shot's stance gets before they walk there, so after a shot
-		// or two the corrections are small enough not to see
-		if (_npcAlignKept || !a_actor) {
-			return;
-		}
-		_npcAlignKept = true;
-		auto& l = _npcLearned[a_actor->GetFormID()];
-		l.side += _npcAlignSide * 0.8f;
-		l.yaw += _npcAlignYaw * 0.8f;
-		l.side = std::clamp(l.side, -25.0f, 25.0f);
-		l.yaw = std::clamp(l.yaw, -0.2f, 0.2f);
-		log::info("{}: cue lined up after {} corrections ({:.1f} across, {:.1f} deg); next shots start {:.1f} across, {:.1f} deg", _opponentName,
-			_npcAligns, _npcAlignSide, _npcAlignYaw / 0.017453292f, l.side, l.yaw / 0.017453292f);
 	}
 
 	bool Game::PlaceStickUpright(RE::Actor* a_actor)
@@ -732,16 +708,6 @@ namespace fp
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
 		_npcStance = StanceFor(a_frame, _sim->Balls()[0].pos, _npcShot.dir, _npcHeading);
-		if (auto* who = Opponent()) {
-			// what lining the cue up needed on their earlier shots, so this one needs little or nothing
-			if (const auto it = _npcLearned.find(who->GetFormID()); it != _npcLearned.end()) {
-				const RE::NiPoint3 shotW = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(_npcShot.dir.x), static_cast<float>(_npcShot.dir.y), 0.0f });
-				const RE::NiPoint3 shot = util::Normalized(RE::NiPoint3{ shotW.x, shotW.y, 0.0f });
-				const RE::NiPoint3 across{ -shot.y, shot.x, 0.0f };
-				_npcStance += across * it->second.side;
-				_npcHeading += it->second.yaw;
-			}
-		}
 
 		auto* actor = Opponent();
 		auto* table = _table.get().get();
@@ -788,9 +754,6 @@ namespace fp
 			_npcAligned = false;
 			_npcAligns = 0;
 			_npcAlignWait = 0.0f;
-			_npcAlignSide = 0.0f;
-			_npcAlignYaw = 0.0f;
-			_npcAlignKept = false;
 			_npcAlignSamples = 0;
 			_npcAlignTip = {};
 			_npcAlignDir = {};
@@ -1116,7 +1079,6 @@ namespace fp
 				HideOpponentStick();
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
-				KeepLearned(actor);  // whatever the corrections got to
 				Anim::PlayStrike(actor);
 				_npcStep = NpcStep::kStriking;
 				_npcTimer = 0.0f;
