@@ -172,11 +172,11 @@ namespace fp
 		}
 		_lookTime = now;
 		if (auto* map = RE::ControlMap::GetSingleton()) {
-			const auto scan = map->GetMappedKey("Activate", RE::INPUT_DEVICE::kKeyboard);
-			if (scan != RE::ControlMap::kInvalid && scan > 0) {
-				if (const UINT vk = ::MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX); vk) {
-					_activateVk = static_cast<int>(vk);
-				}
+			// Fallout 4 keeps keyboard bindings as Windows virtual-key codes (F = 0x46), not scan codes: reading 0x46
+			// as a scan code gave Scroll Lock
+			const auto vk = map->GetMappedKey("Activate", RE::INPUT_DEVICE::kKeyboard);
+			if (vk != RE::ControlMap::kInvalid && vk > 0 && vk < 0xFF) {
+				_activateVk = static_cast<int>(vk);
 			}
 		}
 		std::string prompt;
