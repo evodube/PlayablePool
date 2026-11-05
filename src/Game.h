@@ -169,6 +169,7 @@ namespace fp
 		// its butt on the floor while they wait (in the right hand); false = no hands found
 		bool  PlaceStickInHands(RE::Actor* a_actor, RE::NiPoint3* a_tip = nullptr, RE::NiPoint3* a_dir = nullptr);
 		void  AlignCueToBall(RE::Actor* a_actor, const Frame& a_frame, float a_dt);  // turn/slide them so the cue points at the cue ball
+		void  KeepLearned(RE::Actor* a_actor);  // this shot's cue corrections, for their next stance
 		bool  PlaceStickUpright(RE::Actor* a_actor);
 		void  HideOpponentStick();
 		void  HideAimObjects();
@@ -298,6 +299,16 @@ namespace fp
 		int                 _npcAlignSamples{ 0 };
 		int                 _npcAligns{ 0 };          // corrections made this shot
 		bool                _npcAligned{ false };     // the cue's on the ball: no more corrections this shot
+		float               _npcAlignWait{ 0.0f };    // after a correction: seconds before measuring again (it takes a moment)
+		float               _npcAlignSide{ 0.0f };    // this shot's corrections, summed: across the shot line...
+		float               _npcAlignYaw{ 0.0f };     // ...and turned
+		bool                _npcAlignKept{ false };   // this shot's corrections have gone into _npcLearned
+		struct Learned
+		{
+			float side{ 0.0f };  // how far across the shot line their stance has to be moved for the cue to be on the ball
+			float yaw{ 0.0f };   // and turned
+		};
+		std::unordered_map<std::uint32_t, Learned> _npcLearned;  // per NPC (form ID), for this session
 		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
 		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)

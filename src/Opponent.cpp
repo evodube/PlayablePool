@@ -597,10 +597,17 @@ namespace fp
 		// the cue ball. The cue's distance to the ball is left alone (the aim loop strokes along the cue).
 		RE::NiPoint3 tip;
 		RE::NiPoint3 dir;
-		if (_npcAligned || _npcAligns >= 6 || !PlaceStickInHands(a_actor, &tip, &dir)) {
+		if (!PlaceStickInHands(a_actor, &tip, &dir)) {
 			return;
 		}
-		(void)a_dt;
+		if (_npcAligned || _npcAligns >= 6) {
+			KeepLearned(a_actor);
+			return;
+		}
+		if (_npcAlignWait > 0.0f) {
+			_npcAlignWait -= a_dt;  // the last correction (SetPosition) is still taking
+			return;
+		}
 		_npcAlignTip += tip;
 		_npcAlignDir += dir;
 		if (++_npcAlignSamples < 6) {
@@ -633,13 +640,34 @@ namespace fp
 		log::info("{}: cue {:.1f} deg off the shot, tip {:.1f} off the ball's line (correction {})", _opponentName, yaw / 0.017453292f, side, _npcAligns);
 		if (std::abs(yaw) < 0.01f && std::abs(side) < 0.6f) {
 			_npcAligned = true;
+			KeepLearned(a_actor);
 			return;
 		}
 		_npcHeading = _npcHeading + yaw;
+		_npcAlignYaw += yaw;
 		a_actor->SetHeading(_npcHeading);
 		if (std::abs(side) >= 0.6f && std::abs(side) < 40.0f) {
 			Anim::SetPosition(a_actor, root + across * side);
+			_npcAlignSide += side;
 		}
+		_npcAlignWait = 0.12f;
+	}
+
+	void Game::KeepLearned(RE::Actor* a_actor)
+	{
+		// what this shot needed goes into what the next shot's stance gets before they walk there, so after a shot
+		// or two the corrections are small enough not to see
+		if (_npcAlignKept || !a_actor) {
+			return;
+		}
+		_npcAlignKept = true;
+		auto& l = _npcLearned[a_actor->GetFormID()];
+		l.side += _npcAlignSide * 0.8f;
+		l.yaw += _npcAlignYaw * 0.8f;
+		l.side = std::clamp(l.side, -25.0f, 25.0f);
+		l.yaw = std::clamp(l.yaw, -0.2f, 0.2f);
+		log::info("{}: cue lined up after {} corrections ({:.1f} across, {:.1f} deg); next shots start {:.1f} across, {:.1f} deg", _opponentName,
+			_npcAligns, _npcAlignSide, _npcAlignYaw / 0.017453292f, l.side, l.yaw / 0.017453292f);
 	}
 
 	bool Game::PlaceStickUpright(RE::Actor* a_actor)
@@ -704,6 +732,16 @@ namespace fp
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
 		_npcStance = StanceFor(a_frame, _sim->Balls()[0].pos, _npcShot.dir, _npcHeading);
+		if (auto* who = Opponent()) {
+			// what lining the cue up needed on their earlier shots, so this one needs little or nothing
+			if (const auto it = _npcLearned.find(who->GetFormID()); it != _npcLearned.end()) {
+				const RE::NiPoint3 shotW = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(_npcShot.dir.x), static_cast<float>(_npcShot.dir.y), 0.0f });
+				const RE::NiPoint3 shot = util::Normalized(RE::NiPoint3{ shotW.x, shotW.y, 0.0f });
+				const RE::NiPoint3 across{ -shot.y, shot.x, 0.0f };
+				_npcStance += across * it->second.side;
+				_npcHeading += it->second.yaw;
+			}
+		}
 
 		auto* actor = Opponent();
 		auto* table = _table.get().get();
@@ -749,6 +787,10 @@ namespace fp
 			_npcTurnWarned = false;
 			_npcAligned = false;
 			_npcAligns = 0;
+			_npcAlignWait = 0.0f;
+			_npcAlignSide = 0.0f;
+			_npcAlignYaw = 0.0f;
+			_npcAlignKept = false;
 			_npcAlignSamples = 0;
 			_npcAlignTip = {};
 			_npcAlignDir = {};
@@ -1061,6 +1103,11 @@ namespace fp
 			KeepFacingShot(actor);  // from the moment they're on the spot, before the aim starts
 			if (_npcTimer >= kSettleSeconds && _npcTimer - a_dt < kSettleSeconds) {
 				HoldOpponent(actor, true);  // (already on since they stepped onto the spot)
+				// exactly on the spot before the aim shows (MoveTo can leave them a little off, the table can push)
+				if (const float off = Distance2D(actor->data.location, _npcStance); off > 1.5f) {
+					log::info("{}: {:.1f} off the spot before the aim: put on it", _opponentName, off);
+					Anim::SetPosition(actor, RE::NiPoint3{ _npcStance.x, _npcStance.y, actor->data.location.z });
+				}
 				Anim::PlayAim(actor);
 			}
 			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
@@ -1069,6 +1116,7 @@ namespace fp
 				HideOpponentStick();
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
+				KeepLearned(actor);  // whatever the corrections got to
 				Anim::PlayStrike(actor);
 				_npcStep = NpcStep::kStriking;
 				_npcTimer = 0.0f;
