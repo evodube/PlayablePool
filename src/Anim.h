@@ -25,6 +25,12 @@ namespace fp::Anim
 	void JoinOwnPackage(RE::Actor* a_actor);     // into the alias (ForceRefTo; takes a moment)
 	void ReleaseOwnPackage(RE::Actor* a_actor);  // out of it, no linked ref: their own AI again
 	bool InOwnPackage(RE::Actor* a_actor);       // the alias holds them
+	// The Watchers collection (fo4poolWatchTable: sandbox round their linked ref, keyword fo4poolLinkPoolTable):
+	// settlers hanging round a pool table
+	void AddWatcher(RE::Actor* a_actor, RE::TESObjectREFR* a_table);
+	void RemoveWatcher(RE::Actor* a_actor);
+	void ClearWatchers();
+	bool OwnPackageReady();  // fo4pool.esl has the quest and keywords
 	bool RunningOwnPackage(RE::Actor* a_actor);  // ...and fo4poolWalkToSpot is the package they're on
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.
 	bool MoveTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target);

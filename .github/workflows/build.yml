@@ -104,12 +104,12 @@ jobs:
           # from inside papyrus/, so the scripts are top level (from the repo root Caprica puts them in a
           # 'papyrus' namespace: out/Scripts/papyrus/, and the wrong script names)
           Push-Location papyrus
-          ../caprica-bin/Caprica.exe -g fallout4 -i "../vanilla-base" -f ../vanilla-base/Institute_Papyrus_Flags.flg -o ../out/Scripts fo4poolOpponentQuest.psc fo4poolOpponentAlias.psc
+          ../caprica-bin/Caprica.exe -g fallout4 -i "../vanilla-base" -f ../vanilla-base/Institute_Papyrus_Flags.flg -o ../out/Scripts fo4poolOpponentQuest.psc fo4poolOpponentAlias.psc fo4poolWatchersAlias.psc
           $code = $LASTEXITCODE
           Pop-Location
           if ($code -ne 0) { throw "Caprica failed" }
           Get-ChildItem -Recurse out/Scripts
-          if (-not (Test-Path out/Scripts/fo4poolOpponentQuest.pex) -or -not (Test-Path out/Scripts/fo4poolOpponentAlias.pex)) { throw "scripts not at out/Scripts/" }
+          foreach ($n in 'fo4poolOpponentQuest', 'fo4poolOpponentAlias', 'fo4poolWatchersAlias') { if (-not (Test-Path "out/Scripts/$n.pex")) { throw "$n.pex not at out/Scripts/" } }
 
       - name: Package
         shell: pwsh
@@ -118,7 +118,7 @@ jobs:
           New-Item -ItemType Directory -Force "$stage" | Out-Null
           Copy-Item -Recurse dist/Data "$stage/Data"
           New-Item -ItemType Directory -Force "$stage/Data/Scripts/Source/User" | Out-Null
-          Copy-Item out/Scripts/fo4poolOpponentQuest.pex, out/Scripts/fo4poolOpponentAlias.pex "$stage/Data/Scripts/"
+          Copy-Item out/Scripts/*.pex "$stage/Data/Scripts/"
           Copy-Item papyrus/*.psc "$stage/Data/Scripts/Source/User/"
           Copy-Item build/out/F4SE/Plugins/fo4pool.dll "$stage/Data/F4SE/Plugins/"
           Copy-Item build/out/F4SE/Plugins/fo4pool.pdb "$stage/Data/F4SE/Plugins/" -ErrorAction SilentlyContinue

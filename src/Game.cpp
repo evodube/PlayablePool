@@ -274,6 +274,9 @@ namespace fp
 		_npcPathTarget = {};
 		_npcReleasedForOver = false;
 		_watching = false;
+		_watchers.clear();
+		_watchersStale = true;
+		_watchTable = {};
 	}
 
 	void Game::ClearForSave()
@@ -743,6 +746,7 @@ namespace fp
 	void Game::Tick()
 	{
 		UpdateLook();
+		TickWatchers();
 		if (!_sim && _markers.empty()) {
 			return;
 		}

@@ -1109,4 +1109,119 @@ namespace fp
 			HideOpponentStick();
 		}
 	}
+
+	void Game::DropWatcher(RE::TESFormID a_id)
+	{
+		std::erase_if(_watchers, [&](const Watcher& w) {
+			if (w.id != a_id) {
+				return false;
+			}
+			if (auto* actor = RE::TESForm::GetFormByID<RE::Actor>(a_id)) {
+				Anim::RemoveWatcher(actor);
+			}
+			return true;
+		});
+	}
+
+	void Game::TickWatchers()
+	{
+		// once a second: watchers whose time is up (or who left, died, or are playing you) go back to their own
+		// business; now and then a settler near the pool table closest to you wanders over
+		const auto now = std::chrono::steady_clock::now();
+		const float dt = std::min(5.0f, std::chrono::duration<float>(now - _watchTime).count());
+		if (dt < 1.0f || IsGamePaused()) {
+			return;
+		}
+		_watchTime = now;
+		const auto& s = Settings::Get();
+		if (_watchersStale && Anim::OwnPackageReady()) {
+			_watchersStale = false;
+			Anim::ClearWatchers();
+		}
+		if (!s.wander) {
+			while (!_watchers.empty()) {
+				DropWatcher(_watchers.back().id);
+			}
+			return;
+		}
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			return;
+		}
+
+		// the pool table nearest you, within reach (looked for every 5 s)
+		_watchScan -= dt;
+		if (_watchScan <= 0.0f) {
+			_watchScan = 5.0f;
+			RE::TESObjectREFR* best = nullptr;
+			float              bestD = 2500.0f;
+			util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+				a_cell->ForEachReferenceInRange(player->data.location, 2500.0f, [&](RE::TESObjectREFR* a_ref) {
+					if (a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && IsPoolTable(a_ref)) {
+						if (const float d = (a_ref->data.location - player->data.location).Length(); d < bestD) {
+							bestD = d;
+							best = a_ref;
+						}
+					}
+					return RE::BSContainer::ForEachResult::kContinue;
+				});
+			});
+			if (_sim && _table) {
+				best = _table.get().get();  // the table you're playing at
+			}
+			_watchTable = best ? best->GetHandle() : RE::ObjectRefHandle{};
+		}
+		auto table = _watchTable.get();
+
+		auto* opponent = Opponent();
+		for (std::size_t i = _watchers.size(); i-- > 0;) {
+			auto&  w = _watchers[i];
+			auto*  actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			w.left -= dt;
+			const bool gone = !actor || actor->IsDead(false) || actor->IsDisabled() || !table ||
+			                  (actor->data.location - table->data.location).Length() > s.wanderRange + 1000.0f;
+			if (actor && actor == opponent) {
+				log::info("{}: playing you now, not just watching", actor->GetDisplayFullName());
+				DropWatcher(w.id);  // their walks are the Opponent alias's now
+			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
+				if (actor) {
+					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
+				}
+				DropWatcher(w.id);
+			}
+		}
+		if (!table || static_cast<int>(_watchers.size()) >= s.wanderMax) {
+			return;
+		}
+		static std::mt19937 rng{ std::random_device{}() };
+		if (std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
+			return;
+		}
+
+		// someone: a grown-up NPC near the table who isn't fighting, following you, playing you or already there
+		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);    // ActorTypeNPC
+		static auto* companions = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
+		std::vector<RE::Actor*> candidates;
+		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReferenceInRange(table->data.location, s.wanderRange, [&](RE::TESObjectREFR* a_ref) {
+				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
+				if (!actor || actor == player || actor == opponent || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
+					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
+					(companions && actor->IsInFaction(companions)) ||
+					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); })) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				candidates.push_back(actor);
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		if (candidates.empty()) {
+			return;
+		}
+		auto* who = candidates[std::uniform_int_distribution<std::size_t>(0, candidates.size() - 1)(rng)];
+		const float stay = s.wanderStay * std::uniform_real_distribution<float>(0.6f, 1.4f)(rng);
+		_watchers.push_back({ who->GetFormID(), stay });
+		log::info("{} ({:08X}) wanders over to the table for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(), stay, candidates.size());
+		Anim::AddWatcher(who, table.get());
+	}
 }

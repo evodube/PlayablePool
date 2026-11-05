@@ -6,6 +6,7 @@ Actors, refs and keywords come in as form IDs, not objects: an NPC with other sc
 from the plugin as an object Papyrus won't take as an Actor ("Type mismatch for argument 1").}
 
 ReferenceAlias Property Opponent Auto Const Mandatory
+RefCollectionAlias Property Watchers Auto Const Mandatory  ; settlers hanging round a table (fo4poolWatchTable)
 
 ; puts them in the alias. Returns "in ..." if the alias holds them afterwards, otherwise "NOT in ..." with what
 ; it found, for fo4pool.log. If the first ForceRefTo doesn't take, the quest is restarted and it's tried again.
@@ -91,4 +92,65 @@ Function Leave()
 	if current
 		current.EvaluatePackage()
 	endif
+EndFunction
+
+; a settler wanders over to a table and hangs round it (the collection's sandbox, round their linked ref). "in" if
+; the collection holds them afterwards. A save from before the collection existed has the quest running without it:
+; then the quest is restarted (only with no opponent in it) and it's tried again.
+String Function AddWatcher(Int aiActor, Int aiTable, Int aiLink)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	ObjectReference akTable = Game.GetForm(aiTable) as ObjectReference
+	Keyword akLink = Game.GetForm(aiLink) as Keyword
+	if akActor == None || akTable == None || akLink == None
+		return "NOT in: actor " + akActor + ", table " + akTable + ", keyword " + akLink
+	endif
+	akActor.SetLinkedRef(akTable, akLink)
+	Watchers.AddRef(akActor)
+	if Watchers.Find(akActor) < 0 && Opponent.GetReference() == None
+		Stop()
+		Int tries = 0
+		while IsStopping() && tries < 50
+			Utility.Wait(0.1)
+			tries += 1
+		endwhile
+		StartAndWait()
+		Watchers.AddRef(akActor)
+	endif
+	akActor.EvaluatePackage()
+	if Watchers.Find(akActor) < 0
+		return "NOT in (collection " + Watchers + ", count " + Watchers.GetCount() + ")"
+	endif
+	return "in"
+EndFunction
+
+; back to their own business
+Function RemoveWatcher(Int aiActor, Int aiLink)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	Keyword akLink = Game.GetForm(aiLink) as Keyword
+	if akActor == None
+		return
+	endif
+	Watchers.RemoveRef(akActor)
+	if akLink
+		akActor.SetLinkedRef(None, akLink)
+	endif
+	akActor.EvaluatePackage()
+EndFunction
+
+; everyone out of the collection (a loaded save: the plugin no longer knows who's in it)
+Function ClearWatchers(Int aiLink)
+	Keyword akLink = Game.GetForm(aiLink) as Keyword
+	Int i = Watchers.GetCount()
+	while i > 0
+		i -= 1
+		ObjectReference r = Watchers.GetAt(i)
+		Actor a = r as Actor
+		Watchers.RemoveRef(r)
+		if a
+			if akLink
+				a.SetLinkedRef(None, akLink)
+			endif
+			a.EvaluatePackage()
+		endif
+	endwhile
 EndFunction

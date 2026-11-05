@@ -13,7 +13,10 @@ Form IDs (what fo4pool.ini expects by default):
     xx000814        keyword fo4poolLinkPoolSpot  (the opponent's linked ref: where they're to walk)
     xx000815        package fo4poolWalkToSpot    (Travel to that linked ref, walking, facing the marker at the end)
     xx000816        quest fo4poolOpponent        (priority 100, start game enabled; alias 0 "Opponent" carries the
-                                                 package, so it outranks settler sandboxes from other mods)
+                                                 package, so it outranks settler sandboxes from other mods; alias 1
+                                                 "Watchers", a collection, carries fo4poolWatchTable)
+    xx000817        keyword fo4poolLinkPoolTable (a watcher's linked ref: the table they hang round)
+    xx000818        package fo4poolWatchTable    (Sandbox within 180 of that linked ref)
 
 The idles are "dynamic idles": the human behaviour graph's dyn_ActivationLoop event plays whatever HKX the idle
 names, so no behaviour file is edited. The plugin plays them on the player with AIProcess::PlayIdle.
@@ -136,37 +139,76 @@ def object_property(name: str, form_id: int, alias: int = -1) -> bytes:
     return wstring(name) + bytes([1, 1]) + struct.pack("<HhI", 0, alias, form_id)
 
 
-def quest_vmad(quest_id: int, quest_script: str, alias_property: str, alias_script: str) -> bytes:
-    """Scripts on the quest and on its alias 0, laid out as Fallout4.esm's DialogueGlowingSeaAtom: version 6, object
-    format 2; the quest script; the fragments block with no fragments (03, count 0, an empty fragment script name);
-    then the aliases."""
+def quest_vmad(quest_id: int, quest_script: str, alias_properties: list[tuple[str, int]], alias_scripts: list[tuple[int, str]]) -> bytes:
+    """Scripts on the quest and on its aliases, laid out as Fallout4.esm's DialogueGlowingSeaAtom: version 6, object
+    format 2; the quest script (its properties pointing at its aliases); the fragments block with no fragments (03,
+    count 0, an empty fragment script name); then the aliases and their scripts."""
+    aliases = b"".join(
+        struct.pack("<HhI", 0, alias_id, quest_id) + struct.pack("<HHH", 6, 2, 1) + script_entry(script, [])
+        for alias_id, script in alias_scripts
+    )
     return (
         struct.pack("<HHH", 6, 2, 1)
-        + script_entry(quest_script, [object_property(alias_property, quest_id, 0)])
+        + script_entry(quest_script, [object_property(name, quest_id, alias_id) for name, alias_id in alias_properties])
         + b"\x03" + struct.pack("<H", 0) + wstring("")
-        + struct.pack("<H", 1)
-        + struct.pack("<HhI", 0, 0, quest_id)  # alias 0 of this quest
-        + struct.pack("<HHH", 6, 2, 1)
-        + script_entry(alias_script, [])
+        + struct.pack("<H", len(alias_scripts))
+        + aliases
     )
 
 
-def quest(form_id: int, editor_id: str, alias_name: str, package: int, priority: int = 100) -> bytes:
-    """A start-game-enabled quest with one optional reference alias that carries `package`. Alias packages go by
-    quest priority: 100 is the highest the Creation Kit allows. Scripts: fo4poolOpponentQuest (Join / Leave, its
-    Opponent property is the alias) and fo4poolOpponentAlias on the alias (papyrus/)."""
+def sandbox_package(form_id: int, editor_id: str, link_keyword: int, radius: int) -> bytes:
+    """A Sandbox package round the actor's linked ref (with link_keyword): MagicSyringesMod's working settler sandbox
+    (template 2CB1, its data inputs and event blocks) without its conditions, at the given radius."""
+    no_event = subrecord(b"INAM", struct.pack("<I", 0)) + subrecord(b"PDTO", bytes(8))
+    def boolean(v: int) -> bytes:
+        return subrecord(b"ANAM", zstring("Bool")) + subrecord(b"CNAM", bytes([v]))
     body = (
         subrecord(b"EDID", zstring(editor_id))
-        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", "Opponent", "fo4poolOpponentAlias"))
+        + subrecord(b"PKDT", bytes.fromhex("0000000012000261fffe0000"))
+        + subrecord(b"PSDT", bytes.fromhex("00ff00ffff02000000000000"))
+        + subrecord(b"PKCU", struct.pack("<III", 15, 0x00002CB1, 7))
+        + subrecord(b"ANAM", zstring("Location")) + subrecord(b"PLDT", struct.pack("<IIiI", 6, link_keyword, radius, 0))
+        + boolean(1) + boolean(1) + boolean(0) + boolean(1) + boolean(1) + boolean(1) + boolean(1) + boolean(1) + boolean(1)
+        + subrecord(b"ANAM", zstring("Float")) + subrecord(b"CNAM", bytes.fromhex("00004842"))
+        + boolean(0) + boolean(0)
+        + subrecord(b"ANAM", zstring("TargetSelector")) + subrecord(b"PTDA", bytes.fromhex("020000000000000000000000"))
+        + subrecord(b"ANAM", zstring("Float")) + subrecord(b"CNAM", bytes.fromhex("00001643"))
+        + b"".join(subrecord(b"UNAM", bytes([i])) for i in (0x02, 0x0C, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0E, 0x0A, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1A))
+        + subrecord(b"XNAM", b"\x15")
+        + subrecord(b"POBA", b"") + no_event
+        + subrecord(b"POEA", b"") + no_event
+        + subrecord(b"POCA", b"") + no_event
+    )
+    return record(b"PACK", 0, form_id, body)
+
+
+def quest(form_id: int, editor_id: str, opponent_package: int, watch_package: int, priority: int = 100) -> bytes:
+    """fo4poolOpponent: start game enabled, priority 100 (the highest the Creation Kit allows: alias packages go by
+    quest priority). Alias 0 'Opponent' (the NPC playing you; Travel to their linked ref), alias 1 'Watchers' (a
+    collection: settlers hanging round a table; Sandbox round it). Scripts: fo4poolOpponentQuest on the quest
+    (properties Opponent and Watchers), fo4poolOpponentAlias and fo4poolWatchersAlias on the aliases (papyrus/)."""
+    body = (
+        subrecord(b"EDID", zstring(editor_id))
+        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", [("Opponent", 0), ("Watchers", 1)],
+                                        [(0, "fo4poolOpponentAlias"), (1, "fo4poolWatchersAlias")]))
         # flags (0x10 start game enabled, 0x1 as saved by the CK for those), priority, unknown, delay 0, type 0 (none)
         + subrecord(b"DNAM", struct.pack("<HBBfI", 0x0011, priority, 0, 0.0, 0))
         + subrecord(b"NEXT", b"")
-        + subrecord(b"ANAM", struct.pack("<I", 1))  # next alias id
+        + subrecord(b"ANAM", struct.pack("<I", 2))  # next alias id
         + subrecord(b"ALST", struct.pack("<I", 0))
-        + subrecord(b"ALID", zstring(alias_name))
+        + subrecord(b"ALID", zstring("Opponent"))
         # optional, allow reuse in quest, allow reserved (settlers are often reserved by workshop quests)
         + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
-        + subrecord(b"ALPC", struct.pack("<I", package))
+        + subrecord(b"ALPC", struct.pack("<I", opponent_package))
+        + subrecord(b"VTCK", struct.pack("<I", 0))
+        + subrecord(b"ALED", b"")
+        # a collection alias, as vanilla WorkshopPermanentActors: ALCS id, ALMI 0 (no initial fill), then the alias
+        + subrecord(b"ALCS", struct.pack("<I", 1))
+        + subrecord(b"ALMI", b"\x00")
+        + subrecord(b"ALST", struct.pack("<I", 1))
+        + subrecord(b"ALID", zstring("Watchers"))
+        + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
+        + subrecord(b"ALPC", struct.pack("<I", watch_package))
         + subrecord(b"VTCK", struct.pack("<I", 0))
         + subrecord(b"ALED", b"")
     )
@@ -189,16 +231,18 @@ def build(with_stick: bool) -> bytes:
 
     link = own | (FIRST_ID + 20)
     walk = own | (FIRST_ID + 21)
-    keywords = [keyword(link, "fo4poolLinkPoolSpot")]
-    packages = [travel_package(walk, "fo4poolWalkToSpot", link)]
-    quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", "Opponent", walk)]
+    table_link = own | (FIRST_ID + 23)
+    watch = own | (FIRST_ID + 24)
+    keywords = [keyword(link, "fo4poolLinkPoolSpot"), keyword(table_link, "fo4poolLinkPoolTable")]
+    packages = [travel_package(walk, "fo4poolWalkToSpot", link), sandbox_package(watch, "fo4poolWatchTable", table_link, 180)]
+    quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", walk, watch)]
 
     count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests)
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 23))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 25))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))

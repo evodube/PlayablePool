@@ -125,6 +125,11 @@ namespace fp
 		opponentRun = ReadBool(L"Opponent", L"bRun", opponentRun);
 		opponentLog = ReadBool(L"Opponent", L"bLog", opponentLog);
 		opponentOwnPackage = ReadBool(L"Opponent", L"bOwnPackage", opponentOwnPackage);
+		wander = ReadBool(L"Opponent", L"bWander", wander);
+		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
+		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));
+		wanderStay = ReadFloat(L"Opponent", L"fWanderStay", wanderStay);
+		wanderRange = ReadFloat(L"Opponent", L"fWanderRange", wanderRange);
 
 		anim = ReadBool(L"Anim", L"bEnabled", anim);
 		animPlugin = Narrow(ReadString(L"Anim", L"sPlugin", std::wstring(animPlugin.begin(), animPlugin.end())));

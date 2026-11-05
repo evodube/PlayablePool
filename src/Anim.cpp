@@ -29,6 +29,8 @@ namespace fp::Anim
 			{
 				if (a_result.is<bool>()) {
 					log::info("papyrus {} -> {}", _what, RE::BSScript::get<bool>(a_result));
+				} else if (a_result.is<RE::BSFixedString>()) {
+					log::info("papyrus {} -> {}", _what, RE::BSScript::get<RE::BSFixedString>(a_result).c_str());
 				} else {
 					log::info("papyrus {} -> done", _what);
 				}
@@ -76,6 +78,7 @@ namespace fp::Anim
 		// fo4pool.esl: the opponent's own walk (make_esl.py)
 		constexpr std::uint32_t kLinkKeywordID = 0x814;
 		constexpr std::uint32_t kPackageID = 0x815;
+		constexpr std::uint32_t kTableKeywordID = 0x817;
 		constexpr std::uint32_t kQuestID = 0x816;
 
 		RE::BGSKeyword* LinkKeyword()
@@ -336,6 +339,41 @@ namespace fp::Anim
 		if (!CallQuest("Join", what, done, FormArg(a_actor))) {
 			g_joining = false;
 		}
+	}
+
+	void AddWatcher(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
+	{
+		auto* keyword = util::ResolveAnyForm(Settings::Get().animPlugin, kTableKeywordID);
+		if (!a_actor || !a_table || !keyword) {
+			return;
+		}
+		const std::string what = What(a_actor, "fo4poolOpponentQuest.AddWatcher");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuest("AddWatcher", what, logged, FormArg(a_actor), FormArg(a_table), FormArg(keyword));
+	}
+
+	void RemoveWatcher(RE::Actor* a_actor)
+	{
+		auto* keyword = util::ResolveAnyForm(Settings::Get().animPlugin, kTableKeywordID);
+		if (!a_actor) {
+			return;
+		}
+		const std::string what = What(a_actor, "fo4poolOpponentQuest.RemoveWatcher");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuest("RemoveWatcher", what, logged, FormArg(a_actor), FormArg(keyword));
+	}
+
+	bool OwnPackageReady()
+	{
+		return OwnQuest() && LinkKeyword() && Settings::Get().opponentOwnPackage;
+	}
+
+	void ClearWatchers()
+	{
+		auto*             keyword = util::ResolveAnyForm(Settings::Get().animPlugin, kTableKeywordID);
+		const std::string what = "fo4poolOpponentQuest.ClearWatchers";
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuest("ClearWatchers", what, logged, FormArg(keyword));
 	}
 
 	bool InOwnPackage(RE::Actor* a_actor)

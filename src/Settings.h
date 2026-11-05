@@ -94,6 +94,11 @@ namespace fp
 		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
+		bool  wander{ true };               // settlers wander over to a pool table near you now and then
+		float wanderEvery{ 90.0f };         // about this often (seconds)
+		int   wanderMax{ 2 };               // at most this many at once
+		float wanderStay{ 120.0f };         // each hangs round about this long
+		float wanderRange{ 2500.0f };       // from this far from the table
 		bool  opponentOwnPackage{ true };   // walk them with fo4pool.esl's own AI package (outranks settler sandboxes); off = PathToReference
 
 		// [Anim] the pool idles (fo4pool.esl) the opponent plays

@@ -339,6 +339,21 @@ namespace fp
 		RE::ObjectRefHandle _lookTable;            // the pool table under the crosshair (UpdateLook), if any
 		std::chrono::steady_clock::time_point _lookTime{};
 		void                UpdateLook();          // main thread: which table you're looking at, and the prompt
+
+		// Settlers wandering over to hang round a pool table now and then ([Opponent] bWander), so there's someone
+		// to ask for a game
+		struct Watcher
+		{
+			RE::TESFormID id{ 0 };
+			float         left{ 0.0f };  // seconds before they go back to their own business
+		};
+		std::vector<Watcher> _watchers;
+		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
+		std::chrono::steady_clock::time_point _watchTime{};
+		RE::ObjectRefHandle  _watchTable;
+		float                _watchScan{ 0.0f };
+		void                 TickWatchers();
+		void                 DropWatcher(RE::TESFormID a_id);
 		void                OnActivate();          // main thread: the activate key went down
 		bool                ActorInView(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_dir, float a_upTo) const;
 		bool                _lmbWasDown{ false };
