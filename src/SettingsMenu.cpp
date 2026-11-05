@@ -183,6 +183,7 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iCalibrate", "Calibration markers", Kind::kKey, &s.keyCalibrate },
 						{ L"Keys", L"iCallPocket", "Change the called pocket", Kind::kKey, &s.keyCallPocket },
 						{ L"Keys", L"iChallenge", "Challenge an NPC", Kind::kKey, &s.keyChallenge },
+						{ L"Keys", L"iForfeit", "Forfeit (press twice)", Kind::kKey, &s.keyForfeit },
 					} },
 			};
 			static bool added = false;

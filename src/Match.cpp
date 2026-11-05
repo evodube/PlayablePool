@@ -94,6 +94,78 @@ namespace fp
 		Say(std::format("calling the 8 in the {} (marked)", PocketName(_manualPocket)));
 	}
 
+	void Game::Forfeit()
+	{
+		if (!_sim || _rules.Over()) {
+			return;
+		}
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto  table = _table.get();
+		if (!_aiming && (!player || !table || (player->data.location - table->data.location).Length() > 800.0f)) {
+			return;  // only at the table you're playing at
+		}
+		if (_shotLive || !_sim->AtRest()) {
+			Say("wait for the balls to stop to forfeit");
+			return;
+		}
+		const auto now = std::chrono::steady_clock::now();
+		const auto key = Settings::Key(Settings::Get().keyForfeit);
+		if (now - _forfeitAsked > std::chrono::seconds(3)) {
+			_forfeitAsked = now;
+			Say(std::format("press {} again to forfeit", key));
+			return;
+		}
+		_forfeitAsked = {};
+		const bool solo = _rules.GameMode() == pool::Mode::kSolo;
+		ExitAim();
+		_rules.Forfeit(0);
+		_manualPocket = _autoPocket = -1;
+		if (solo || !_opponent) {
+			Banner(3, "GAME OVER", "YOU GAVE UP");
+			Say(std::format("you gave up. {} racks again", Settings::Key(Settings::Get().keyRack)));
+			log::info("game over: forfeit (Solo Play, no record)");
+		} else {
+			std::string theyWin = _opponentName + " WINS";
+			std::ranges::transform(theyWin, theyWin.begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
+			Banner(3, theyWin, "YOU FORFEIT");
+			// the win/loss record will go here: a loss for you, a win for them
+			log::info("game over: forfeit to {} (a loss for you, a win for them)", _opponentName);
+			EndChallenge(std::format("you forfeit. {} wins", _opponentName));
+		}
+	}
+
+	void Game::TickPocketCall()
+	{
+		if (!_sim || !_aiming || !Settings::Get().callEight || !_rules.OnEight(_rules.Shooter(), *_sim) || _shotLive || _placing) {
+			_dwellPocket = -1;
+			return;
+		}
+		const auto now = std::chrono::steady_clock::now();
+		if (_lookPocket != _dwellPocket) {
+			_dwellPocket = _lookPocket;
+			_dwellSince = now;
+			return;
+		}
+		if (_dwellPocket >= 0 && _dwellPocket != _manualPocket && now - _dwellSince >= std::chrono::seconds(2)) {
+			_manualPocket = _dwellPocket;
+			Say(std::format("calling the 8 in the {} (marked)", PocketName(_manualPocket)));
+		}
+	}
+
+	void Game::CallLookedAtPocket()
+	{
+		if (!_sim || !_aiming || !_rules.OnEight(_rules.Shooter(), *_sim) || !Settings::Get().callEight) {
+			return;
+		}
+		if (_lookPocket < 0) {
+			Say("aim at a pocket (the 8 going into it), then F to call it");
+			return;
+		}
+		_manualPocket = _lookPocket;
+		_dwellPocket = _lookPocket;
+		Say(std::format("calling the 8 in the {} (marked)", PocketName(_manualPocket)));
+	}
+
 	void Game::JudgeShot()
 	{
 		_shotLive = false;
@@ -194,7 +266,7 @@ namespace fp
 			line = "the 8 on the break is spotted. " + line;
 		}
 		if (_rules.OnEight(_rules.Shooter(), *_sim)) {
-			line += Settings::Get().callEight ? std::format(". On the 8: aim, and {} to change the called pocket", Settings::Key(Settings::Get().keyCallPocket))
+			line += Settings::Get().callEight ? std::format(". On the 8: aim at a pocket for 2 s, or {}, to call it", Settings::Key(_activateVk.load()))
 			                                  : std::string(". On the 8");
 		}
 		Say(line);
@@ -286,6 +358,7 @@ namespace fp
 	void Game::UpdateHud()
 	{
 		HudState h;
+		h.activateVk = _activateVk.load();
 		if (_sim) {
 			h.game = true;
 			h.solo = _rules.GameMode() == pool::Mode::kSolo;

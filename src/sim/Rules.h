@@ -101,6 +101,14 @@ namespace pool
 		// a_player's group is cleared, so they're shooting at the 8.
 		bool OnEight(int a_player, const Sim& a_sim) const;
 
+		// a_player gives up: the game's over and the other one wins (Solo: just over).
+		void Forfeit(int a_player)
+		{
+			_over = true;
+			_winner = _mode == Mode::kSolo ? -1 : 1 - a_player;
+			_inShot = false;
+		}
+
 		// The next shooter has placed the cue ball.
 		void PlacedCueBall() { _ballInHand = false; }
 

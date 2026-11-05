@@ -409,16 +409,20 @@ namespace fp::Hud
 		void Keys(const View& a_v, const Game::HudState& a_st)
 		{
 			const auto& set = Settings::Get();
-			const std::string aim = KeyLabel(set.keyShoot), rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(set.keyCallPocket);
+			const std::string aim = KeyLabel(set.keyShoot), rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(a_st.activateVk),
+							  forfeit = KeyLabel(set.keyForfeit);
 			std::vector<std::pair<std::string, std::string>> keys;
 			if (a_st.placing) {
 				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { aim, "LEAVE TABLE" } };
 			} else if (a_st.over) {
 				keys = { { rack, "RACK AGAIN" }, { clear, "CLEAR TABLE" }, { aim, "LEAVE TABLE" } };
 			} else if (a_st.calling) {
-				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { call, "CHANGE CALLED POCKET" }, { "RMB", "OVERHEAD" } };
+				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { call, "CALL THE POCKET (OR AIM 2S)" }, { "RMB", "OVERHEAD" } };
 			} else {
 				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { aim, "LEAVE TABLE" } };
+			}
+			if (!a_st.over && set.keyForfeit > 0) {
+				keys.push_back({ forfeit, "FORFEIT" });
 			}
 			// measure, then centre the row
 			float total = 0.0f;

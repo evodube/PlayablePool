@@ -77,7 +77,7 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 7> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay };
+		const std::array<int, 8> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay, s.keyForfeit };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -100,6 +100,7 @@ namespace fp
 							break;
 						case 3: ToggleCalibrate(); break;
 						case 4: CyclePocket(); break;
+						case 7: Forfeit(); break;
 						case 6:
 							// the NPC by a table under the crosshair (the prompt's), or nothing
 							if (auto actor = _lookActor.get()) {
@@ -124,13 +125,24 @@ namespace fp
 			}
 			_arrowWasDown[i] = down;
 		}
-		// the game's activate key, on a pool table (OnActivate checks it's one)
+		// the game's activate key, on a pool table (OnActivate checks it's one): a tap (on letting go) or a hold
 		if (const int vk = _activateVk.load(); vk > 0) {
 			const bool down = (::GetAsyncKeyState(vk) & 0x8000) != 0;
+			const auto now = std::chrono::steady_clock::now();
 			if (down && !_activateWasDown) {
+				_activateDownAt = now;
+				_activateHeld = false;
+			}
+			auto send = [this](bool a_hold) {
 				if (auto* tasks = F4SE::GetTaskInterface()) {
-					tasks->AddTask([this]() { OnActivate(); });
+					tasks->AddTask([this, a_hold]() { OnActivate(a_hold); });
 				}
+			};
+			if (down && !_activateHeld && now - _activateDownAt >= std::chrono::milliseconds(kHoldMs)) {
+				_activateHeld = true;
+				send(true);
+			} else if (!down && _activateWasDown && !_activateHeld) {
+				send(false);
 			}
 			_activateWasDown = down;
 		}
@@ -201,7 +213,7 @@ namespace fp
 							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 							prompt = std::format("{}) PLAY {}", key, name);
 						} else {
-							prompt = key + ") PLAY POOL";
+							prompt = std::format("{}) PLAY SOLO  ·  HOLD {}) 2 PLAYER", key, key);
 						}
 					} else if (_opponent && OpponentsTurn()) {
 						prompt.clear();  // their shot: nothing to do
@@ -250,12 +262,21 @@ namespace fp
 		_hud.pickHint = _hud.pick.empty() ? std::string() : std::format("UP/DOWN PICK · {} PLAY", Settings::Key(_activateVk.load()));
 	}
 
-	void Game::OnActivate()
+	void Game::OnActivate(bool a_hold)
 	{
-		if (IsGamePaused() || _aiming) {
+		if (IsGamePaused()) {
+			return;
+		}
+		if (_aiming) {
+			if (!a_hold) {
+				CallLookedAtPocket();  // on the 8: F calls the pocket you're looking at
+			}
 			return;
 		}
 		auto table = _lookTable.get();
+		if (_pick && a_hold) {
+			return;
+		}
 		if (_pick) {
 			// the list is up: F on its table plays whoever's picked; anywhere else just closes it
 			const Pick pick = *_pick;
@@ -280,18 +301,14 @@ namespace fp
 			return;  // not looking at a pool table: the key does what the game does with it
 		}
 		const bool here = _sim && _table.get().get() == table.get();
-		if (!here || _rules.Over()) {
-			if (auto* asking = Offerer(table.get())) {
-				log::info("{} ({:08X}) asked for a game: playing them", asking->GetDisplayFullName(), asking->GetFormID());
-				_offerID = 0;
-				Challenge(asking, table.get());
-			} else if (auto people = PlayersNear(table.get()); people.empty() || !Settings::Get().pickOpponent) {
-				Rack(table.get());  // your own game (Solo Play by default)
+		if (a_hold) {
+			// held: two players. A list of who's by the table to pick from
+			auto people = PlayersNear(table.get());
+			if (people.empty()) {
+				Notify(std::format("Pool: nobody's by the table to play. {} plays Solo", Settings::Key(_activateVk.load())));
 			} else {
 				Pick pick;
 				pick.table = table->GetHandle();
-				pick.who.emplace_back();
-				pick.names.emplace_back("SOLO");
 				for (auto* a : people) {
 					std::string name = a->GetDisplayFullName();
 					if (name.empty()) {
@@ -301,9 +318,22 @@ namespace fp
 					pick.who.push_back(a->GetHandle());
 					pick.names.push_back(std::move(name));
 				}
-				pick.touched = std::chrono::steady_clock::now();
-				_pick = std::move(pick);
-				_picking = true;
+				if (!pick.names.empty()) {
+					pick.touched = std::chrono::steady_clock::now();
+					_pick = std::move(pick);
+					_picking = true;
+				}
+			}
+		} else if (!here || _rules.Over()) {
+			if (auto* asking = Offerer(table.get())) {
+				log::info("{} ({:08X}) asked for a game: playing them", asking->GetDisplayFullName(), asking->GetFormID());
+				_offerID = 0;
+				Challenge(asking, table.get());
+			} else {
+				if (_opponent) {
+					EndChallenge("");
+				}
+				Rack(table.get());  // tapped: Solo Play
 			}
 		} else if (!(_opponent && OpponentsTurn())) {
 			ToggleAim();
@@ -596,8 +626,12 @@ namespace fp
 
 	bool Game::GetFrame(Frame& a_out) const
 	{
-		auto table = _table.get();
-		auto* root = table ? table->Get3D() : nullptr;
+		return FrameOf(_table.get().get(), a_out);
+	}
+
+	bool Game::FrameOf(RE::TESObjectREFR* a_table, Frame& a_out) const
+	{
+		auto* root = a_table ? a_table->Get3D() : nullptr;
 		if (!root) {
 			return false;
 		}

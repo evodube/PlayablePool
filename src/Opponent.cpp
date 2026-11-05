@@ -53,6 +53,7 @@ namespace fp
 		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
+		constexpr float kWatchOut = 150.0f;  // watchers stand this far out from the felt's edge: clear of every shot
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
 		constexpr float kStrayed = 400.0f;       // this much further than their best: their own package has them, send the walk again
 		constexpr int   kWalkTries = 12;         // a walk that fails is sent again this many times before giving up
@@ -684,8 +685,9 @@ namespace fp
 
 	bool Game::PlaceStickCarried(RE::Actor* a_actor)
 	{
-		// Walking about: the cue in the right hand, nearly upright (a little forward and out), held about a third of
-		// the way up, so it goes where the hand goes without swinging through the body
+		// Walking about: the cue in the right hand like a walking stick carried at the side, tip forward and up, the
+		// fingers closed round it: it crosses the palm through the curl of the middle finger (not along the fingers,
+		// which put it inside the hand), a little in on the palm side
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
 		auto  stick = _npcStick.get();
 		if (!root || !stick || !stick->Get3D()) {
@@ -700,14 +702,30 @@ namespace fp
 		if (!rHand) {
 			return false;
 		}
-		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
-		const float        h = a_actor->data.angle.z;
+		const auto&  s = Settings::Get();
+		auto*        rMid2 = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger32" });
+		auto*        rIndex = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger21" });
+		auto*        rLittle = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger51" });
+		const float  h = a_actor->data.angle.z;
 		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
 		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
-		const RE::NiPoint3 dir = util::Normalized(RE::NiPoint3{ 0.0f, 0.0f, 1.0f } + fwd * 0.25f + right * 0.1f);
-		const auto&        s = Settings::Get();
+		// where the fingers close: the middle finger's second joint (or between the palm and its first joint)
+		RE::NiPoint3 grip = rMid2 ? rMid2->world.translate : rMid ? rMid->world.translate : rHand->world.translate;
+		// the palm's face: across the knuckles x down the fingers, turned to face the body (a hanging hand's palm does)
+		if (rMid && rIndex && rLittle) {
+			const RE::NiPoint3 down = util::Normalized(rMid->world.translate - rHand->world.translate);
+			const RE::NiPoint3 across = util::Normalized(rIndex->world.translate - rLittle->world.translate);
+			RE::NiPoint3       face = util::Normalized(down.Cross(across));
+			const RE::NiPoint3 toBody = a_actor->data.location + RE::NiPoint3{ 0.0f, 0.0f, grip.z - a_actor->data.location.z } - grip;
+			if (face.Dot(toBody) < 0.0f) {
+				face = face * -1.0f;
+			}
+			grip = grip + face * s.carryIn;
+		}
+		const float        tilt = s.carryTilt * 0.017453292f;  // up from level
+		const RE::NiPoint3 dir = util::Normalized(fwd * std::cos(tilt) + RE::NiPoint3{ 0.0f, 0.0f, std::sin(tilt) } + right * s.carryOut);
 		const float        length = std::abs(s.stickTip - s.stickButt);
-		const RE::NiPoint3 butt = palm - dir * (length * 0.32f);
+		const RE::NiPoint3 butt = grip - dir * (length * s.carryGrip);
 		PlaceStickAlong(stick.get(), butt + dir * length, dir, 1.0f);
 		return true;
 	}
@@ -853,26 +871,8 @@ namespace fp
 	{
 		// Pathing only goes where there's navmesh. Every navmesh with a vertex within 2500 of the table, then rings
 		// of points round the felt (a point every ~25 units) at a few distances out: how many have navmesh under them
-		_navmeshes.clear();
 		const auto start = std::chrono::steady_clock::now();
-		{
-			const auto& [map, lock] = RE::TESForm::GetAllForms();
-			RE::BSAutoReadLock l{ lock };
-			if (map) {
-				for (const auto& [id, form] : *map) {
-					if (!form || form->GetFormType() != RE::ENUM_FORM_ID::kNAVM) {
-						continue;
-					}
-					auto* nav = static_cast<RE::NavMesh*>(form);
-					for (const auto& vert : nav->vertices) {
-						if (Distance2D(vert.location, a_frame.origin) < 2500.0f && std::abs(vert.location.z - a_frame.origin.z) < 400.0f) {
-							_navmeshes.push_back(id);
-							break;
-						}
-					}
-				}
-			}
-		}
+		_navmeshes = NavmeshesNear(a_frame.origin);
 		const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
 		std::string ids;
 		for (const auto id : _navmeshes) {
@@ -921,6 +921,79 @@ namespace fp
 			}
 			log::info("navmesh: {:.0f} outside the felt: {}/{} points on navmesh{}{}", out, covered, n, gaps.empty() ? "" : "; none at (table space)", gaps);
 		}
+	}
+
+	std::vector<RE::TESFormID> Game::NavmeshesNear(const RE::NiPoint3& a_pos) const
+	{
+		std::vector<RE::TESFormID> out;
+		const auto& [map, lock] = RE::TESForm::GetAllForms();
+		RE::BSAutoReadLock l{ lock };
+		if (map) {
+			for (const auto& [id, form] : *map) {
+				if (!form || form->GetFormType() != RE::ENUM_FORM_ID::kNAVM) {
+					continue;
+				}
+				auto* nav = static_cast<RE::NavMesh*>(form);
+				for (const auto& vert : nav->vertices) {
+					if (Distance2D(vert.location, a_pos) < 2500.0f && std::abs(vert.location.z - a_pos.z) < 400.0f) {
+						out.push_back(id);
+						break;
+					}
+				}
+			}
+		}
+		return out;
+	}
+
+	RE::ObjectRefHandle Game::WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from)
+	{
+		Frame frame;
+		auto* markerForm = RE::TESForm::GetFormByID(kXMarkerHeading);
+		auto* bound = markerForm && markerForm->IsBoundObject() ? static_cast<RE::TESBoundObject*>(markerForm) : nullptr;
+		if (!a_table || !bound || !FrameOf(a_table, frame)) {
+			return {};
+		}
+		if (_watchNavTable.get().get() != a_table) {
+			_watchNavTable = a_table->GetHandle();
+			_watchNavmeshes = NavmeshesNear(frame.origin);
+		}
+		const auto& s = Settings::Get();
+		// round the felt, kWatchOut beyond its edges: past where anyone stands to shoot (the cue's length and more)
+		const double hx = s.spec.length * 0.5 + kWatchOut;
+		const double hy = s.spec.width * 0.5 + kWatchOut;
+		std::vector<pool::Vec2> spots{ { -hx, -hy }, { hx, -hy }, { hx, hy }, { -hx, hy }, { 0.0, -hy }, { 0.0, hy }, { -hx, 0.0 }, { hx, 0.0 },
+			{ -hx * 0.5, -hy }, { hx * 0.5, -hy }, { -hx * 0.5, hy }, { hx * 0.5, hy } };
+		RE::NiPoint3 best{};
+		float        bestD = std::numeric_limits<float>::max();
+		for (const auto& p : spots) {
+			RE::NiPoint3 w = ToWorld(frame, p, 0.0f);
+			w.z = frame.origin.z;
+			bool on = _watchNavmeshes.empty();
+			for (const auto id : _watchNavmeshes) {
+				auto* form = RE::TESForm::GetFormByID(id);
+				if (form && form->GetFormType() == RE::ENUM_FORM_ID::kNAVM && OnNavmesh(static_cast<RE::NavMesh*>(form), w)) {
+					on = true;
+					break;
+				}
+			}
+			const bool taken = std::ranges::any_of(_watchers, [&](const Watcher& a_w) {
+				auto ref = a_w.spot.get();
+				return ref && Distance2D(ref->data.location, w) < 80.0f;
+			});
+			if (on && !taken && Distance2D(w, a_from) < bestD) {
+				bestD = Distance2D(w, a_from);
+				best = w;
+			}
+		}
+		if (bestD == std::numeric_limits<float>::max()) {
+			return {};
+		}
+		auto spot = Spawn(bound, a_table, best);
+		if (auto ref = spot.get()) {
+			const RE::NiPoint3 to = frame.origin - best;
+			ref->data.angle = { 0.0f, 0.0f, std::atan2(to.x, to.y) };
+		}
+		return spot;
 	}
 
 	std::string Game::NavmeshAt(const RE::NiPoint3& a_pos) const
@@ -1177,6 +1250,8 @@ namespace fp
 			if (auto* actor = RE::TESForm::GetFormByID<RE::Actor>(a_id)) {
 				Anim::RemoveWatcher(actor);
 			}
+			auto spot = w.spot;
+			RemoveRef(spot);
 			return true;
 		});
 	}
@@ -1259,7 +1334,8 @@ namespace fp
 			(player->data.location - table->data.location).Length() < 1500.0f) {
 			for (auto& w : _watchers) {
 				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
-				if (w.offered || !actor || (actor->data.location - table->data.location).Length() > 300.0f) {
+				auto spot = w.spot.get();
+				if (w.offered || !actor || !spot || Distance2D(actor->data.location, spot->data.location) > 120.0f) {
 					continue;
 				}
 				w.offered = true;
@@ -1306,8 +1382,17 @@ namespace fp
 		}
 		auto* who = candidates[std::uniform_int_distribution<std::size_t>(0, candidates.size() - 1)(rng)];
 		const float stay = s.wanderStay * std::uniform_real_distribution<float>(0.6f, 1.4f)(rng);
-		_watchers.push_back({ who->GetFormID(), stay });
-		log::info("{} ({:08X}) wanders over to the table for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(), stay, candidates.size());
-		Anim::AddWatcher(who, table.get());
+		auto spot = WatchSpot(table.get(), who->data.location);
+		auto spotRef = spot.get();
+		if (!spotRef) {
+			log::info("no spot to watch from round this table (navmesh?)");
+			return;
+		}
+		Watcher w{ who->GetFormID(), stay };
+		w.spot = spot;
+		_watchers.push_back(w);
+		log::info("{} ({:08X}) wanders over to watch from {} for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(),
+			NavmeshAt(spotRef->data.location), stay, candidates.size());
+		Anim::AddWatcher(who, spotRef.get());
 	}
 }

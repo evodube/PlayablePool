@@ -31,6 +31,7 @@ namespace fp
 		int keyCalibrate{ 0x64 };  // Numpad 4
 		int keyCallPocket{ 0x65 }; // Numpad 5: pick the pocket for the 8
 		int keyChallenge{ 0x66 };  // Numpad 6: challenge the NPC you're looking at (again: they stop playing)
+		int keyForfeit{ 0x58 };    // X (twice): give up the game in play
 
 		// [Rules] 8-ball
 		int   gameMode{ 1 };        // 0 = 8-Ball (two players), 1 = Solo Play (the default; a challenged NPC always plays 8-ball)
@@ -97,10 +98,13 @@ namespace fp
 		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
-		bool  pickOpponent{ true };         // F on a table with people by it: pick Solo or one of them to play
 		bool  offers{ true };               // a settler hanging round the table asks you for a game now and then
 		float offerEvery{ 180.0f };         // ...at most this often (seconds)
 		float offerWait{ 30.0f };           // ...and waits this long for you to press F at the table
+		float carryTilt{ 50.0f };           // the cue they carry while walking: degrees up from level, tip forward
+		float carryGrip{ 0.3f };            // ...held this far up from the butt (0..1)
+		float carryIn{ 1.2f };              // ...this far in from the finger joint, on the palm side
+		float carryOut{ 0.12f };            // ...tip leaning out to the side this much (keeps it off the body)
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 90.0f };         // about this often (seconds)
 		int   wanderMax{ 2 };               // at most this many at once

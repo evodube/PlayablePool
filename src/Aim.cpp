@@ -594,7 +594,27 @@ namespace fp
 					_autoPocket = p;
 				}
 			}
+			if (best < 0.985) {
+				_lookPocket = -1;  // not heading for any pocket in particular
+			} else {
+				_lookPocket = _autoPocket;
+			}
+		} else {
+			// not at the 8: the pocket the cue ball itself points at, if any (from the overhead view, say)
+			_lookPocket = -1;
+			double best = 0.995;
+			for (int p = 0; p < pool::Sim::kPockets; ++p) {
+				pool::Vec2 mouth, inward;
+				_sim->PocketMouth(p, mouth, inward);
+				const pool::Vec2 to = mouth - cue.pos;
+				const double     l = to.Length();
+				if (const double c = l > 0.0 ? to.Dot(a_dir) / l : -1.0; c > best) {
+					best = c;
+					_lookPocket = p;
+				}
+			}
 		}
+		TickPocketCall();
 		if (const int called = CalledPocket(); called >= 0) {
 			pool::Vec2 mouth, inward;
 			_sim->PocketMouth(called, mouth, inward);

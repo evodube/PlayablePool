@@ -61,9 +61,10 @@ namespace fp
 			std::string             bannerSub;
 			float                   bannerAge{ 0.0f };
 			std::string             prompt;           // looking at a pool table, no shot camera: "F) PLAY POOL" etc.
-			std::vector<std::string> pick;            // F on a table with people by it: who to play ("SOLO", names)
+			std::vector<std::string> pick;            // F on a table with people by it: who to play (held F: their names)
 			int                     pickSel{ 0 };
 			std::string             pickHint;         // "UP/DOWN PICK   F PLAY"
+			int                     activateVk{ 'F' };
 		};
 		HudState Hud() const;
 
@@ -110,6 +111,10 @@ namespace fp
 		void UpdateHud();
 		int  CalledPocket() const;
 		void CyclePocket();
+		// X twice: you give up the game in play. Against an NPC it's their win (and, later, a loss on your record);
+		// Solo Play just ends
+		void Forfeit();
+		std::chrono::steady_clock::time_point _forfeitAsked{};
 		void StartGame();  // the rules side of a rack
 		void StartPlacement();
 		void ConfirmPlacement();
@@ -143,6 +148,11 @@ namespace fp
 		void        GetOutOfFurniture(RE::Actor* a_actor, float a_dt);   // out of any chair they've taken while playing
 		void        ProbeNavmesh(const Frame& a_frame);                 // logs how much navmesh is around the table
 		std::string NavmeshAt(const RE::NiPoint3& a_pos) const;         // "on navmesh <id>" / "NO navmesh" (for the log)
+		std::vector<RE::TESFormID> NavmeshesNear(const RE::NiPoint3& a_pos) const;
+		bool        FrameOf(RE::TESObjectREFR* a_table, Frame& a_out) const;
+		// a spot for a watcher to stand, well clear of the table (no shot is taken from there), on navmesh, not
+		// another watcher's, nearest a_from; facing the table
+		RE::ObjectRefHandle WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from);
 		bool        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt, int a_tries);  // true: gave up
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
@@ -228,6 +238,13 @@ namespace fp
 		float                                               _overTime{ 0.0f };   // seconds since the game ended
 		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
 		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
+		// On the 8: aim at a pocket for 2 s (the 8 heading into it, or the cue ball pointing at it) to call it; look
+		// at another for 2 s to change; or F calls it at once
+		int                                                 _lookPocket{ -1 };
+		int                                                 _dwellPocket{ -1 };
+		std::chrono::steady_clock::time_point               _dwellSince{};
+		void                                                TickPocketCall();
+		void                                                CallLookedAtPocket();
 		bool                                                _overheadBeforePlacing{ false };
 		std::string                                         _message;
 		std::chrono::steady_clock::time_point               _messageTime{};
@@ -338,12 +355,15 @@ namespace fp
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
 
 		// render thread
-		std::array<bool, 7> _keyWasDown{};
+		std::array<bool, 8> _keyWasDown{};
 		RE::ObjectRefHandle _lookActor;            // an NPC by a pool table under the crosshair: the play key challenges them
 		RE::ObjectRefHandle _lookActorTable;       // ...at this table
 		// The activate key (F by default; read from the game's controls): on a pool table it racks or takes your shot
 		std::atomic<int>    _activateVk{ 'F' };
 		bool                _activateWasDown{ false };
+		bool                _activateHeld{ false };     // this press already counted as a hold
+		std::chrono::steady_clock::time_point _activateDownAt{};
+		static constexpr int kHoldMs = 500;
 		RE::ObjectRefHandle _lookTable;            // the pool table under the crosshair (UpdateLook), if any
 		std::chrono::steady_clock::time_point _lookTime{};
 		void                UpdateLook();          // main thread: which table you're looking at, and the prompt
@@ -355,6 +375,7 @@ namespace fp
 			RE::TESFormID id{ 0 };
 			float         left{ 0.0f };     // seconds before they go back to their own business
 			bool          offered{ false };  // asked you for a game already (or decided not to)
+			RE::ObjectRefHandle spot;        // where they hang round (WatchSpot)
 		};
 		// Someone hanging round the table asking you for a game ([Opponent] bOffers): F at that table plays them
 		RE::TESFormID                         _offerID{ 0 };
@@ -380,10 +401,12 @@ namespace fp
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
 		RE::ObjectRefHandle  _watchTable;
+		RE::ObjectRefHandle  _watchNavTable;           // _watchNavmeshes are round this one
+		std::vector<RE::TESFormID> _watchNavmeshes;
 		float                _watchScan{ 0.0f };
 		void                 TickWatchers();
 		void                 DropWatcher(RE::TESFormID a_id);
-		void                OnActivate();          // main thread: the activate key went down
+		void                OnActivate(bool a_hold);  // main thread: the activate key tapped (on letting go) or held
 		bool                ActorInView(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_dir, float a_upTo) const;
 		bool                _lmbWasDown{ false };
 		bool                _rmbWasDown{ false };

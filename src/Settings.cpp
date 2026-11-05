@@ -76,6 +76,7 @@ namespace fp
 		keyCalibrate = static_cast<int>(ReadInt(L"Keys", L"iCalibrate", keyCalibrate));
 		keyCallPocket = static_cast<int>(ReadInt(L"Keys", L"iCallPocket", keyCallPocket));
 		keyChallenge = static_cast<int>(ReadInt(L"Keys", L"iChallenge", keyChallenge));
+		keyForfeit = static_cast<int>(ReadInt(L"Keys", L"iForfeit", keyForfeit));
 		gameMode = ReadInt(L"Rules", L"iGameMode", gameMode) == 1 ? 1 : 0;
 		callEight = ReadBool(L"Rules", L"bCallEight", callEight);
 		placeSpeed = std::clamp(ReadFloat(L"Rules", L"fPlaceSpeed", placeSpeed), 0.005f, 1.0f);
@@ -128,10 +129,13 @@ namespace fp
 		opponentRun = ReadBool(L"Opponent", L"bRun", opponentRun);
 		opponentLog = ReadBool(L"Opponent", L"bLog", opponentLog);
 		opponentOwnPackage = ReadBool(L"Opponent", L"bOwnPackage", opponentOwnPackage);
-		pickOpponent = ReadBool(L"Opponent", L"bPickOpponent", pickOpponent);
 		offers = ReadBool(L"Opponent", L"bOffers", offers);
 		offerEvery = ReadFloat(L"Opponent", L"fOfferEvery", offerEvery);
 		offerWait = ReadFloat(L"Opponent", L"fOfferWait", offerWait);
+		carryTilt = ReadFloat(L"Opponent", L"fCarryTilt", carryTilt);
+		carryGrip = ReadFloat(L"Opponent", L"fCarryGrip", carryGrip);
+		carryIn = ReadFloat(L"Opponent", L"fCarryIn", carryIn);
+		carryOut = ReadFloat(L"Opponent", L"fCarryOut", carryOut);
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));
