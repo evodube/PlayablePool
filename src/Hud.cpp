@@ -550,7 +550,8 @@ namespace fp::Hud
 			v.origin = a_viewport->Pos;
 			v.w = a_viewport->Size.x / v.s;
 			v.h = a_viewport->Size.y / v.s;
-			Print(v, Title(), a_text, v.w * 0.5f + 40.0f, v.h * 0.5f - 12.0f, 20, kGreen.bright, kGreen.glow, 1.5f);
+			// a line below where the game puts its own "F) Talk", so both show
+			Print(v, Title(), a_text, v.w * 0.5f + 40.0f, v.h * 0.5f + 34.0f, 20, kGreen.bright, kGreen.glow, 1.5f);
 		}
 
 		// ------------------------------------------------------------

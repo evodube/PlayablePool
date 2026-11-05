@@ -67,6 +67,9 @@ namespace fp
 	{
 		keyRack = static_cast<int>(ReadInt(L"Keys", L"iRack", keyRack));
 		activateTable = ReadBool(L"Keys", L"bActivateTable", activateTable);
+		keyPlay = static_cast<int>(ReadInt(L"Keys", L"iPlay", keyPlay));
+		playDistance = ReadFloat(L"Keys", L"fPlayDistance", playDistance);
+		playNearTable = ReadFloat(L"Keys", L"fPlayNearTable", playNearTable);
 		activateDistance = ReadFloat(L"Keys", L"fActivateDistance", activateDistance);
 		keyShoot = static_cast<int>(ReadInt(L"Keys", L"iShoot", keyShoot));
 		keyClear = static_cast<int>(ReadInt(L"Keys", L"iClear", keyClear));

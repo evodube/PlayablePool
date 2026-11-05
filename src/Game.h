@@ -122,11 +122,12 @@ namespace fp
 			kStriking,  // PoolStrike, up to the cue reaching the ball
 			kFollow,    // the rest of the strike clip
 		};
-		void        Challenge();
+		void        Challenge(RE::Actor* a_actor = nullptr, RE::TESObjectREFR* a_table = nullptr);  // a_actor at a_table (racked first if need be)
 		void        EndChallenge(const std::string& a_why);
 		RE::Actor*  Opponent() const;
 		bool        OpponentsTurn() const;  // Player 2 is the NPC and it's their shot
-		RE::Actor*  PickActor() const;
+		RE::Actor*  PickActor(bool a_crosshairOnly = false) const;
+		RE::TESObjectREFR* PoolTableNear(const RE::NiPoint3& a_pos, float a_within) const;
 		void        TickOpponent(const Frame& a_frame, float a_dt);
 		void        PlanOpponentShot(const Frame& a_frame);
 		void        OpponentStrike(const Frame& a_frame);
@@ -146,7 +147,7 @@ namespace fp
 		void        TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt);
 		RE::NiPoint3 StanceFor(const Frame& a_frame, pool::Vec2 a_cue, pool::Vec2 a_dir, float& a_heading) const;
 
-		void Rack();
+		void Rack(RE::TESObjectREFR* a_table = nullptr);  // the table under the crosshair, or a_table
 		bool RerackInPlace();  // a new game on the table already in use, keeping the balls and aim mode
 		void Clear();
 		void ToggleCalibrate();
@@ -333,7 +334,9 @@ namespace fp
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
 
 		// render thread
-		std::array<bool, 6> _keyWasDown{};
+		std::array<bool, 7> _keyWasDown{};
+		RE::ObjectRefHandle _lookActor;            // an NPC by a pool table under the crosshair: the play key challenges them
+		RE::ObjectRefHandle _lookActorTable;       // ...at this table
 		// The activate key (F by default; read from the game's controls): on a pool table it racks or takes your shot
 		std::atomic<int>    _activateVk{ 'F' };
 		bool                _activateWasDown{ false };

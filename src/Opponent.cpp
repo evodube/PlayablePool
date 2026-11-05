@@ -105,7 +105,25 @@ namespace fp
 		return _sim && _opponent && _rules.GameMode() == pool::Mode::kEightBall && _rules.Shooter() == 1 && !_rules.Over();
 	}
 
-	RE::Actor* Game::PickActor() const
+	RE::TESObjectREFR* Game::PoolTableNear(const RE::NiPoint3& a_pos, float a_within) const
+	{
+		RE::TESObjectREFR* best = nullptr;
+		float              bestD = a_within;
+		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReferenceInRange(a_pos, a_within, [&](RE::TESObjectREFR* a_ref) {
+				if (a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && !IsOurs(a_ref) && IsPoolTable(a_ref)) {
+					if (const float d = (a_ref->data.location - a_pos).Length(); d < bestD) {
+						bestD = d;
+						best = a_ref;
+					}
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		return best;
+	}
+
+	RE::Actor* Game::PickActor(bool a_crosshairOnly) const
 	{
 		auto*       player = RE::PlayerCharacter::GetSingleton();
 		const auto& s = Settings::Get();
@@ -116,7 +134,7 @@ namespace fp
 			}
 			return actor;
 		};
-		if (s.useConsolePick) {
+		if (s.useConsolePick && !a_crosshairOnly) {
 			if (auto picked = RE::Console::GetPickRef().get()) {
 				if (auto* actor = usable(picked.get())) {
 					return actor;
@@ -156,15 +174,22 @@ namespace fp
 		return best;
 	}
 
-	void Game::Challenge()
+	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
+		// asked with the play key: their table racked first, if it isn't the one in play
+		if (a_actor && a_table && (!_sim || _table.get().get() != a_table)) {
+			if (_opponent) {
+				EndChallenge(std::format("{} stops playing", _opponentName));
+			}
+			Rack(a_table);
+		}
 		if (!_sim) {
 			Notify(std::format("Pool: rack a table first ({}), then look at who you want to play and press {}", Settings::Key(s.keyRack),
 				Settings::Key(s.keyChallenge)));
 			return;
 		}
-		auto* actor = PickActor();
+		auto* actor = a_actor ? a_actor : PickActor();
 		auto* current = Opponent();
 		if (!actor || actor == current) {
 			if (current) {

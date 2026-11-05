@@ -77,7 +77,7 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 6> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge };
+		const std::array<int, 7> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -100,6 +100,12 @@ namespace fp
 							break;
 						case 3: ToggleCalibrate(); break;
 						case 4: CyclePocket(); break;
+						case 6:
+							// the NPC by a table under the crosshair (the prompt's), or nothing
+							if (auto actor = _lookActor.get()) {
+								Challenge(actor->As<RE::Actor>(), _lookActorTable.get().get());
+							}
+							break;
 						default: Challenge(); break;
 						}
 					});
@@ -185,6 +191,25 @@ namespace fp
 					} else {
 						prompt = key + ") TAKE YOUR SHOT";
 					}
+				}
+			}
+		}
+		// not on a table: an NPC by a pool table, close enough to talk to, gets "G) PLAY POOL WITH <NAME>" under the
+		// game's own "F) Talk" (F still talks; companions too)
+		_lookActor = {};
+		_lookActorTable = {};
+		if (prompt.empty() && s.keyPlay > 0 && !_aiming && !IsGamePaused() && player) {
+			auto* actor = PickActor(true);
+			if (actor && actor != Opponent() && (actor->data.location - player->data.location).Length() < s.playDistance) {
+				static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);  // ActorTypeNPC
+				auto*        table = PoolTableNear(actor->data.location, s.playNearTable);
+				if (table && !actor->IsChild() && !actor->IsInCombat() && !actor->GetHostileToActor(player) &&
+					(!npcType || actor->HasKeywordHelper(npcType, nullptr))) {
+					_lookActor = actor->GetHandle();
+					_lookActorTable = table->GetHandle();
+					std::string name = actor->GetDisplayFullName();
+					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+					prompt = std::format("{}) PLAY POOL WITH {}", Settings::Key(s.keyPlay), name);
 				}
 			}
 		}
@@ -576,13 +601,13 @@ namespace fp
 		return true;
 	}
 
-	void Game::Rack()
+	void Game::Rack(RE::TESObjectREFR* a_table)
 	{
 		auto& s = Settings::Get();
 		s.Load();
 
 		// Same table (or no other one in view, or in the shot camera, where there's no crosshair): just start again.
-		auto* picked = _aiming ? nullptr : PickTable();
+		auto* picked = a_table ? a_table : _aiming ? nullptr : PickTable();
 		if (_sim && (!picked || picked == _table.get().get()) && RerackInPlace()) {
 			return;
 		}
