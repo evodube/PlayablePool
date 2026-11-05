@@ -173,6 +173,7 @@ namespace fp
 		bool  PlaceStickInHands(RE::Actor* a_actor, float* a_side = nullptr);
 		void  GlideOntoLine(RE::Actor* a_actor, const Frame& a_frame, float a_dt);  // ease them sideways so the cue's on the ball
 		bool  PlaceStickUpright(RE::Actor* a_actor);
+		bool  PlaceStickCarried(RE::Actor* a_actor);  // walking: in the right hand, nearly upright
 		void  HideOpponentStick();
 		void  HideAimObjects();
 		void  RemoveAimObjects();

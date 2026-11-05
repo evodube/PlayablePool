@@ -657,6 +657,36 @@ namespace fp
 		return true;
 	}
 
+	bool Game::PlaceStickCarried(RE::Actor* a_actor)
+	{
+		// Walking about: the cue in the right hand, nearly upright (a little forward and out), held about a third of
+		// the way up, so it goes where the hand goes without swinging through the body
+		auto* root = a_actor ? a_actor->Get3D() : nullptr;
+		auto  stick = _npcStick.get();
+		if (!root || !stick || !stick->Get3D()) {
+			return false;
+		}
+		if (!_npcStickReady) {
+			_npcStickReady = true;
+			PrepareStick(stick.get());
+		}
+		auto* rHand = root->GetObjectByName(RE::BSFixedString{ "RArm_Hand" });
+		auto* rMid = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger31" });
+		if (!rHand) {
+			return false;
+		}
+		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
+		const float        h = a_actor->data.angle.z;
+		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
+		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
+		const RE::NiPoint3 dir = util::Normalized(RE::NiPoint3{ 0.0f, 0.0f, 1.0f } + fwd * 0.25f + right * 0.1f);
+		const auto&        s = Settings::Get();
+		const float        length = std::abs(s.stickTip - s.stickButt);
+		const RE::NiPoint3 butt = palm - dir * (length * 0.32f);
+		PlaceStickAlong(stick.get(), butt + dir * length, dir, 1.0f);
+		return true;
+	}
+
 	void Game::HideOpponentStick()
 	{
 		if (auto stick = _npcStick.get()) {
@@ -1055,8 +1085,8 @@ namespace fp
 			}
 			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
 				GlideOntoLine(actor, a_frame, a_dt);  // also places the stick
-			} else if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
-				HideOpponentStick();
+			} else if (_npcTimer < kSettleSeconds ? !PlaceStickCarried(actor) : !PlaceStickInHands(actor)) {
+				HideOpponentStick();  // (carried in the hand while they settle onto the spot)
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
 				Anim::PlayStrike(actor);
@@ -1102,11 +1132,14 @@ namespace fp
 			}
 		}
 		if (_npcStep == NpcStep::kNone) {
-			if (!_npcWaitIdle || !PlaceStickUpright(actor)) {
+			// at the table, the cue upright by their foot; walking about, carried in the hand
+			if (!(_npcWaitIdle ? PlaceStickUpright(actor) : PlaceStickCarried(actor))) {
 				HideOpponentStick();
 			}
 		} else if (_npcStep == NpcStep::kWalking) {
-			HideOpponentStick();
+			if (!PlaceStickCarried(actor)) {
+				HideOpponentStick();
+			}
 		}
 	}
 
