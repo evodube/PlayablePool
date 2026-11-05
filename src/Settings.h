@@ -97,7 +97,6 @@ namespace fp
 		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
-		bool  askInDialogue{ true };        // talk to an NPC by a pool table: "Challenge in Pool" on the wheel
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 90.0f };         // about this often (seconds)
 		int   wanderMax{ 2 };               // at most this many at once

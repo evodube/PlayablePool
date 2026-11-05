@@ -104,12 +104,12 @@ jobs:
           # from inside papyrus/, so the scripts are top level (from the repo root Caprica puts them in a
           # 'papyrus' namespace: out/Scripts/papyrus/, and the wrong script names)
           Push-Location papyrus
-          ../caprica-bin/Caprica.exe -g fallout4 -i "../vanilla-base" -f ../vanilla-base/Institute_Papyrus_Flags.flg -o ../out/Scripts fo4poolOpponentQuest.psc fo4poolOpponentAlias.psc fo4poolWatchersAlias.psc fo4poolTalkQuest.psc fo4poolChallengeInfo.psc fo4poolTalkInfo.psc
+          ../caprica-bin/Caprica.exe -g fallout4 -i "../vanilla-base" -f ../vanilla-base/Institute_Papyrus_Flags.flg -o ../out/Scripts fo4poolOpponentQuest.psc fo4poolOpponentAlias.psc fo4poolWatchersAlias.psc
           $code = $LASTEXITCODE
           Pop-Location
           if ($code -ne 0) { throw "Caprica failed" }
           Get-ChildItem -Recurse out/Scripts
-          foreach ($n in 'fo4poolOpponentQuest', 'fo4poolOpponentAlias', 'fo4poolWatchersAlias', 'fo4poolTalkQuest', 'fo4poolChallengeInfo', 'fo4poolTalkInfo') { if (-not (Test-Path "out/Scripts/$n.pex")) { throw "$n.pex not at out/Scripts/" } }
+          foreach ($n in 'fo4poolOpponentQuest', 'fo4poolOpponentAlias', 'fo4poolWatchersAlias') { if (-not (Test-Path "out/Scripts/$n.pex")) { throw "$n.pex not at out/Scripts/" } }
 
       - name: Package
         shell: pwsh

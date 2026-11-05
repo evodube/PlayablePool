@@ -30,11 +30,6 @@ namespace fp::Anim
 	void AddWatcher(RE::Actor* a_actor, RE::TESObjectREFR* a_table);
 	void RemoveWatcher(RE::Actor* a_actor);
 	void ClearWatchers();
-	// "Challenge in Pool" in dialogue (fo4poolTalk): the NPC in its Asker alias (nullptr empties it) gets the choice
-	// when you talk to them; TakeAnswer reads and resets fo4poolAsked: 0 nothing yet, 1 challenge, 2 "Talk"
-	bool TalkReady();
-	void SetAsker(RE::Actor* a_actor);
-	int  TakeAnswer();
 	bool OwnPackageReady();  // fo4pool.esl has the quest and keywords
 	bool RunningOwnPackage(RE::Actor* a_actor);  // ...and fo4poolWalkToSpot is the package they're on
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.
