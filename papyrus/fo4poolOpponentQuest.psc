@@ -15,6 +15,12 @@ String Function Join(Actor akActor)
 	if !IsRunning()
 		StartAndWait()
 	endif
+	; whoever it held before (an earlier opponent, kept by a save) out first
+	Actor previous = Opponent.GetActorReference()
+	if previous && previous != akActor
+		Opponent.Clear()
+		previous.EvaluatePackage()
+	endif
 	Opponent.ForceRefTo(akActor)
 	if Opponent.GetActorReference() == akActor
 		akActor.EvaluatePackage()
