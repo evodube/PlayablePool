@@ -30,6 +30,7 @@ namespace fp
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
 		constexpr float kThinkSeconds = 0.8f;    // after the balls stop, before they set off
 		constexpr float kArrivedDistance = 30.0f;
+		constexpr float kAlignAfter = 0.4f;      // into the aim pose before the cue is measured and lined up
 		constexpr float kRailClear = 20.0f;      // the cue ball this far from the cushion behind it, or the cue goes through the rail
 		constexpr float kTableMargin = 22.0f;    // the rails and some room for the body, beyond the felt
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
@@ -523,7 +524,7 @@ namespace fp
 		}
 	}
 
-	bool Game::PlaceStickInHands(RE::Actor* a_actor)
+	bool Game::PlaceStickInHands(RE::Actor* a_actor, RE::NiPoint3* a_tip, RE::NiPoint3* a_dir)
 	{
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
 		auto  stick = _npcStick.get();
@@ -579,7 +580,66 @@ namespace fp
 		const float        length = std::abs(s.stickTip - s.stickButt);
 		const RE::NiPoint3 tip = grip + dir * (length - kGripFromButt);
 		PlaceStickAlong(stick.get(), tip, dir, 1.0f);
+		if (a_tip) {
+			*a_tip = tip;
+		}
+		if (a_dir) {
+			*a_dir = dir;
+		}
 		return true;
+	}
+
+	void Game::AlignCueToBall(RE::Actor* a_actor, const Frame& a_frame, float a_dt)
+	{
+		// The stance comes from one body measured in Blender; NPCs differ (height, proportions, the skeleton the
+		// clip lands on), so where the cue really points is measured here, from their hands, once the aim pose is
+		// in: they're turned until the cue runs along the shot line and slid sideways until it's on the middle of
+		// the cue ball. The cue's distance to the ball is left alone (the aim loop strokes along the cue).
+		RE::NiPoint3 tip;
+		RE::NiPoint3 dir;
+		if (_npcAligned || _npcAligns >= 6 || !PlaceStickInHands(a_actor, &tip, &dir)) {
+			return;
+		}
+		(void)a_dt;
+		_npcAlignTip += tip;
+		_npcAlignDir += dir;
+		if (++_npcAlignSamples < 6) {
+			return;
+		}
+		tip = _npcAlignTip * (1.0f / _npcAlignSamples);
+		dir = _npcAlignDir * (1.0f / _npcAlignSamples);
+		_npcAlignTip = {};
+		_npcAlignDir = {};
+		_npcAlignSamples = 0;
+
+		const auto&        s = Settings::Get();
+		const RE::NiPoint3 shotW = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(_npcShot.dir.x), static_cast<float>(_npcShot.dir.y), 0.0f });
+		const RE::NiPoint3 shot = util::Normalized(RE::NiPoint3{ shotW.x, shotW.y, 0.0f });
+		const RE::NiPoint3 cueH = util::Normalized(RE::NiPoint3{ dir.x, dir.y, 0.0f });
+		const RE::NiPoint3 ball = ToWorld(a_frame, _sim->Balls()[0].pos, static_cast<float>(s.spec.ballRadius));
+
+		// turn: the cue's heading onto the shot's (heading: 0 = +Y, clockwise)
+		const float  yaw = util::AngleDiff(std::atan2(shot.x, shot.y), std::atan2(cueH.x, cueH.y));
+		const auto   root = a_actor->data.location;
+		const float  c = std::cos(yaw);
+		const float  sn = std::sin(yaw);
+		const RE::NiPoint3 rel = tip - root;
+		const RE::NiPoint3 turnedTip = root + RE::NiPoint3{ rel.x * c + rel.y * sn, -rel.x * sn + rel.y * c, rel.z };
+		// slide: across the shot line, so the tip's on the line through the ball's centre
+		const RE::NiPoint3 across{ -shot.y, shot.x, 0.0f };
+		const float        side = (ball - turnedTip).Dot(across);
+
+		++_npcAligns;
+		log::info("{}: cue {:.1f} deg off the shot, tip {:.1f} off the ball's line (correction {})", _opponentName, yaw / 0.017453292f, side, _npcAligns);
+		if (std::abs(yaw) < 0.01f && std::abs(side) < 0.6f) {
+			_npcAligned = true;
+			return;
+		}
+		_npcHeading = _npcHeading + yaw;
+		a_actor->SetHeading(_npcHeading);
+		if (std::abs(side) >= 0.6f && std::abs(side) < 40.0f) {
+			Anim::SetPosition(a_actor, root + across * side);
+		}
 	}
 
 	bool Game::PlaceStickUpright(RE::Actor* a_actor)
@@ -687,6 +747,11 @@ namespace fp
 		if (actor && marker) {
 			_npcAtApproach = false;
 			_npcTurnWarned = false;
+			_npcAligned = false;
+			_npcAligns = 0;
+			_npcAlignSamples = 0;
+			_npcAlignTip = {};
+			_npcAlignDir = {};
 			PathOpponent(actor, _npcApproach ? _npcApproach : _npcMarker, s.opponentRun ? 1.0f : 0.0f);
 			_npcStep = NpcStep::kWalking;
 		} else {
@@ -976,7 +1041,17 @@ namespace fp
 				Anim::Arrived(actor);
 				HoldOpponent(actor, true);
 				actor->SetHeading(_npcHeading);
-				Anim::SetHeadTracking(actor, false);  // eyes on the shot, not on whoever walks by
+				// eyes on the ball they're going for (the cue ball on a safety), not on whoever walks by
+				{
+					const int look = _npcShot.target > 0 ? _npcShot.target : 0;
+					if (auto ball = _balls[look].get()) {
+						Anim::SetHeadTracking(actor, true);
+						Anim::LookAt(actor, ball.get());
+						_npcLooking = false;  // not looking at the player
+					} else {
+						Anim::SetHeadTracking(actor, false);
+					}
+				}
 				_npcStep = NpcStep::kAiming;
 				_npcTimer = 0.0f;
 				break;
@@ -988,7 +1063,9 @@ namespace fp
 				HoldOpponent(actor, true);  // (already on since they stepped onto the spot)
 				Anim::PlayAim(actor);
 			}
-			if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
+			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
+				AlignCueToBall(actor, a_frame, a_dt);  // also places the stick
+			} else if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
 				HideOpponentStick();
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
@@ -1017,6 +1094,7 @@ namespace fp
 			}
 			if (_npcTimer >= kStrikeLength - kContactSeconds) {
 				Anim::Stop(actor);
+				Anim::ClearLookAt(actor);  // done looking at the ball they went for
 				Anim::SetHeadTracking(actor, true);
 				_npcStep = NpcStep::kNone;
 				_npcTimer = 0.0f;

@@ -56,7 +56,7 @@ namespace fp
 
 		// [Shot] hold the left mouse button (the camera freezes), pull the mouse back for power, release to shoot
 		float minSpeed{ 28.0f };      // cue ball speed at the smallest power, units per second
-		float maxSpeed{ 401.5f };     // at 100% (365 + 10% in 0.8.1; 50% of it was the old full power up to 0.3.2)
+		float maxSpeed{ 462.0f };     // at 100% (401.5 + 15% in 0.9.12; 365 + 10% in 0.8.1)
 		float pullPerDegree{ 0.04f }; // power gained per degree the mouse tries to tilt the view (0.04 = full at 25)
 		bool  invertPull{ false };    // true: push the mouse forward for power instead
 

@@ -34,6 +34,8 @@ namespace fp::Anim
 	// Papyrus Actor.SetLookAt / ClearLookAt: what they turn their head to
 	bool LookAt(RE::Actor* a_actor, RE::TESObjectREFR* a_target);
 	bool ClearLookAt(RE::Actor* a_actor);
+	// Papyrus ObjectReference.SetPosition: a small correction of where they stand (lining the cue up)
+	bool SetPosition(RE::Actor* a_actor, const RE::NiPoint3& a_pos);
 	// Papyrus Actor.SetHeadTracking: off while they're lining up a shot
 	bool SetHeadTracking(RE::Actor* a_actor, bool a_on);
 }

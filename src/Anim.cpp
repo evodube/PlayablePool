@@ -417,6 +417,11 @@ namespace fp::Anim
 		return CallActor(a_actor, "MoveTo", a_target, 0.0f, 0.0f, 0.0f, true);
 	}
 
+	bool SetPosition(RE::Actor* a_actor, const RE::NiPoint3& a_pos)
+	{
+		return CallActor(a_actor, "SetPosition", a_pos.x, a_pos.y, a_pos.z);
+	}
+
 	bool SetRestrained(RE::Actor* a_actor, bool a_restrained)
 	{
 		return CallActor(a_actor, "SetRestrained", a_restrained);
