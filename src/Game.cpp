@@ -194,27 +194,82 @@ namespace fp
 				}
 			}
 		}
-		// not on a table: an NPC by a pool table, close enough to talk to, gets "G) PLAY POOL WITH <NAME>" under the
-		// game's own "F) Talk" (F still talks; companions too)
+		// not on a table: an NPC by a pool table, close enough to talk to. Talking to them offers "Challenge in Pool"
+		// (UpdateAsker); the play key ([Keys] iPlay, off by default) challenges them straight away
 		_lookActor = {};
 		_lookActorTable = {};
-		if (prompt.empty() && s.keyPlay > 0 && !_aiming && !IsGamePaused() && player) {
+		RE::Actor* look = nullptr;
+		if (prompt.empty() && !_aiming && !IsGamePaused() && player) {
 			auto* actor = PickActor(true);
 			if (actor && actor != Opponent() && (actor->data.location - player->data.location).Length() < s.playDistance) {
 				static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);  // ActorTypeNPC
 				auto*        table = PoolTableNear(actor->data.location, s.playNearTable);
-				if (table && !actor->IsChild() && !actor->IsInCombat() && !actor->GetHostileToActor(player) &&
+				if (table && !actor->IsChild() && !actor->IsInCombat() && !actor->IsDead(false) && !actor->GetHostileToActor(player) &&
 					(!npcType || actor->HasKeywordHelper(npcType, nullptr))) {
 					_lookActor = actor->GetHandle();
 					_lookActorTable = table->GetHandle();
-					std::string name = actor->GetDisplayFullName();
-					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-					prompt = std::format("{}) PLAY POOL WITH {}", Settings::Key(s.keyPlay), name);
+					look = actor;
 				}
 			}
 		}
+		UpdateAsker(look);
 		std::scoped_lock lock(_hudMutex);
 		_hud.prompt = std::move(prompt);
+	}
+
+	void Game::UpdateAsker(RE::Actor* a_look)
+	{
+		if (!Settings::Get().askInDialogue || !Anim::TalkReady()) {
+			return;
+		}
+		const auto& s = Settings::Get();
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		auto*       held = _askerID ? RE::TESForm::GetFormByID<RE::Actor>(_askerID) : nullptr;
+
+		// what they picked on the wheel
+		switch (Anim::TakeAnswer()) {
+		case 1:
+			if (held && held != Opponent()) {
+				log::info("{} ({:08X}): challenged in dialogue", held->GetDisplayFullName(), held->GetFormID());
+				auto* table = PoolTableNear(held->data.location, s.playNearTable);
+				Anim::SetAsker(nullptr);
+				_askerID = 0;
+				Challenge(held, table);
+			}
+			return;
+		case 2:
+			_askSkip = _askerID;  // the script let them go and talks to them; leave them be
+			_askerID = 0;
+			return;
+		default: break;
+		}
+
+		auto* ui = RE::UI::GetSingleton();
+		if (IsGamePaused() || (ui && ui->GetMenuOpen("DialogueMenu"))) {
+			return;  // mid-conversation: the scene needs them in the alias
+		}
+		if (a_look && a_look->GetFormID() == _askSkip) {
+			a_look = nullptr;
+		} else if (a_look || !held) {
+			_askSkip = 0;
+		}
+		// whoever you look at; otherwise keep the last one while they're still by a table and near you (the crosshair
+		// goes when the conversation's camera comes in), and let them go when they aren't
+		RE::Actor* want = a_look;
+		if (!want && held && held != Opponent() && !_askerStale && player &&
+			(held->data.location - player->data.location).Length() < s.playDistance * 1.5f &&
+			PoolTableNear(held->data.location, s.playNearTable)) {
+			want = held;
+		}
+		const RE::TESFormID wantID = want ? want->GetFormID() : 0;
+		if (wantID != _askerID || (_askerStale && wantID)) {
+			Anim::SetAsker(want);
+			_askerID = wantID;
+			_askerStale = false;
+		} else if (_askerStale) {
+			Anim::SetAsker(nullptr);  // a save's leftover
+			_askerStale = false;
+		}
 	}
 
 	void Game::OnActivate()
@@ -302,6 +357,9 @@ namespace fp
 		_watchers.clear();
 		_watchersStale = true;
 		_watchTable = {};
+		_askerID = 0;
+		_askSkip = 0;
+		_askerStale = true;
 	}
 
 	void Game::ClearForSave()

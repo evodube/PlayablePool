@@ -80,6 +80,8 @@ namespace fp::Anim
 		constexpr std::uint32_t kPackageID = 0x815;
 		constexpr std::uint32_t kTableKeywordID = 0x817;
 		constexpr std::uint32_t kQuestID = 0x816;
+		constexpr std::uint32_t kTalkQuestID = 0x819;  // fo4poolTalk: "Challenge in Pool" in dialogue
+		constexpr std::uint32_t kAskedID = 0x81A;      // fo4poolAsked: what was picked there
 
 		RE::BGSKeyword* LinkKeyword()
 		{
@@ -250,12 +252,12 @@ namespace fp::Anim
 		// Calls a function of the quest's own script (fo4poolOpponentQuest, attached in fo4pool.esl): the script does
 		// the alias work in Papyrus, where aliases are at home
 		template <class... Args>
-		bool CallQuest(const char* a_function, const std::string& a_what, const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback,
-			Args... a_args)
+		bool CallQuestScript(RE::TESQuest* a_quest, const char* a_script, const char* a_function, const std::string& a_what,
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback, Args... a_args)
 		{
 			auto* game = RE::GameVM::GetSingleton();
 			auto  vm = game ? game->GetVM() : nullptr;
-			auto* quest = OwnQuest();
+			auto* quest = a_quest;
 			if (!vm || !quest) {
 				return false;
 			}
@@ -265,7 +267,7 @@ namespace fp::Anim
 				log::warn("{}: no script handle for the quest", a_what);
 				return false;
 			}
-			const RE::BSFixedString script{ "fo4poolOpponentQuest" };
+			const RE::BSFixedString script{ a_script };
 			const RE::BSFixedString function{ a_function };
 			const bool              ok = vm->DispatchMethodCall(
                 handle, script, function,
@@ -274,8 +276,15 @@ namespace fp::Anim
                     return true;
                 },
                 a_callback);
-			log::info("{} {}", a_what, ok ? "sent" : "failed (is fo4poolOpponentQuest.pex installed?)");
+			log::info("{} {}", a_what, ok ? "sent" : std::format("failed (is {}.pex installed?)", a_script));
 			return ok;
+		}
+
+		template <class... Args>
+		bool CallQuest(const char* a_function, const std::string& a_what, const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback,
+			Args... a_args)
+		{
+			return CallQuestScript(OwnQuest(), "fo4poolOpponentQuest", a_function, a_what, a_callback, a_args...);
 		}
 
 		std::string What(RE::Actor* a_actor, const char* a_function)
@@ -479,5 +488,36 @@ namespace fp::Anim
 	bool SetHeadTracking(RE::Actor* a_actor, bool a_on)
 	{
 		return CallActor(a_actor, "SetHeadTracking", a_on);
+	}
+
+	bool TalkReady()
+	{
+		auto* quest = util::ResolveAnyForm(Settings::Get().animPlugin, kTalkQuestID);
+		auto* asked = util::ResolveAnyForm(Settings::Get().animPlugin, kAskedID);
+		return quest && quest->As<RE::TESQuest>() && asked && asked->As<RE::TESGlobal>();
+	}
+
+	void SetAsker(RE::Actor* a_actor)
+	{
+		auto* form = util::ResolveAnyForm(Settings::Get().animPlugin, kTalkQuestID);
+		auto* quest = form ? form->As<RE::TESQuest>() : nullptr;
+		if (!quest) {
+			return;
+		}
+		const std::string what = What(a_actor, "fo4poolTalkQuest.SetAsker");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuestScript(quest, "fo4poolTalkQuest", "SetAsker", what, logged, FormArg(a_actor));
+	}
+
+	int TakeAnswer()
+	{
+		auto* form = util::ResolveAnyForm(Settings::Get().animPlugin, kAskedID);
+		auto* asked = form ? form->As<RE::TESGlobal>() : nullptr;
+		if (!asked || asked->value == 0.0f) {
+			return 0;
+		}
+		const int answer = static_cast<int>(asked->value);
+		asked->value = 0.0f;
+		return answer;
 	}
 }

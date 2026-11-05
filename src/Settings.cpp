@@ -128,6 +128,7 @@ namespace fp
 		opponentRun = ReadBool(L"Opponent", L"bRun", opponentRun);
 		opponentLog = ReadBool(L"Opponent", L"bLog", opponentLog);
 		opponentOwnPackage = ReadBool(L"Opponent", L"bOwnPackage", opponentOwnPackage);
+		askInDialogue = ReadBool(L"Opponent", L"bAskInDialogue", askInDialogue);
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));

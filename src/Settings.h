@@ -21,7 +21,7 @@ namespace fp
 
 		// [Keys] virtual-key codes
 		int keyRack{ 0x67 };       // Numpad 7
-		int   keyPlay{ 0x47 };              // G: look at an NPC by a pool table to play them
+		int   keyPlay{ 0 };                 // off; a key here: look at an NPC by a pool table and press it to play them
 		float playDistance{ 300.0f };       // ...close enough to talk to
 		float playNearTable{ 700.0f };      // ...and this close to a pool table
 		bool  activateTable{ true };        // the game's activate key (F) on a pool table racks / takes your shot
@@ -97,6 +97,7 @@ namespace fp
 		float opponentWalkTimeout{ 60.0f }; // a last resort: seconds of failed walking before they're put at the shot
 		bool  opponentRun{ false };         // run to the shot instead of walking
 		bool  opponentLog{ true };          // a status line about them in fo4pool.log every second
+		bool  askInDialogue{ true };        // talk to an NPC by a pool table: "Challenge in Pool" on the wheel
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 90.0f };         // about this often (seconds)
 		int   wanderMax{ 2 };               // at most this many at once

@@ -343,6 +343,12 @@ namespace fp
 		RE::ObjectRefHandle _lookTable;            // the pool table under the crosshair (UpdateLook), if any
 		std::chrono::steady_clock::time_point _lookTime{};
 		void                UpdateLook();          // main thread: which table you're looking at, and the prompt
+		// "Challenge in Pool" in dialogue (fo4pool.esl's fo4poolTalk): the NPC by a table you look at goes in its
+		// Asker alias, so talking to them offers it; their answer comes back through fo4poolAsked
+		RE::TESFormID       _askerID{ 0 };         // who the alias holds (as far as the plugin's told it)
+		RE::TESFormID       _askSkip{ 0 };         // picked "Talk": not them again till you look at someone else
+		bool                _askerStale{ true };   // a load: whoever the alias holds, the plugin doesn't know
+		void                UpdateAsker(RE::Actor* a_look);
 
 		// Settlers wandering over to hang round a pool table now and then ([Opponent] bWander), so there's someone
 		// to ask for a game
