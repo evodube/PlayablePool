@@ -555,7 +555,7 @@ namespace fp::Hud
 		}
 
 		// F on a table with people by it: who to play, under the crosshair
-		void PickList(ImGuiViewport* a_viewport, const HudState& a_st)
+		void PickList(ImGuiViewport* a_viewport, const Game::HudState& a_st)
 		{
 			View v;
 			v.dl = GetBackgroundDrawList();
