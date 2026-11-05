@@ -1,15 +1,18 @@
 Scriptname fo4poolOpponentQuest extends Quest
 {fo4pool: the NPC you're playing pool against. While they're in the Opponent alias, its package
 (fo4poolWalkToSpot: walk to their linked ref, keyword fo4poolLinkPoolSpot) outranks the sandbox packages
-other mods give settlers. The F4SE plugin calls Join and Leave and sets the linked ref for each walk.}
+other mods give settlers. The F4SE plugin calls Join, Walk, Arrived and Leave.
+Actors, refs and keywords come in as form IDs, not objects: an NPC with other scripts on them can come through
+from the plugin as an object Papyrus won't take as an Actor ("Type mismatch for argument 1").}
 
 ReferenceAlias Property Opponent Auto Const Mandatory
 
 ; puts them in the alias. Returns "in ..." if the alias holds them afterwards, otherwise "NOT in ..." with what
 ; it found, for fo4pool.log. If the first ForceRefTo doesn't take, the quest is restarted and it's tried again.
-String Function Join(Actor akActor)
+String Function Join(Int aiActor)
+	Actor akActor = Game.GetForm(aiActor) as Actor
 	if akActor == None
-		return "NOT in: no actor"
+		return "NOT in: no actor with form ID " + aiActor
 	endif
 	Debug.Trace("fo4pool: Join " + akActor + ", Opponent property " + Opponent)
 	String before = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
@@ -57,8 +60,12 @@ EndFunction
 ; a walk with the alias package: the package goes to their linked ref. It's taken off first and the package
 ; looked at again, so a Travel that already finished (at the last spot) starts over for the new one instead of
 ; staying done where it was. abReset: reset their AI too (a walk that isn't getting going)
-Function Walk(Actor akActor, ObjectReference akTarget, Keyword akLink, Bool abReset)
+Function Walk(Int aiActor, Int aiTarget, Int aiLink, Bool abReset)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	ObjectReference akTarget = Game.GetForm(aiTarget) as ObjectReference
+	Keyword akLink = Game.GetForm(aiLink) as Keyword
 	if akActor == None || akTarget == None || akLink == None
+		Debug.Trace("fo4pool: Walk: actor " + akActor + ", target " + akTarget + ", keyword " + akLink)
 		return
 	endif
 	akActor.SetLinkedRef(None, akLink)
@@ -68,7 +75,9 @@ Function Walk(Actor akActor, ObjectReference akTarget, Keyword akLink, Bool abRe
 EndFunction
 
 ; there: no destination, so the Travel package doesn't keep stepping and turning them on the spot
-Function Arrived(Actor akActor, Keyword akLink)
+Function Arrived(Int aiActor, Int aiLink)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	Keyword akLink = Game.GetForm(aiLink) as Keyword
 	if akActor && akLink
 		akActor.SetLinkedRef(None, akLink)
 		akActor.EvaluatePackage()

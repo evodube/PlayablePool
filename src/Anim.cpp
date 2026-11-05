@@ -237,6 +237,13 @@ namespace fp::Anim
 			std::uint32_t _formID;
 		};
 
+		// a form as the script's Int argument (it does Game.GetForm): objects for NPCs with other scripts on them
+		// came through as the wrong type
+		std::int32_t FormArg(const RE::TESForm* a_form)
+		{
+			return a_form ? static_cast<std::int32_t>(a_form->GetFormID()) : 0;
+		}
+
 		// Calls a function of the quest's own script (fo4poolOpponentQuest, attached in fo4pool.esl): the script does
 		// the alias work in Papyrus, where aliases are at home
 		template <class... Args>
@@ -326,7 +333,7 @@ namespace fp::Anim
 		}
 		const std::string what = What(a_actor, "fo4poolOpponentQuest.Join");
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> done{ new JoinDone(what, a_actor->GetFormID()) };
-		if (!CallQuest("Join", what, done, a_actor)) {
+		if (!CallQuest("Join", what, done, FormArg(a_actor))) {
 			g_joining = false;
 		}
 	}
@@ -365,7 +372,7 @@ namespace fp::Anim
 		}
 		const std::string what = What(a_actor, "fo4poolOpponentQuest.Arrived");
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
-		CallQuest("Arrived", what, logged, a_actor, keyword);
+		CallQuest("Arrived", what, logged, FormArg(a_actor), FormArg(keyword));
 	}
 
 	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun, bool a_again)
@@ -385,7 +392,7 @@ namespace fp::Anim
 				const std::string what = std::format("{} to {:08X} (walk {}{})", What(a_actor, "fo4poolOpponentQuest.Walk"), a_target->GetFormID(), id,
 					a_again ? ", AI reset" : "");
 				const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
-				CallQuest("Walk", what, logged, a_actor, a_target, keyword, a_again);
+				CallQuest("Walk", what, logged, FormArg(a_actor), FormArg(a_target), FormArg(keyword), a_again);
 				return id;
 			}
 		}
