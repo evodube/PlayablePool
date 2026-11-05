@@ -167,9 +167,10 @@ namespace fp
 		static void PrepareStick(RE::TESObjectREFR* a_ref);  // once its 3D is in: hides the blood overlay
 		// the opponent's own cue: in their hands on a shot (butt in the right, shaft over the left bridge), upright with
 		// its butt on the floor while they wait (in the right hand); false = no hands found
-		// a_onShot: the cue pivots in the grip hand (by _npcCueBlend) so its tip is on the line through the middle of
-		// the cue ball, whatever their body does to where the hands put it
-		bool  PlaceStickInHands(RE::Actor* a_actor, bool a_onShot = false);
+		// The stick in their hands. a_side: how far the tip is to the side of the line through the cue ball's middle
+		// (+ = to the line's left), for lining them up.
+		bool  PlaceStickInHands(RE::Actor* a_actor, float* a_side = nullptr);
+		void  GlideOntoLine(RE::Actor* a_actor, const Frame& a_frame, float a_dt);  // ease them sideways so the cue's on the ball
 		bool  PlaceStickUpright(RE::Actor* a_actor);
 		void  HideOpponentStick();
 		void  HideAimObjects();
@@ -294,8 +295,12 @@ namespace fp
 		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
 		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
 		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
-		float               _npcCueBlend{ 0.0f };     // 0..1: how much of the cue's turn onto the ball's line is applied (eased in)
-		bool                _npcCueLogged{ false };   // logged how far the hands put the cue off the line, this shot
+		float               _npcGlideSum{ 0.0f };     // GlideOntoLine: the tip's offset from the ball's line, summed over a few frames
+		int                 _npcGlideSamples{ 0 };
+		float               _npcGlideT{ -1.0f };      // seconds into the glide (-1: not started)
+		bool                _npcGlideDone{ false };
+		RE::NiPoint3        _npcGlideFrom;
+		RE::NiPoint3        _npcGlideBy;
 		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
 		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)
