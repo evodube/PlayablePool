@@ -1248,10 +1248,38 @@ namespace fp
 				DropWatcher(w.id);
 			}
 		}
+		static std::mt19937 rng{ std::random_device{}() };
+
+		// now and then one who's got to the table asks you for a game: F at the table plays them
+		if (_offerID && now > _offerUntil) {
+			_offerID = 0;
+		}
+		if (s.offers && table && !_offerID && !opponent && !_aiming && !(_sim && !_rules.Over() && _table.get().get() == table.get()) &&
+			now - _lastOffer > std::chrono::duration<float>(s.offerEvery) &&
+			(player->data.location - table->data.location).Length() < 1500.0f) {
+			for (auto& w : _watchers) {
+				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+				if (w.offered || !actor || (actor->data.location - table->data.location).Length() > 300.0f) {
+					continue;
+				}
+				w.offered = true;
+				if (std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > 0.6f) {
+					continue;  // not everyone asks
+				}
+				_offerID = w.id;
+				_offerTable = table->GetHandle();
+				_offerUntil = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(s.offerWait));
+				_lastOffer = now;
+				log::info("{} ({:08X}) asks you for a game", actor->GetDisplayFullName(), actor->GetFormID());
+				Notify(std::format("{} wants a game of pool. {} at the table to play", actor->GetDisplayFullName(),
+					Settings::Key(_activateVk.load())));
+				break;
+			}
+		}
+
 		if (!table || static_cast<int>(_watchers.size()) >= s.wanderMax) {
 			return;
 		}
-		static std::mt19937 rng{ std::random_device{}() };
 		if (std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
 			return;
 		}

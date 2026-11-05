@@ -317,6 +317,9 @@ namespace fp
 		}
 		std::scoped_lock lock(_hudMutex);
 		h.prompt = std::move(_hud.prompt);  // UpdateLook's
+		h.pick = std::move(_hud.pick);
+		h.pickSel = _hud.pickSel;
+		h.pickHint = std::move(_hud.pickHint);
 		_hud = std::move(h);
 	}
 }

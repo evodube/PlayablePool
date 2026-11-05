@@ -113,6 +113,17 @@ namespace fp
 			}
 			_keyWasDown[i] = down;
 		}
+		// up/down through the who-to-play list while it's up
+		const std::array<int, 2> arrows{ VK_UP, VK_DOWN };
+		for (std::size_t i = 0; i < arrows.size(); ++i) {
+			const bool down = (::GetAsyncKeyState(arrows[i]) & 0x8000) != 0;
+			if (down && !_arrowWasDown[i] && _picking.load()) {
+				if (auto* tasks = F4SE::GetTaskInterface()) {
+					tasks->AddTask([this, i]() { MovePick(i == 0 ? -1 : 1); });
+				}
+			}
+			_arrowWasDown[i] = down;
+		}
 		// the game's activate key, on a pool table (OnActivate checks it's one)
 		if (const int vk = _activateVk.load(); vk > 0) {
 			const bool down = (::GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -185,7 +196,13 @@ namespace fp
 					const std::string key = Settings::Key(_activateVk.load());
 					const bool        here = _sim && _table.get().get() == table;
 					if (!here || _rules.Over()) {
-						prompt = key + ") PLAY POOL";
+						if (auto* asking = Offerer(table)) {
+							std::string name = asking->GetDisplayFullName();
+							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+							prompt = std::format("{}) PLAY {}", key, name);
+						} else {
+							prompt = key + ") PLAY POOL";
+						}
 					} else if (_opponent && OpponentsTurn()) {
 						prompt.clear();  // their shot: nothing to do
 					} else {
@@ -210,8 +227,27 @@ namespace fp
 				}
 			}
 		}
+		// the who-to-play list: gone if you walk off, or leave it be a while
+		std::vector<std::string> pick;
+		int                      pickSel = 0;
+		if (_pick) {
+			auto table = _pick->table.get();
+			const bool away = !table || !player || IsGamePaused() || _aiming ||
+			                  Distance(table->data.location, player->data.location) > s.activateDistance + 150.0f ||
+			                  now - _pick->touched > std::chrono::seconds(20);
+			if (away) {
+				ClosePick();
+			} else {
+				pick = _pick->names;
+				pickSel = _pick->sel;
+				prompt.clear();
+			}
+		}
 		std::scoped_lock lock(_hudMutex);
 		_hud.prompt = std::move(prompt);
+		_hud.pick = std::move(pick);
+		_hud.pickSel = pickSel;
+		_hud.pickHint = _hud.pick.empty() ? std::string() : std::format("UP/DOWN PICK · {} PLAY", Settings::Key(_activateVk.load()));
 	}
 
 	void Game::OnActivate()
@@ -220,16 +256,118 @@ namespace fp
 			return;
 		}
 		auto table = _lookTable.get();
+		if (_pick) {
+			// the list is up: F on its table plays whoever's picked; anywhere else just closes it
+			const Pick pick = *_pick;
+			ClosePick();
+			if (table && table == pick.table.get()) {
+				auto who = pick.who[pick.sel].get();
+				auto* actor = who ? who->As<RE::Actor>() : nullptr;
+				if (actor && !actor->IsDead(false) && !actor->IsDisabled()) {
+					log::info("picked {} ({:08X}) to play", actor->GetDisplayFullName(), actor->GetFormID());
+					Challenge(actor, table.get());
+				} else {
+					if (_opponent) {
+						EndChallenge("");
+					}
+					Rack(table.get());  // Solo Play
+				}
+			}
+			_lookTime = {};
+			return;
+		}
 		if (!table) {
 			return;  // not looking at a pool table: the key does what the game does with it
 		}
 		const bool here = _sim && _table.get().get() == table.get();
 		if (!here || _rules.Over()) {
-			Rack();  // the table under the crosshair, your own game (Solo Play by default)
+			if (auto* asking = Offerer(table.get())) {
+				log::info("{} ({:08X}) asked for a game: playing them", asking->GetDisplayFullName(), asking->GetFormID());
+				_offerID = 0;
+				Challenge(asking, table.get());
+			} else if (auto people = PlayersNear(table.get()); people.empty() || !Settings::Get().pickOpponent) {
+				Rack(table.get());  // your own game (Solo Play by default)
+			} else {
+				Pick pick;
+				pick.table = table->GetHandle();
+				pick.who.emplace_back();
+				pick.names.emplace_back("SOLO");
+				for (auto* a : people) {
+					std::string name = a->GetDisplayFullName();
+					if (name.empty()) {
+						continue;
+					}
+					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+					pick.who.push_back(a->GetHandle());
+					pick.names.push_back(std::move(name));
+				}
+				pick.touched = std::chrono::steady_clock::now();
+				_pick = std::move(pick);
+				_picking = true;
+			}
 		} else if (!(_opponent && OpponentsTurn())) {
 			ToggleAim();
 		}
 		_lookTime = {};  // the prompt follows straight away
+	}
+
+	void Game::MovePick(int a_by)
+	{
+		if (!_pick || _pick->names.empty()) {
+			return;
+		}
+		const int n = static_cast<int>(_pick->names.size());
+		_pick->sel = ((_pick->sel + a_by) % n + n) % n;
+		_pick->touched = std::chrono::steady_clock::now();
+		_lookTime = {};
+	}
+
+	void Game::ClosePick()
+	{
+		_pick.reset();
+		_picking = false;
+		_lookTime = {};
+	}
+
+	RE::Actor* Game::Offerer(RE::TESObjectREFR* a_table) const
+	{
+		if (!_offerID || !a_table || _offerTable.get().get() != a_table || std::chrono::steady_clock::now() > _offerUntil) {
+			return nullptr;
+		}
+		auto* actor = RE::TESForm::GetFormByID<RE::Actor>(_offerID);
+		if (!actor || actor->IsDead(false) || actor->IsDisabled() || actor->IsInCombat() ||
+			(actor->data.location - a_table->data.location).Length() > Settings::Get().playNearTable) {
+			return nullptr;
+		}
+		return actor;
+	}
+
+	std::vector<RE::Actor*> Game::PlayersNear(RE::TESObjectREFR* a_table) const
+	{
+		// grown-up NPCs (settlers, companions) by the table who aren't fighting or hostile; nearest first
+		std::vector<std::pair<float, RE::Actor*>> found;
+		auto*        player = RE::PlayerCharacter::GetSingleton();
+		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);  // ActorTypeNPC
+		const float  within = Settings::Get().playNearTable;
+		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReferenceInRange(a_table->data.location, within, [&](RE::TESObjectREFR* a_ref) {
+				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
+				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() || actor->IsChild() ||
+					actor->IsInCombat() || (player && actor->GetHostileToActor(player)) ||
+					(npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
+					std::ranges::any_of(found, [&](const auto& f) { return f.second == actor; })) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				found.emplace_back((actor->data.location - a_table->data.location).Length(), actor);
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		std::ranges::sort(found, {}, &std::pair<float, RE::Actor*>::first);
+		std::vector<RE::Actor*> out;
+		for (std::size_t i = 0; i < found.size() && i < 7; ++i) {
+			out.push_back(found[i].second);
+		}
+		return out;
 	}
 
 	// ---------------------------------------------------------------- main thread
@@ -299,6 +437,8 @@ namespace fp
 		_watchers.clear();
 		_watchersStale = true;
 		_watchTable = {};
+		_offerID = 0;
+		ClosePick();
 	}
 
 	void Game::ClearForSave()

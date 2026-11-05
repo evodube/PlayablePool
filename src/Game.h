@@ -61,6 +61,9 @@ namespace fp
 			std::string             bannerSub;
 			float                   bannerAge{ 0.0f };
 			std::string             prompt;           // looking at a pool table, no shot camera: "F) PLAY POOL" etc.
+			std::vector<std::string> pick;            // F on a table with people by it: who to play ("SOLO", names)
+			int                     pickSel{ 0 };
+			std::string             pickHint;         // "UP/DOWN PICK   F PLAY"
 		};
 		HudState Hud() const;
 
@@ -328,6 +331,7 @@ namespace fp
 		std::atomic<bool>          _aiming{ false };
 		std::atomic<bool>          _watching{ false };
 		std::atomic<bool>          _charging{ false };
+		std::atomic<bool>          _picking{ false };  // the who-to-play list is up (arrow keys go to it)
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _rolling{ false };
 		std::atomic<float>         _power{ 0.0f };     // 0..1 while charging
@@ -349,8 +353,29 @@ namespace fp
 		struct Watcher
 		{
 			RE::TESFormID id{ 0 };
-			float         left{ 0.0f };  // seconds before they go back to their own business
+			float         left{ 0.0f };     // seconds before they go back to their own business
+			bool          offered{ false };  // asked you for a game already (or decided not to)
 		};
+		// Someone hanging round the table asking you for a game ([Opponent] bOffers): F at that table plays them
+		RE::TESFormID                         _offerID{ 0 };
+		RE::ObjectRefHandle                   _offerTable;
+		std::chrono::steady_clock::time_point _offerUntil{};
+		std::chrono::steady_clock::time_point _lastOffer{};
+		RE::Actor*                            Offerer(RE::TESObjectREFR* a_table) const;  // still asking, at this table
+		// F on a table with people by it: a list, Solo first, to pick who to play (arrow keys, F)
+		struct Pick
+		{
+			RE::ObjectRefHandle              table;
+			std::vector<RE::ObjectRefHandle> who;  // [0] empty: Solo
+			std::vector<std::string>         names;
+			int                              sel{ 0 };
+			std::chrono::steady_clock::time_point touched{};
+		};
+		std::optional<Pick>        _pick;
+		std::array<bool, 2>        _arrowWasDown{};
+		std::vector<RE::Actor*>    PlayersNear(RE::TESObjectREFR* a_table) const;  // who you could play at it
+		void                       MovePick(int a_by);
+		void                       ClosePick();
 		std::vector<Watcher> _watchers;
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
