@@ -5,22 +5,46 @@ other mods give settlers. The F4SE plugin calls Join and Leave and sets the link
 
 ReferenceAlias Property Opponent Auto Const Mandatory
 
-; puts them in the alias; true if the alias holds them afterwards
-Bool Function Join(Actor akActor)
+; puts them in the alias. Returns "in ..." if the alias holds them afterwards, otherwise "NOT in ..." with what
+; it found, for fo4pool.log. If the first ForceRefTo doesn't take, the quest is restarted and it's tried again.
+String Function Join(Actor akActor)
 	if akActor == None
-		return False
+		return "NOT in: no actor"
 	endif
+	String before = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
 	if !IsRunning()
-		Start()
-		Int tries = 0
-		while IsStarting() && tries < 50
-			Utility.Wait(0.1)
-			tries += 1
-		endwhile
+		StartAndWait()
 	endif
 	Opponent.ForceRefTo(akActor)
-	akActor.EvaluatePackage()
-	return Opponent.GetActorReference() == akActor
+	if Opponent.GetActorReference() == akActor
+		akActor.EvaluatePackage()
+		return "in (" + before + ")"
+	endif
+	String first = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
+	; a fresh start of the quest, then again
+	Stop()
+	Int tries = 0
+	while IsStopping() && tries < 50
+		Utility.Wait(0.1)
+		tries += 1
+	endwhile
+	StartAndWait()
+	Opponent.ForceRefTo(akActor)
+	String second = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
+	if Opponent.GetActorReference() == akActor
+		akActor.EvaluatePackage()
+		return "in, after restarting the quest (before: " + before + "; first ForceRefTo: " + first + ")"
+	endif
+	return "NOT in (before: " + before + "; first ForceRefTo: " + first + "; after a restart: " + second + "; dead " + akActor.IsDead() + ", disabled " + akActor.IsDisabled() + ")"
+EndFunction
+
+Function StartAndWait()
+	Start()
+	Int tries = 0
+	while IsStarting() && tries < 50
+		Utility.Wait(0.1)
+		tries += 1
+	endwhile
 EndFunction
 
 ; a walk with the alias package: the package goes to their linked ref. It's taken off first and the package

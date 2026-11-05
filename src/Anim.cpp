@@ -147,6 +147,7 @@ namespace fp::Anim
 
 		bool                       g_ownWarned{ false };
 		std::atomic<std::uint32_t> g_joined{ 0 };  // the actor the Opponent alias holds, as the quest script says
+		std::atomic<bool>          g_joining{ false };  // a Join is on its way (one at a time: it may restart the quest)
 
 		// fo4poolOpponentQuest.Join returns whether the alias holds them now (sets g_joined)
 		class JoinDone final : public RE::BSScript::IStackCallbackFunctor
@@ -158,13 +159,27 @@ namespace fp::Anim
 			{}
 
 			void CallQueued() override {}
-			void CallCanceled() override { log::warn("papyrus {}: canceled (is fo4poolOpponentQuest.pex installed?)", _what); }
+			void CallCanceled() override
+			{
+				log::warn("papyrus {}: canceled (is fo4poolOpponentQuest.pex installed?)", _what);
+				g_joining = false;
+			}
 			void StartMultiDispatch() override {}
 			void EndMultiDispatch() override {}
 			void operator()(RE::BSScript::Variable a_result) override
 			{
-				const bool held = a_result.is<bool>() && RE::BSScript::get<bool>(a_result);
-				log::info("papyrus {} -> {}", _what, held ? "in the alias" : "NOT in the alias");
+				// "in ..." / "NOT in ..." with what the script saw (an old script returns a bool)
+				std::string text;
+				bool        held = false;
+				if (a_result.is<RE::BSFixedString>()) {
+					text = RE::BSScript::get<RE::BSFixedString>(a_result).c_str();
+					held = text.starts_with("in");
+				} else if (a_result.is<bool>()) {
+					held = RE::BSScript::get<bool>(a_result);
+					text = held ? "in the alias" : "NOT in the alias";
+				}
+				log::info("papyrus {} -> {}", _what, text);
+				g_joining = false;
 				if (held) {
 					g_joined = _formID;
 				}
@@ -255,9 +270,14 @@ namespace fp::Anim
 		}
 		// fo4poolOpponentQuest.Join: starts the quest if it isn't running, ForceRefTo, EvaluatePackage; says whether
 		// the alias holds them
+		if (g_joining.exchange(true)) {
+			return;  // the last one hasn't answered yet
+		}
 		const std::string what = What(a_actor, "fo4poolOpponentQuest.Join");
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> done{ new JoinDone(what, a_actor->GetFormID()) };
-		CallQuest("Join", what, done, a_actor);
+		if (!CallQuest("Join", what, done, a_actor)) {
+			g_joining = false;
+		}
 	}
 
 	bool InOwnPackage(RE::Actor* a_actor)
