@@ -167,8 +167,9 @@ namespace fp
 		static void PrepareStick(RE::TESObjectREFR* a_ref);  // once its 3D is in: hides the blood overlay
 		// the opponent's own cue: in their hands on a shot (butt in the right, shaft over the left bridge), upright with
 		// its butt on the floor while they wait (in the right hand); false = no hands found
-		bool  PlaceStickInHands(RE::Actor* a_actor, RE::NiPoint3* a_tip = nullptr, RE::NiPoint3* a_dir = nullptr);
-		void  AlignCueToBall(RE::Actor* a_actor, const Frame& a_frame, float a_dt);  // turn/slide them so the cue points at the cue ball
+		// a_onShot: the cue pivots in the grip hand (by _npcCueBlend) so its tip is on the line through the middle of
+		// the cue ball, whatever their body does to where the hands put it
+		bool  PlaceStickInHands(RE::Actor* a_actor, bool a_onShot = false);
 		bool  PlaceStickUpright(RE::Actor* a_actor);
 		void  HideOpponentStick();
 		void  HideAimObjects();
@@ -293,12 +294,8 @@ namespace fp
 		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
 		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
 		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
-		RE::NiPoint3        _npcAlignTip;             // AlignCueToBall: the cue tip and direction summed over a few frames
-		RE::NiPoint3        _npcAlignDir;
-		int                 _npcAlignSamples{ 0 };
-		int                 _npcAligns{ 0 };          // corrections made this shot
-		bool                _npcAligned{ false };     // the cue's on the ball: no more corrections this shot
-		float               _npcAlignWait{ 0.0f };    // after a correction: seconds before measuring again (it takes a moment)
+		float               _npcCueBlend{ 0.0f };     // 0..1: how much of the cue's turn onto the ball's line is applied (eased in)
+		bool                _npcCueLogged{ false };   // logged how far the hands put the cue off the line, this shot
 		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
 		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)
