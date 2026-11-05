@@ -139,7 +139,8 @@ namespace
 			std::mt19937 rng(11 + g);
 			AiParams     p;
 			p.skill = 0.8;
-			p.stanceBack = 66.1;
+			p.stanceBack = 77.0;  // the opponent's stance (Opponent.cpp kStanceBack)
+			p.railClear = 20.0;   // and the cue clear of the rail behind the cue ball
 			for (int n = 0; n < 300 && !rules.Over(); ++n) {
 				const auto shot = ChooseShot(sim, rules, rules.Shooter(), p, rng);
 				if (!rules.IsBreak()) {
@@ -160,7 +161,7 @@ namespace
 			Check(rules.Over(), "a reach-limited game still finishes");
 		}
 		std::printf("    %d shots: %d pots (%d out of reach), %d safeties (%d out of reach)\n", shots, pots, potsOver, safeties, safetiesOver);
-		Check(potsOver == 0, "no pot needs them to lean across the table");
+		Check(potsOver == 0, "no pot needs them to lean across the table or cue through the rail");
 	}
 }
 

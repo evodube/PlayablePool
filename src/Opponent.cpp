@@ -30,6 +30,7 @@ namespace fp
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
 		constexpr float kThinkSeconds = 0.8f;    // after the balls stop, before they set off
 		constexpr float kArrivedDistance = 30.0f;
+		constexpr float kRailClear = 20.0f;      // the cue ball this far from the cushion behind it, or the cue goes through the rail
 		constexpr float kTableMargin = 22.0f;    // the rails and some room for the body, beyond the felt
 		constexpr float kQuitDistance = 4000.0f; // the opponent is this far from the table: the game's off
 		constexpr float kWatchDistance = 1500.0f;
@@ -627,6 +628,7 @@ namespace fp
 		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)
 		p.stanceBack = kStanceBack / std::max(0.01f, a_frame.scale);
 		p.tableMargin = kTableMargin;
+		p.railClear = kRailClear;  // and the cue (sloping down to the ball) clear of the rail behind the cue ball
 		_npcShot = pool::ChooseShot(*_sim, _rules, 1, p, _npcRng);
 		if (const double over = pool::Overreach(*_sim, _npcShot.placeCue ? _npcShot.cuePos : _sim->Balls()[0].pos, _npcShot.dir, p); over > p.reachSlack) {
 			log::info("{}: no shot they can stand behind from here; this one needs {:.0f} more reach", _opponentName, over);

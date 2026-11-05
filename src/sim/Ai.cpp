@@ -35,7 +35,7 @@ namespace pool
 
 		bool Reachable(const Sim& a_sim, Vec2 a_cue, Vec2 a_dir, const AiParams& a_p)
 		{
-			return a_p.stanceBack <= 0.0 || Overreach(a_sim, a_cue, a_dir, a_p) <= a_p.reachSlack;
+			return (a_p.stanceBack <= 0.0 && a_p.railClear <= 0.0) || Overreach(a_sim, a_cue, a_dir, a_p) <= a_p.reachSlack;
 		}
 
 		bool OnTable(const Sim& a_sim, int a_index)
@@ -196,7 +196,7 @@ namespace pool
 					if (!pred.hitBall || pred.ball != t) {
 						continue;
 					}
-					const double over = a_p.stanceBack > 0.0 ? std::max(0.0, Overreach(a_sim, cue, dir, a_p) - a_p.reachSlack) : 0.0;
+					const double over = a_p.stanceBack > 0.0 || a_p.railClear > 0.0 ? std::max(0.0, Overreach(a_sim, cue, dir, a_p) - a_p.reachSlack) : 0.0;
 					const double cost = pred.distance + over * 1000.0;
 					if (cost < bestCost) {
 						bestCost = cost;
@@ -288,10 +288,23 @@ namespace pool
 
 	double Overreach(const Sim& a_sim, Vec2 a_cue, Vec2 a_dir, const AiParams& a_params)
 	{
-		if (a_params.stanceBack <= 0.0) {
+		if (a_params.stanceBack <= 0.0 && a_params.railClear <= 0.0) {
 			return 0.0;
 		}
 		const auto&  spec = a_sim.Spec();
+		const Vec2   u = Unit(a_dir);
+		// how far back along the shot the felt's edge is from the cue ball
+		double edge = 1e9;
+		if (std::abs(u.x) > 1e-9) {
+			edge = std::min(edge, ((u.x > 0 ? a_cue.x + spec.length * 0.5 : spec.length * 0.5 - a_cue.x)) / std::abs(u.x));
+		}
+		if (std::abs(u.y) > 1e-9) {
+			edge = std::min(edge, ((u.y > 0 ? a_cue.y + spec.width * 0.5 : spec.width * 0.5 - a_cue.y)) / std::abs(u.y));
+		}
+		const double railShort = a_params.railClear > 0.0 ? std::max(0.0, a_params.railClear - edge) : 0.0;
+		if (a_params.stanceBack <= 0.0) {
+			return railShort;
+		}
 		const double hx = spec.length * 0.5 + a_params.tableMargin;
 		const double hy = spec.width * 0.5 + a_params.tableMargin;
 		const Vec2   d = Unit(a_dir);
@@ -303,7 +316,7 @@ namespace pool
 		while (inside(back) && back < a_params.stanceBack + 600.0) {
 			back += 1.0;
 		}
-		return back - a_params.stanceBack;
+		return back - a_params.stanceBack + railShort;
 	}
 
 	AiShot BestShot(const Sim& a_sim, const Rules& a_rules, int a_player, const AiParams& a_params)
