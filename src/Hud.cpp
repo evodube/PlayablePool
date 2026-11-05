@@ -322,7 +322,7 @@ namespace fp::Hud
 				sub = a_st.breakShot ? "BREAK" : a_st.ballInHand ? "BALL IN HAND" : a_st.onEight ? "SHOOTING THE 8" : std::format("{} TO GO", a_st.remaining[0]);
 			} else {
 				title = a_st.shooter == 0 ? std::string("YOUR SHOT")
-				                          : a_st.opponent.empty() ? std::string("THEIR SHOT") : OpponentLabel(a_st, 10) + "'S SHOT";
+				                          : a_st.opponent.empty() ? std::string("THEIR SHOT") : OpponentLabel(a_st, 20) + "'S SHOT";
 				const char* group = a_st.group[a_st.shooter] == 1 ? "SOLIDS" : a_st.group[a_st.shooter] == 2 ? "STRIPES" : "";
 				if (a_st.breakShot) {
 					sub = "BREAK";
@@ -336,7 +336,13 @@ namespace fp::Hud
 					sub = "OPEN TABLE";
 				}
 			}
-			Print(a_v, Title(), title, x + 150, y + 10, 30, kGreen.bright, kGreen.glow, 3.0f, Align::kCentre);
+			// a long name is drawn smaller, so it stays inside the tag: nothing wider than "HEATHER'S SHOT" at full size
+			float size = 30.0f;
+			const float kFits = TextWidth(Title(), "HEATHER'S SHOT", 30.0f, 3.0f);
+			if (const float w = TextWidth(Title(), title, 30.0f, 3.0f); w > kFits) {
+				size = std::max(14.0f, 30.0f * kFits / w);
+			}
+			Print(a_v, Title(), title, x + 150, y + 10 + (30.0f - size) * 0.5f, size, kGreen.bright, kGreen.glow, 3.0f * size / 30.0f, Align::kCentre);
 			Print(a_v, Mono(), sub, x + 150, y + 44, 13, kGreen.dim, 0, 1.0f, Align::kCentre);
 		}
 
