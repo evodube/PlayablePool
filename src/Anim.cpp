@@ -148,6 +148,45 @@ namespace fp::Anim
 		bool                       g_ownWarned{ false };
 		std::atomic<std::uint32_t> g_joined{ 0 };  // the actor the Opponent alias holds, as the quest script says
 		std::atomic<bool>          g_joining{ false };  // a Join is on its way (one at a time: it may restart the quest)
+		std::atomic<bool>          g_diagnose{ false };  // a Join didn't take: log what the quest looks like
+		bool                       g_diagnosed{ false };
+
+		// What fo4poolOpponent looks like from here: running, its alias, its script object and the Opponent property
+		void DiagnoseQuest()
+		{
+			auto* quest = OwnQuest();
+			if (!quest) {
+				log::warn("quest check: fo4poolOpponent not found");
+				return;
+			}
+			std::string alias = "no aliases";
+			if (!quest->aliases.empty() && quest->aliases[0]) {
+				auto* a = quest->aliases[0];
+				auto* ref = a->GetVMTypeID() == RE::BGSRefAlias::TYPE_ID ? static_cast<RE::BGSRefAlias*>(a)->GetReference() : nullptr;
+				alias = std::format("alias 0 '{}' type {} flags {:X} fill type {} holds {}", a->aliasName.c_str(), static_cast<int>(a->GetVMTypeID()),
+					static_cast<std::uint32_t>(a->flags.get()), a->fillType, ref ? std::format("{:08X}", ref->GetFormID()) : std::string("nobody"));
+			}
+			std::string script = "no VM";
+			if (auto* game = RE::GameVM::GetSingleton(); game && game->GetVM()) {
+				auto        vm = game->GetVM();
+				auto&       handles = vm->GetObjectHandlePolicy();
+				const auto  handle = handles.GetHandleForObject(RE::BSScript::GetVMTypeID<RE::TESQuest>(), quest);
+				RE::BSTSmartPointer<RE::BSScript::Object> object;
+				const bool  found = vm->FindBoundObject(handle, "fo4poolOpponentQuest", false, object, false) && object;
+				std::string prop = "-";
+				if (found) {
+					if (auto* v = object->GetProperty(RE::BSFixedString{ "Opponent" })) {
+						prop = v->is<RE::BSScript::Object>() ? (RE::BSScript::get<RE::BSScript::Object>(*v) ? std::format("an object (handle {:X})", RE::BSScript::get<RE::BSScript::Object>(*v)->GetHandle()) : std::string("None")) :
+						       v->is<std::nullptr_t>()            ? std::string("None") :
+						                                            std::string("not an object");
+					} else {
+						prop = "no such property";
+					}
+				}
+				script = std::format("quest handle {:X}, fo4poolOpponentQuest bound {}, Opponent property {}", handle, found ? "yes" : "NO", prop);
+			}
+			log::warn("quest check: fo4poolOpponent active {} flags {:X} priority {} | {} | {}", quest->GetActive(), quest->data.flags, quest->data.priority, alias, script);
+		}
 
 		// fo4poolOpponentQuest.Join returns whether the alias holds them now (sets g_joined)
 		class JoinDone final : public RE::BSScript::IStackCallbackFunctor
@@ -177,6 +216,14 @@ namespace fp::Anim
 				} else if (a_result.is<bool>()) {
 					held = RE::BSScript::get<bool>(a_result);
 					text = held ? "in the alias" : "NOT in the alias";
+				} else {
+					text = a_result.is<std::nullptr_t>() ? "None (the call failed before Join ran?)" : "something else";
+				}
+				if (text.empty()) {
+					text = "\"\" (Join didn't run to the end: an empty string is what a failed call returns)";
+				}
+				if (!held) {
+					g_diagnose = true;  // the plugin looks at the quest on the next walk (main thread)
 				}
 				log::info("papyrus {} -> {}", _what, text);
 				g_joining = false;
@@ -258,6 +305,10 @@ namespace fp::Anim
 
 	void JoinOwnPackage(RE::Actor* a_actor)
 	{
+		if (g_diagnose.exchange(false) && !g_diagnosed) {
+			g_diagnosed = true;
+			DiagnoseQuest();
+		}
 		if (!a_actor || !Settings::Get().opponentOwnPackage || g_joined == a_actor->GetFormID()) {
 			return;
 		}

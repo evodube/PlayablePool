@@ -11,6 +11,7 @@ String Function Join(Actor akActor)
 	if akActor == None
 		return "NOT in: no actor"
 	endif
+	Debug.Trace("fo4pool: Join " + akActor + ", Opponent property " + Opponent)
 	String before = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
 	if !IsRunning()
 		StartAndWait()
