@@ -23,6 +23,27 @@ Bool Function Join(Actor akActor)
 	return Opponent.GetActorReference() == akActor
 EndFunction
 
+; a walk with the alias package: the package goes to their linked ref. It's taken off first and the package
+; looked at again, so a Travel that already finished (at the last spot) starts over for the new one instead of
+; staying done where it was. abReset: reset their AI too (a walk that isn't getting going)
+Function Walk(Actor akActor, ObjectReference akTarget, Keyword akLink, Bool abReset)
+	if akActor == None || akTarget == None || akLink == None
+		return
+	endif
+	akActor.SetLinkedRef(None, akLink)
+	akActor.EvaluatePackage()
+	akActor.SetLinkedRef(akTarget, akLink)
+	akActor.EvaluatePackage(abReset)
+EndFunction
+
+; there: no destination, so the Travel package doesn't keep stepping and turning them on the spot
+Function Arrived(Actor akActor, Keyword akLink)
+	if akActor && akLink
+		akActor.SetLinkedRef(None, akLink)
+		akActor.EvaluatePackage()
+	endif
+EndFunction
+
 ; out of the alias: their own AI again
 Function Leave()
 	Actor current = Opponent.GetActorReference()

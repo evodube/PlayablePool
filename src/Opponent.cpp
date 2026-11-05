@@ -43,6 +43,7 @@ namespace fp
 		constexpr float kBridgeLift = 3.0f;      // the cue rests this far above the bridge hand's thumb-index V (clear of the knuckles)
 		constexpr float kWaitRadius = 80.0f;     // further from the wait spot than this: back they go
 		constexpr float kRepathSeconds = 12.0f;  // the same walk isn't re-sent sooner than this while it's making progress
+		constexpr float kNotStartedSeconds = 1.5f;  // a walk they haven't set off on in this long is sent again (AI reset)
 		constexpr float kStallSeconds = 4.0f;    // ...but is, once they've gone this long without getting closer (going round the table can take a while)
 		constexpr float kProgress = 10.0f;       // closer by this much counts as progress
 		constexpr float kWaitBeyondRail = 55.0f; // the first wait spot: this far outside the felt, on their side
@@ -238,6 +239,8 @@ namespace fp
 			why = std::format("PathToReference says they got there, but they're {:.0f} away", d);
 		} else if (d > _npcBestDist + kStrayed) {
 			why = std::format("they've wandered off ({:.0f} away, got to {:.0f})", d, _npcBestDist);
+		} else if (_npcStall >= kNotStartedSeconds && Distance2D(a_actor->data.location, _npcWalkFrom) < 5.0f) {
+			why = std::format("they haven't set off in {:.1f} s ({:.0f} away)", _npcStall, d);
 		} else if (_npcStall >= kStallSeconds) {
 			why = std::format("no closer in {:.0f} s ({:.0f} away)", _npcStall, d);
 		}
@@ -343,8 +346,9 @@ namespace fp
 			Distance2D(a_actor->data.location, target->data.location), again ? ", again" : "", NavmeshAt(target->data.location),
 			NavmeshAt(a_actor->data.location));
 		_npcPathAge = 0.0f;
+		_npcWalkFrom = a_actor->data.location;
 		Anim::JoinOwnPackage(a_actor);  // if they aren't in the Opponent alias yet; this walk may still be PathToReference
-		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun);
+		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun, again);
 	}
 
 	void Game::OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look)
@@ -965,6 +969,11 @@ namespace fp
 				if (marker) {
 					Anim::MoveTo(actor, marker.get());  // exactly on the spot, facing the shot
 				}
+				// and kept there, facing the shot, from now: the walk package's destination comes off (or it keeps
+				// stepping and turning them about the spot), the hold goes on, and the heading is set every frame
+				Anim::Arrived(actor);
+				HoldOpponent(actor, true);
+				actor->SetHeading(_npcHeading);
 				Anim::SetHeadTracking(actor, false);  // eyes on the shot, not on whoever walks by
 				_npcStep = NpcStep::kAiming;
 				_npcTimer = 0.0f;
@@ -972,13 +981,10 @@ namespace fp
 			}
 
 		case NpcStep::kAiming:
+			KeepFacingShot(actor);  // from the moment they're on the spot, before the aim starts
 			if (_npcTimer >= kSettleSeconds && _npcTimer - a_dt < kSettleSeconds) {
-				HoldOpponent(actor, true);  // nothing (their own package) turns or moves them off the shot now
-				actor->SetHeading(_npcHeading);
+				HoldOpponent(actor, true);  // (already on since they stepped onto the spot)
 				Anim::PlayAim(actor);
-			}
-			if (_npcTimer >= kSettleSeconds) {
-				KeepFacingShot(actor);
 			}
 			if (_npcTimer < kSettleSeconds || !PlaceStickInHands(actor)) {
 				HideOpponentStick();

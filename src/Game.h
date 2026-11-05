@@ -291,6 +291,7 @@ namespace fp
 		RE::ObjectRefHandle _npcApproach;        // where they walk to for a shot: clear of the table, by the spot
 		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
 		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
+		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
 		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
 		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)

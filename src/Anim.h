@@ -11,7 +11,10 @@ namespace fp::Anim
 
 	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once with an id for the walk (0 =
 	// couldn't send it); the walk goes on.
-	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun);
+	// a_again: the same walk sent again because it isn't getting going (the own package then resets their AI too).
+	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun, bool a_again = false);
+	// On the spot: the own package's destination comes off, so it doesn't keep stepping and turning them.
+	void Arrived(RE::Actor* a_actor);
 	// How that walk ended: -1 not yet (or unknown), 0 it failed (no path, or it was cut short), 1 they got there.
 	int PathResult(std::uint32_t a_id);
 

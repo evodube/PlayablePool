@@ -286,7 +286,18 @@ namespace fp::Anim
 		CallQuest("Leave", what, logged);  // Clear, then EvaluatePackage: their own AI again
 	}
 
-	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun)
+	void Arrived(RE::Actor* a_actor)
+	{
+		auto* keyword = LinkKeyword();
+		if (!InOwnPackage(a_actor) || !keyword) {
+			return;
+		}
+		const std::string what = What(a_actor, "fo4poolOpponentQuest.Arrived");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuest("Arrived", what, logged, a_actor, keyword);
+	}
+
+	std::uint32_t PathTo(RE::Actor* a_actor, RE::TESObjectREFR* a_target, float a_walkRun, bool a_again)
 	{
 		std::uint32_t id = ++g_pathId;
 		if (id == 0) {
@@ -298,9 +309,12 @@ namespace fp::Anim
 		// distance
 		if (InOwnPackage(a_actor)) {
 			if (auto* keyword = LinkKeyword(); keyword && a_target) {
-				a_actor->SetLinkedRef(a_target, keyword);
-				log::info("{}: fo4poolWalkToSpot to {:08X} (walk {})", What(a_actor, "package"), a_target->GetFormID(), id);
-				CallActor(a_actor, "EvaluatePackage", false);
+				// in the quest script: linked ref off, look at packages, linked ref on the target, look again (and
+				// reset their AI if this walk is being sent again), so the Travel starts over for the new spot
+				const std::string what = std::format("{} to {:08X} (walk {}{})", What(a_actor, "fo4poolOpponentQuest.Walk"), a_target->GetFormID(), id,
+					a_again ? ", AI reset" : "");
+				const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+				CallQuest("Walk", what, logged, a_actor, a_target, keyword, a_again);
 				return id;
 			}
 		}
