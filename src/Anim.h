@@ -5,7 +5,7 @@
 namespace fp::Anim
 {
 	bool PlayAim(RE::Actor* a_actor, int a_variant = 0);   // PoolAim (1: PoolAim2): lined up over the table, loops
-	bool PlayStrike(RE::Actor* a_actor);  // PoolStrike: the cue reaches the ball on frame 35
+	bool PlayStrike(RE::Actor* a_actor, int a_variant = 0);  // PoolStrike (1: PoolStrike2, after PoolAim2)  // PoolStrike: the cue reaches the ball on frame 35
 	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
 

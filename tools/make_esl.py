@@ -19,6 +19,7 @@ Form IDs (what fo4pool.ini expects by default):
     xx000817        keyword fo4poolLinkPoolTable (a watcher's linked ref: the table they hang round)
     xx000819        idle fo4poolAim2    Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolAim2.hkx  (another aim, picked at random)
     xx00081A        idle fo4poolWait2   Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolWait2.hkx (another wait, picked at random)
+    xx00081B        idle fo4poolStrike2 Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike2.hkx (the strike that follows PoolAim2)
     xx000818        package fo4poolWatchTable    (Travel to that linked ref, facing it: a spot the plugin picks, 100 out
                                                  from the felt, turned to face the table; they stand there watching)
 
@@ -250,6 +251,7 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 19), "fo4poolWait", ANIM_DIR + "PoolWait.hkx"),
         idle(own | (FIRST_ID + 25), "fo4poolAim2", ANIM_DIR + "PoolAim2.hkx"),
         idle(own | (FIRST_ID + 26), "fo4poolWait2", ANIM_DIR + "PoolWait2.hkx"),
+        idle(own | (FIRST_ID + 27), "fo4poolStrike2", ANIM_DIR + "PoolStrike2.hkx"),
     ]
 
     link = own | (FIRST_ID + 20)
@@ -265,7 +267,7 @@ def build(with_stick: bool) -> bytes:
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 27))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 28))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))

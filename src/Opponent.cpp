@@ -1414,7 +1414,8 @@ namespace fp
 					log::info("{}: {:.1f} off the spot before the aim: put on it", _opponentName, off);
 					Anim::SetPosition(actor, RE::NiPoint3{ _npcStance.x, _npcStance.y, actor->data.location.z });
 				}
-				Anim::PlayAim(actor, std::uniform_int_distribution<int>(0, 1)(_npcRng));  // one of the two aims, at random
+				_npcAimVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);  // one of the two aims, at random
+				Anim::PlayAim(actor, _npcAimVariant);
 			}
 			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
 				GlideOntoLine(actor, a_frame, a_dt);  // also places the stick
@@ -1422,7 +1423,7 @@ namespace fp
 				HideOpponentStick();  // (carried in the hand while they settle onto the spot)
 			}
 			if (_npcTimer >= kSettleSeconds + s.opponentAimSeconds) {
-				Anim::PlayStrike(actor);
+				Anim::PlayStrike(actor, _npcAimVariant);  // the strike that goes with their aim
 				_npcStep = NpcStep::kStriking;
 				_npcTimer = 0.0f;
 			}

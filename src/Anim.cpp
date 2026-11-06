@@ -309,8 +309,11 @@ namespace fp::Anim
 		return Play(a_actor, Settings::Get().animAimFormID, "PoolAim");
 	}
 
-	bool PlayStrike(RE::Actor* a_actor)
+	bool PlayStrike(RE::Actor* a_actor, int a_variant)
 	{
+		if (a_variant == 1) {
+			return Play(a_actor, Settings::Get().animStrike2FormID, "PoolStrike2");
+		}
 		return Play(a_actor, Settings::Get().animStrikeFormID, "PoolStrike");
 	}
 

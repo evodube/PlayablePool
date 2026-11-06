@@ -57,3 +57,17 @@ They're played by the NPC opponent (`src/Opponent.cpp`, `src/Anim.cpp`): on thei
 PoolAim for `[Opponent] fAimSeconds`, then PoolStrike, and the cue ball is struck 35 frames into it. When the cue
 ball is far from the rail the stance would be over the table, so they stand back at the rail instead and the clip's
 reach falls short of the ball.
+
+## PoolAim2 / PoolStrike2 / PoolWait2
+
+From the user's two posed clips (aim2, poseidle2), animated in `pool_anims_v3.blend` (a copy of v2): each frame is the
+pose plus small rotations about the bones' heads in the armature's space.
+
+| Clip | File | Frames (30 fps) | What |
+|---|---|---|---|
+| PoolAim2 | PoolAim2.hkx | 120 (4 s), loops | the aim pose; two soft practice strokes (the right forearm swings from the elbow, the hand ~2.7 back), a breath, a small nod; the bridge hand moves < 0.15 |
+| PoolStrike2 | PoolStrike2.hkx | 60 (2 s) | from PoolAim2's frame 1: settle, backswing ~7, pause, accelerating stroke, **contact on frame 35**, follow-through ~6, beginning to rise |
+| PoolWait2 | PoolWait2.hkx | 180 (6 s), loops | the lean on the table; two breaths, a slow side-to-side sway, the head looking about; the hands move < 0.6 |
+
+Exported with PyNifly (FO4, 30 fps, the vanilla skeleton.hkx); re-imported within 0.02 units. The originals' "WeaponDraw"
+annotation isn't in these. Each NPC shot picks PoolAim or PoolAim2 at random and then plays the matching strike.
