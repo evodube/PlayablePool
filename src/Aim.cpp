@@ -16,6 +16,8 @@ namespace fp
 	{
 		constexpr float kDegToRad = 0.017453292f;
 		constexpr float kOverheadPitch = 89.0f * kDegToRad;
+		constexpr float kCeilingGap = 25.0f;    // the top view stays this far under a ceiling
+		constexpr float kMinOverhead = 120.0f;  // lower than this above the felt and it shows too little of the table: no top view
 		constexpr float kStrikeShowSeconds = 0.15f;
 		constexpr std::size_t kMaxDots = 96;
 
@@ -118,6 +120,27 @@ namespace fp
 		}
 	}
 
+	float Game::CeilingAbove(const Frame& a_frame, float a_upTo) const
+	{
+		// straight up from the middle of the felt (from a little above it, clear of the table itself) to the first
+		// thing in the way: how high the room goes, or a_upTo if nothing's there
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* cell = player ? player->GetParentCell() : nullptr;
+		if (!cell) {
+			return a_upTo;
+		}
+		constexpr float    kFrom = 15.0f;
+		const RE::NiPoint3 start = ToWorld(a_frame, { 0.0, 0.0 }, kFrom);
+		const RE::NiPoint3 end = start + RE::NiPoint3{ 0.0f, 0.0f, a_upTo - kFrom };
+		RE::bhkPickData    pick;
+		pick.SetStartEnd(start, end);
+		cell->Pick(pick);
+		if (!pick.HasHit()) {
+			return a_upTo;
+		}
+		return kFrom + (a_upTo - kFrom) * std::clamp(pick.GetHitFraction(), 0.0f, 1.0f);
+	}
+
 	void Game::EnterAim()
 	{
 		if (_bgTick) {
@@ -172,6 +195,19 @@ namespace fp
 			const float skill = _opponent && !_npcGame && Opponent() ? SkillOf(Opponent()->GetFormID()) : 0.0f;
 			_noOverhead = skill > 50.5f;
 			_noGuide = skill > 74.5f;
+		}
+		// a ceiling over the table (indoors, or a roof): the top view comes down to just under it, or, if that's too
+		// low to see the table from, there's no top view
+		{
+			const float want = Settings::Get().overheadHeight;
+			const float room = CeilingAbove(frame, want + 60.0f);
+			_overheadCap = std::min(want, room - kCeilingGap);
+			if (room - kCeilingGap < kMinOverhead) {
+				_noOverhead = true;
+			}
+			if (room < want + 60.0f) {
+				log::info("a ceiling {:.0f} above the felt: top view at {:.0f}{}", room, _overheadCap.load(), room - kCeilingGap < kMinOverhead ? " (too low: none)" : "");
+			}
 		}
 		_aiming = true;
 		BlockControls(true);
@@ -463,7 +499,7 @@ namespace fp
 		const float pitch = _pitchSign * (_yawIndex == 0 ? a_free->rotation.y : a_free->rotation.x);
 		if (_overhead) {
 			// top-down: right above the middle of the table, whichever way it's turned
-			a_out = _camTarget + RE::NiPoint3{ 0.0f, 0.0f, s.overheadHeight };
+			a_out = _camTarget + RE::NiPoint3{ 0.0f, 0.0f, std::max(40.0f, std::min(s.overheadHeight, _overheadCap.load())) };
 			return true;
 		}
 		const RE::NiPoint3 forward{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };

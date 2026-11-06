@@ -355,6 +355,7 @@ namespace fp
 		void  EnterAim();
 		void  ExitAim();
 		void  ToggleOverhead();
+		float CeilingAbove(const Frame& a_frame, float a_upTo) const;
 		void  SetTableCollision(bool a_on);
 		// a point in table space (felt units) and whether it's within a_beyond of the felt; and the nearest point
 		// a_beyond out from it if so (else the point itself)
@@ -492,6 +493,7 @@ namespace fp
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _noOverhead{ false };  // this aim: no top view (playing a SEMI-PRO or PRO)
 		std::atomic<bool>          _noGuide{ false };     // this aim: no guide line (playing a PRO)
+		std::atomic<float>         _overheadCap{ 100000.0f };  // this table: the top view no higher than this above the felt (a ceiling)
 		std::atomic<bool>          _rolling{ false };
 		std::atomic<float>         _power{ 0.0f };     // 0..1 while charging
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
