@@ -285,10 +285,10 @@ def build(with_stick: bool) -> bytes:
     quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", walk, watch)]
 
     # the Pool Table Kit (0x837): sold at the Dugout Inn (the plugin adds it to Vadim's stock); used, a pool table in
-    # front of you. In the Pip-Boy it's the game's toolbox
+    # front of you. Its model (the Pip-Boy and barter previews) is the game's own pool table, with its bounds
     potions = [potion(own | (FIRST_ID + 55), "fo4poolTableKit", "Pool Table Kit",
                       "A folding pool table, balls and cues. Use it to set the table up in front of you; hold the activate key at it to pack it away again.",
-                      "SetDressing\\Toolbox\\ToolboxNotSkinned.nif", bytes.fromhex("f4ffe7ff00000b0019001600"), 350, 20.0)]
+                      "SetDressing\\PoolTable\\PoolTable01.nif", bytes.fromhex("b8ff80ff0000480080004b00"), 350, 20.0)]
 
     count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests) + len(potions)
     header = record(
