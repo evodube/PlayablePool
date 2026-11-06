@@ -136,6 +136,16 @@ namespace fp
 		float              SkillOf(RE::TESFormID a_id) const;  // 0-100
 		static const char* SkillName(float a_skill);           // BEGINNER, AMATEUR, SEMI-PRO, PRO
 		static void SaveRecords(const F4SE::SerializationInterface* a_intfc);
+		// the Pool Table Kit (Kit.cpp)
+		static void SetUpKit();     // game data ready: the Dugout Inn sells it; listen for it being used
+		void        StockKit();     // a save loaded / new game: one in the Dugout Inn's stock now (once a save)
+		void        PlaceKitTable();
+		void        PackUpTable(RE::TESObjectREFR* a_table);
+		static bool IsKitTable(const RE::TESObjectREFR* a_table);
+		static void SaveKit(const F4SE::SerializationInterface* a_intfc);
+		static void LoadKit(const F4SE::SerializationInterface* a_intfc, std::uint32_t a_version);
+		static void RevertKit();
+		static bool IsKitRecord(std::uint32_t a_type);
 		static void LoadRecords(const F4SE::SerializationInterface* a_intfc);
 		static void RevertRecords(const F4SE::SerializationInterface* a_intfc);
 		Record      RecordOf(RE::TESFormID a_id) const;

@@ -93,6 +93,23 @@ def idle(form_id: int, editor_id: str, anim_file: str, event: str = "dyn_Activat
     )
 
 
+def potion(form_id: int, editor_id: str, name: str, desc: str, mesh: str, bounds: bytes, value: int, weight: float) -> bytes:
+    """An Aid item with no effects: using it (from the Pip-Boy) is what the plugin listens for (TESEquipEvent)."""
+    return record(
+        b"ALCH",
+        0,
+        form_id,
+        subrecord(b"EDID", zstring(editor_id))
+        + subrecord(b"OBND", bounds)
+        + subrecord(b"FULL", zstring(name))
+        + subrecord(b"MODL", zstring(mesh))
+        + subrecord(b"DESC", zstring(desc))
+        + subrecord(b"DATA", struct.pack("<f", weight))
+        # value, flags (1: no auto-calc, the value as given), addiction (none), addiction chance, consume sound (none)
+        + subrecord(b"ENIT", struct.pack("<iIIfI", value, 1, 0, 0.0, 0)),
+    )
+
+
 def keyword(form_id: int, editor_id: str) -> bytes:
     # colour (white), type 0 (none): as vanilla link keywords (RELinkTravel)
     return record(
@@ -295,12 +312,18 @@ def build(with_stick: bool) -> bytes:
     packages = [travel_package(walk, "fo4poolWalkToSpot", link), travel_package(watch, "fo4poolWatchTable", table_link, 20)]
     quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", walk, watch)]
 
-    count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests)
+    # the Pool Table Kit (0x837): sold at the Dugout Inn (the plugin adds it to Vadim's stock); used, a pool table in
+    # front of you. In the Pip-Boy it's the game's toolbox
+    potions = [potion(own | (FIRST_ID + 55), "fo4poolTableKit", "Pool Table Kit",
+                      "A folding pool table, balls and cues. Use it to set the table up in front of you; hold the activate key at it to pack it away again.",
+                      "SetDressing\\Toolbox\\ToolboxNotSkinned.nif", bytes.fromhex("f4ffe7ff00000b0019001600"), 350, 20.0)]
+
+    count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests) + len(potions)
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 55))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 56))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
@@ -311,6 +334,7 @@ def build(with_stick: bool) -> bytes:
         header
         + group(b"KYWD", b"".join(keywords))
         + group(b"STAT", b"".join(stats))
+        + group(b"ALCH", b"".join(potions))
         + group(b"QUST", b"".join(quests))
         + group(b"IDLE", b"".join(idles))
         + group(b"PACK", b"".join(packages))

@@ -237,7 +237,8 @@ namespace fp
 							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 							prompt = std::format("{}) PLAY {} · {}", key, name, WantType() == 1 ? "9-BALL" : "8-BALL");
 						} else {
-							prompt = std::format("< {} >  {}) SOLO  ·  HOLD {}) 2 PLAYER", WantType() == 1 ? "9-BALL" : "8-BALL", key, key);
+							prompt = std::format("< {} >  {}) SOLO  ·  HOLD {}) {}", WantType() == 1 ? "9-BALL" : "8-BALL", key, key,
+								IsKitTable(table) ? "2 PLAYER / PACK UP" : "2 PLAYER");
 						}
 						canSwitch = true;  // left/right: the other game
 					} else if (_opponent && OpponentsTurn()) {
@@ -318,7 +319,9 @@ namespace fp
 			if (table && table == pick.table.get()) {
 				auto who = pick.who[pick.sel].get();
 				auto* actor = who ? who->As<RE::Actor>() : nullptr;
-				if (actor && !actor->IsDead(false) && !actor->IsDisabled()) {
+				if (who && who.get() == table.get()) {
+					PackUpTable(table.get());  // the list's last entry at a kit table
+				} else if (actor && !actor->IsDead(false) && !actor->IsDisabled()) {
 					log::info("picked {} ({:08X}) to play", actor->GetDisplayFullName(), actor->GetFormID());
 					Challenge(actor, table.get());
 				} else {
@@ -350,7 +353,8 @@ namespace fp
 		if (a_hold) {
 			// held: two players. A list of who's by the table to pick from
 			auto people = PlayersNear(table.get());
-			if (people.empty()) {
+			const bool kit = IsKitTable(table.get());
+			if (people.empty() && !kit) {
 				Notify(std::format("Pool: nobody's by the table to play. {} plays Solo", Settings::Key(_activateVk.load())));
 			} else {
 				Pick pick;
@@ -365,6 +369,10 @@ namespace fp
 					pick.who.push_back(a->GetHandle());
 					const float skill = SkillOf(a->GetFormID());
 					pick.names.push_back(std::format("{}   {}-{} · {}", name, r.wins, r.losses, SkillName(skill)));
+				}
+				if (kit) {
+					pick.who.push_back(table->GetHandle());  // a kit table: last, pack it back into its kit
+					pick.names.push_back("PACK UP THE TABLE");
 				}
 				if (!pick.names.empty()) {
 					pick.touched = std::chrono::steady_clock::now();
@@ -571,14 +579,20 @@ namespace fp
 			a_intfc->WriteRecordData(r.losses);
 			a_intfc->WriteRecordData(r.skill);
 		}
+		SaveKit(a_intfc);  // and the tables set up from kits
 	}
 
 	void Game::LoadRecords(const F4SE::SerializationInterface* a_intfc)
 	{
 		std::scoped_lock lock(g_recordsMutex);
 		g_records.clear();
+		RevertKit();
 		std::uint32_t type = 0, version = 0, length = 0;
 		while (a_intfc->GetNextRecordInfo(type, version, length)) {
+			if (IsKitRecord(type)) {
+				LoadKit(a_intfc, version);
+				continue;
+			}
 			if (type != kRecordsType || (version != 1 && version != kRecordsVersion)) {
 				continue;
 			}
@@ -605,6 +619,7 @@ namespace fp
 	{
 		std::scoped_lock lock(g_recordsMutex);
 		g_records.clear();
+		RevertKit();
 	}
 
 	// ---------------------------------------------------------------- loading screens
