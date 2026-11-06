@@ -348,7 +348,7 @@ namespace fp
 					const auto r = RecordOf(a->GetFormID());
 					pick.who.push_back(a->GetHandle());
 					const float skill = SkillOf(a->GetFormID());
-					pick.names.push_back(std::format("{}   {}-{} · {} {:.0f}", name, r.wins, r.losses, SkillName(skill), skill));
+					pick.names.push_back(std::format("{}   {}-{} · {}", name, r.wins, r.losses, SkillName(skill)));
 				}
 				if (!pick.names.empty()) {
 					pick.touched = std::chrono::steady_clock::now();
