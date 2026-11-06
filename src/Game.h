@@ -412,6 +412,7 @@ namespace fp
 		// Two NPCs playing each other ([Opponent] bNpcGames): both seats are NPCs. The seat being worked on is in the
 		// base class (_seatIdx); the other waits in _seats. Against you, it's always seat 1 (you're 0)
 		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack
+		std::atomic<bool>      _building{ false };        // the workshop menu is open: nothing of ours runs (no keys either)
 		std::chrono::steady_clock::time_point _lastNpcGame{};
 		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);

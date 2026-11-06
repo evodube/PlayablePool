@@ -73,7 +73,9 @@ namespace fp
 	void Game::PollKeys()
 	{
 		const HWND window = GameWindow();
-		if (window && ::GetForegroundWindow() != window) {
+		if ((window && ::GetForegroundWindow() != window) || _building.load()) {
+			_activateWasDown = false;  // (a press that started in build mode isn't ours on the way out)
+			_activateHeld = true;
 			return;
 		}
 		const auto&              s = Settings::Get();
@@ -1141,6 +1143,22 @@ namespace fp
 
 	void Game::Tick()
 	{
+		// build mode (the workshop menu): everything of ours stands still, so nothing (no NPC walk, no Papyrus call,
+		// no ball moved or spawned) happens while you build
+		auto*      ui = RE::UI::GetSingleton();
+		const bool building = ui && ui->GetMenuOpen(RE::BSFixedString("WorkshopMenu"));
+		if (building != _building.load()) {
+			_building = building;
+			log::info("build mode {}: pool {}", building ? "open" : "closed", building ? "paused" : "carries on");
+			if (building) {
+				std::scoped_lock lock(_hudMutex);
+				_hud.prompt.clear();
+				_hud.pick.clear();
+			}
+		}
+		if (building) {
+			return;
+		}
 		UpdateLook();
 		TickWatchers();
 		TickTable();
