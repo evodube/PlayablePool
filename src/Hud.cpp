@@ -315,7 +315,7 @@ namespace fp::Hud
 			}
 		}
 
-		void TurnTag(const View& a_v, const Game::HudState& a_st)
+		[[maybe_unused]] void TurnTag(const View& a_v, const Game::HudState& a_st)
 		{
 			const float x = a_v.w - 28.0f - 300.0f, y = 28.0f;
 			Panel(a_v, HudAtlas::k_tag, x, y);
@@ -622,7 +622,7 @@ namespace fp::Hud
 
 			Scoreboard(v, st);
 			Log(v, st);
-			TurnTag(v, st);
+			// (no turn tag: the scoreboard already marks whose shot it is)
 			if (st.aiming && !st.placing && !st.over) {
 				Meter(v, st);
 			}
