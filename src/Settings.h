@@ -57,7 +57,7 @@ namespace fp
 		bool          ballAutoScale{ true };  // scale the mesh so its size matches fRadius
 		float         ballScale{ 1.0f };      // used when bAutoScale=0
 		float         ballZOffset{ 0.0f };    // if the mesh's centre isn't the ball's centre
-		bool          glowOwn{ true };        // your group's balls glow a little (in hotseat: the shooter's)
+		bool          glowOwn{ false };       // off by default. On: your group's balls glow a little (in hotseat: the shooter's)
 		float         glowStrength{ 0.6f };   // how much
 
 		// [Shot] hold the left mouse button (the camera freezes), pull the mouse back for power, release to shoot
