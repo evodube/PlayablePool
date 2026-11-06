@@ -346,7 +346,8 @@ namespace fp
 					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 					const auto r = RecordOf(a->GetFormID());
 					pick.who.push_back(a->GetHandle());
-					pick.names.push_back(std::format("{}   {}-{}", name, r.wins, r.losses));
+					const float skill = SkillOf(a->GetFormID());
+					pick.names.push_back(std::format("{}   {}-{} · {} {:.0f}", name, r.wins, r.losses, SkillName(skill), skill));
 				}
 				if (!pick.names.empty()) {
 					pick.touched = std::chrono::steady_clock::now();
@@ -468,7 +469,7 @@ namespace fp
 		std::unordered_map<RE::TESFormID, Game::Record> g_records;
 		std::mutex                                     g_recordsMutex;
 		constexpr std::uint32_t                        kRecordsType = 0x52434453;  // 'RCDS'
-		constexpr std::uint32_t                        kRecordsVersion = 1;
+		constexpr std::uint32_t                        kRecordsVersion = 2;  // 2: and each NPC's skill
 		constexpr RE::TESFormID                        kPlayerID = 0x14;
 	}
 
@@ -477,6 +478,24 @@ namespace fp
 		std::scoped_lock lock(g_recordsMutex);
 		const auto       it = g_records.find(a_id);
 		return it == g_records.end() ? Record{} : it->second;
+	}
+
+	float Game::StartingSkill(RE::TESFormID a_id)
+	{
+		// everyone starts somewhere different: a beginner or an amateur, the same for the same NPC
+		const std::uint32_t h = (a_id * 2654435761u) >> 16;
+		return 10.0f + static_cast<float>(h % 31);
+	}
+
+	float Game::SkillOf(RE::TESFormID a_id) const
+	{
+		const auto r = RecordOf(a_id);
+		return r.skill >= 0.0f ? r.skill : StartingSkill(a_id);
+	}
+
+	const char* Game::SkillName(float a_skill)
+	{
+		return a_skill <= 25.5f ? "BEGINNER" : a_skill <= 50.5f ? "AMATEUR" : a_skill <= 74.5f ? "SEMI-PRO" : "PRO";
 	}
 
 	void Game::CountResult(int a_winner)
@@ -496,7 +515,15 @@ namespace fp
 			}
 			auto& r = g_records[ids[p]];
 			(p == a_winner ? r.wins : r.losses) += 1;
-			log::info("record: {} ({:08X}) {}-{}", PlayerName(p), ids[p], r.wins, r.losses);
+			if (ids[p] != kPlayerID) {
+				// every game makes them better, a win more so; slower the better they are
+				if (r.skill < 0.0f) {
+					r.skill = StartingSkill(ids[p]);
+				}
+				const float gain = (p == a_winner ? 4.0f : 2.0f) * (1.0f - r.skill / 125.0f);
+				r.skill = std::min(100.0f, r.skill + gain);
+			}
+			log::info("record: {} ({:08X}) {}-{}, skill {:.0f}", PlayerName(p), ids[p], r.wins, r.losses, r.skill);
 		}
 	}
 
@@ -512,6 +539,7 @@ namespace fp
 			a_intfc->WriteRecordData(id);
 			a_intfc->WriteRecordData(r.wins);
 			a_intfc->WriteRecordData(r.losses);
+			a_intfc->WriteRecordData(r.skill);
 		}
 	}
 
@@ -521,7 +549,7 @@ namespace fp
 		g_records.clear();
 		std::uint32_t type = 0, version = 0, length = 0;
 		while (a_intfc->GetNextRecordInfo(type, version, length)) {
-			if (type != kRecordsType || version != kRecordsVersion) {
+			if (type != kRecordsType || (version != 1 && version != kRecordsVersion)) {
 				continue;
 			}
 			std::uint32_t count = 0;
@@ -532,6 +560,9 @@ namespace fp
 				a_intfc->ReadRecordData(id);
 				a_intfc->ReadRecordData(r.wins);
 				a_intfc->ReadRecordData(r.losses);
+				if (version >= 2) {
+					a_intfc->ReadRecordData(r.skill);
+				}
 				if (const auto now = a_intfc->ResolveFormID(id)) {
 					g_records[*now] = r;  // (an NPC from a mod that's gone: dropped)
 				}
@@ -594,7 +625,7 @@ namespace fp
 		_watching = false;
 		_watchers.clear();
 		_watchersStale = true;
-		_watchTable = {};
+		_watchTables.clear();
 		_offerID = 0;
 		ClosePick();
 	}

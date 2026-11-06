@@ -53,7 +53,7 @@ namespace fp
 		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
-		constexpr float kWatchOut = 50.0f;   // watchers stand this far out from the felt's edge (and step aside from a shot)
+		constexpr float kWatchOut = 100.0f;   // watchers stand this far out from the felt's edge (and step aside from a shot)
 		constexpr float kStepAside = 90.0f;  // a watcher (or the NPC waiting their turn) this close to where a shot's taken from moves
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
 		constexpr float kStrayed = 400.0f;       // this much further than their best: their own package has them, send the walk again
@@ -337,7 +337,7 @@ namespace fp
 			_opponentName = "Player 2";
 		}
 		_nextBreaker = 0;  // you break the first rack
-		log::info("challenge: {} ({:08X}), skill {:.2f}", _opponentName, actor->GetFormID(), s.opponentSkill);
+		log::info("challenge: {} ({:08X}), skill {:.0f} ({})", _opponentName, actor->GetFormID(), SkillOf(actor->GetFormID()), SkillName(SkillOf(actor->GetFormID())));
 		if (!RerackInPlace()) {
 			Rack();
 		}
@@ -894,7 +894,8 @@ namespace fp
 	{
 		const auto&    s = Settings::Get();
 		pool::AiParams p;
-		p.skill = s.opponentSkill;
+		// their own skill (0-100, from how much they've played): a beginner misses a lot, a pro hardly ever
+		p.skill = std::clamp(0.2 + 0.78 * SkillOf(Opponent() ? Opponent()->GetFormID() : 0) / 100.0, 0.0, 1.0);
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;
 		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)
@@ -1541,6 +1542,21 @@ namespace fp
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
 				}
 				DropWatcher(w.id);
+			}
+		}
+		// those standing at their spot: turned to the table (their package faces the spot's marker, which faces it;
+		// this catches anything that turned them since)
+		for (const auto& w : _watchers) {
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto  spot = w.spot.get();
+			auto  table = w.table.get();
+			if (!actor || !spot || !table || Distance2D(actor->data.location, spot->data.location) > 40.0f || actor->IsInCombat()) {
+				continue;
+			}
+			const RE::NiPoint3 to = table->data.location - actor->data.location;
+			const float        facing = std::atan2(to.x, to.y);
+			if (std::abs(util::AngleDiff(actor->data.angle.z, facing)) > 0.35f) {
+				actor->SetHeading(facing);
 			}
 		}
 		static std::mt19937 rng{ std::random_device{}() };

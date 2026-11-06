@@ -125,7 +125,11 @@ namespace fp
 		{
 			std::uint32_t wins{ 0 };
 			std::uint32_t losses{ 0 };
+			float         skill{ -1.0f };  // 0-100, NPCs only (grows with every game they play); -1: not set yet
 		};
+		static float       StartingSkill(RE::TESFormID a_id);  // an NPC's skill before their first game: 10-40
+		float              SkillOf(RE::TESFormID a_id) const;  // 0-100
+		static const char* SkillName(float a_skill);           // BEGINNER, AMATEUR, SEMI-PRO, PRO
 		static void SaveRecords(const F4SE::SerializationInterface* a_intfc);
 		static void LoadRecords(const F4SE::SerializationInterface* a_intfc);
 		static void RevertRecords(const F4SE::SerializationInterface* a_intfc);

@@ -17,8 +17,8 @@ Form IDs (what fo4pool.ini expects by default):
                                                  "Watchers", a collection, carries fo4poolWatchTable; alias 2
                                                  "Opponent2", the second NPC of an NPC-vs-NPC game, the walk again)
     xx000817        keyword fo4poolLinkPoolTable (a watcher's linked ref: the table they hang round)
-    xx000818        package fo4poolWatchTable    (Sandbox within 50 of that linked ref: a spot the plugin picks, well
-                                                 clear of the table, so watchers never stand where a shot is taken)
+    xx000818        package fo4poolWatchTable    (Travel to that linked ref, facing it: a spot the plugin picks, 100 out
+                                                 from the felt, turned to face the table; they stand there watching)
 
 The idles are "dynamic idles": the human behaviour graph's dyn_ActivationLoop event plays whatever HKX the idle
 names, so no behaviour file is edited. The plugin plays them on the player with AIProcess::PlayIdle.
@@ -253,7 +253,7 @@ def build(with_stick: bool) -> bytes:
     table_link = own | (FIRST_ID + 23)
     watch = own | (FIRST_ID + 24)
     keywords = [keyword(link, "fo4poolLinkPoolSpot"), keyword(table_link, "fo4poolLinkPoolTable")]
-    packages = [travel_package(walk, "fo4poolWalkToSpot", link), sandbox_package(watch, "fo4poolWatchTable", table_link, 50)]
+    packages = [travel_package(walk, "fo4poolWalkToSpot", link), travel_package(watch, "fo4poolWatchTable", table_link, 20)]
     quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", walk, watch)]
 
     count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests)
