@@ -79,7 +79,8 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 8> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay, s.keyForfeit };
+		const std::array<int, 9> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay, s.keyForfeit,
+			s.keyStopAll };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -103,6 +104,7 @@ namespace fp
 						case 3: ToggleCalibrate(); break;
 						case 4: CyclePocket(); break;
 						case 7: Forfeit(); break;
+						case 8: StopAllGames(); break;
 						case 6:
 							// the NPC by a table under the crosshair (the prompt's), or nothing
 							if (auto actor = _lookActor.get()) {
@@ -673,6 +675,44 @@ namespace fp
 		}
 		_bgTick = false;
 		std::erase_if(_others, [&](const TableSlot& a_slot) { return !Busy(a_slot); });
+	}
+
+	void Game::StopAllGames()
+	{
+		ExitAim();
+		ClosePick();
+		std::size_t n = 0;
+		auto stop = [&]() {
+			if (_sim || _opponent || _npcGame) {
+				++n;
+				if (_opponent || _npcGame) {
+					EndChallenge("");
+				}
+				Clear();
+			}
+		};
+		stop();
+		{
+			std::scoped_lock lock(_tableMutex);
+			_bgTick = true;
+			for (std::size_t i = 0; i < _others.size(); ++i) {
+				SwapWith(i);
+				stop();
+				SwapWith(i);
+			}
+			_bgTick = false;
+			_others.clear();
+		}
+		while (!_watchers.empty()) {
+			DropWatcher(_watchers.back().id);
+		}
+		_offerID = 0;
+		_pairSince.clear();
+		_aloneSince.clear();
+		_watching = false;
+		UpdateHud();
+		log::info("stop all: {} game(s) stopped, watchers sent home", n);
+		Notify(std::format("Pool: {} stopped", n == 1 ? std::string("1 game") : std::format("{} games", n)));
 	}
 
 	void Game::Forget()

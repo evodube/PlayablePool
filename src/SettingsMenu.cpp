@@ -184,6 +184,7 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iCallPocket", "Change the called pocket", Kind::kKey, &s.keyCallPocket },
 						{ L"Keys", L"iChallenge", "Challenge an NPC", Kind::kKey, &s.keyChallenge },
 						{ L"Keys", L"iForfeit", "Forfeit (press twice)", Kind::kKey, &s.keyForfeit },
+						{ L"Keys", L"iStopAll", "Stop every game", Kind::kKey, &s.keyStopAll },
 					} },
 			};
 			static bool added = false;
