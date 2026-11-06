@@ -249,13 +249,10 @@ namespace fp::Hud
 			return name;
 		}
 
-		// the opponent's name in capitals, cut to fit the panel ("PLAYER 2" when nobody's challenged)
-		std::string OpponentLabel(const Game::HudState& a_st, std::size_t a_max)
+		// a player's name in capitals (yours, an NPC's, "PLAYER 2"), cut to fit the panel
+		std::string NameLabel(const Game::HudState& a_st, int a_player, std::size_t a_max)
 		{
-			if (a_st.opponent.empty()) {
-				return "PLAYER 2";
-			}
-			std::string n = Upper(a_st.opponent);
+			std::string n = a_st.names[a_player].empty() ? std::format("PLAYER {}", a_player + 1) : a_st.names[a_player];
 			if (n.size() > a_max) {
 				n = n.substr(0, a_max - 1) + ".";
 			}
@@ -292,7 +289,7 @@ namespace fp::Hud
 				const float row = y0 + 25.0f + p * 92.0f;
 				const bool  up = !a_st.over && a_st.shooter == p;
 				const char* group = a_st.group[p] == 1 ? "SOLIDS" : a_st.group[p] == 2 ? "STRIPES" : "OPEN";
-				const std::string name = std::format("{} · {}", p == 0 ? std::string("YOU") : OpponentLabel(a_st, 14), group);
+				const std::string name = std::format("{} · {}", NameLabel(a_st, p, 14), group);
 				if (up) {
 					DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
 				}
@@ -321,8 +318,7 @@ namespace fp::Hud
 				title = "SOLO PLAY";
 				sub = a_st.breakShot ? "BREAK" : a_st.ballInHand ? "BALL IN HAND" : a_st.onEight ? "SHOOTING THE 8" : std::format("{} TO GO", a_st.remaining[0]);
 			} else {
-				title = a_st.shooter == 0 ? std::string("YOUR SHOT")
-				                          : a_st.opponent.empty() ? std::string("THEIR SHOT") : OpponentLabel(a_st, 20) + "'S SHOT";
+				title = a_st.shooter == 0 && !a_st.npcGame ? std::string("YOUR SHOT") : NameLabel(a_st, a_st.shooter, 20) + "'S SHOT";
 				const char* group = a_st.group[a_st.shooter] == 1 ? "SOLIDS" : a_st.group[a_st.shooter] == 2 ? "STRIPES" : "";
 				if (a_st.breakShot) {
 					sub = "BREAK";

@@ -207,7 +207,13 @@ namespace fp
 					_lookTable = table->GetHandle();
 					const std::string key = Settings::Key(_activateVk.load());
 					const bool        here = _sim && _table.get().get() == table;
-					if (!here || _rules.Over()) {
+					if (here && _npcGame && !_rules.Over()) {
+						std::string a = PlayerName(0), b = PlayerName(1);
+						for (auto* n : { &a, &b }) {
+							std::ranges::transform(*n, n->begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+						}
+						prompt = _spectating ? key + ") STOP WATCHING" : std::format("{}) WATCH {} VS {}", key, a, b);
+					} else if (!here || _rules.Over()) {
 						if (auto* asking = Offerer(table)) {
 							std::string name = asking->GetDisplayFullName();
 							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -259,7 +265,12 @@ namespace fp
 		_hud.prompt = std::move(prompt);
 		_hud.pick = std::move(pick);
 		_hud.pickSel = pickSel;
-		_hud.pickHint = _hud.pick.empty() ? std::string() : std::format("UP/DOWN PICK · {} PLAY", Settings::Key(_activateVk.load()));
+		if (_hud.pick.empty()) {
+			_hud.pickHint.clear();
+		} else {
+			const auto mine = RecordOf(0x14);
+			_hud.pickHint = std::format("UP/DOWN PICK · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins, mine.losses);
+		}
 	}
 
 	void Game::OnActivate(bool a_hold)
@@ -301,6 +312,19 @@ namespace fp
 			return;  // not looking at a pool table: the key does what the game does with it
 		}
 		const bool here = _sim && _table.get().get() == table.get();
+		if (here && _npcGame && !_rules.Over()) {
+			// two NPCs at it: F watches their game (the HUD comes up; walk about as you like), F again stops
+			if (!a_hold) {
+				_spectating = !_spectating;
+				Tell(_spectating ? std::format("Pool: watching {} and {}", PlayerName(0), PlayerName(1)) : std::string("Pool: stopped watching"));
+			}
+			_lookTime = {};
+			return;
+		}
+		if (_npcGame && !a_hold) {
+			EndNpcGame("");  // one game at a time: theirs (at another table, or over) goes
+			Clear();
+		}
 		if (a_hold) {
 			// held: two players. A list of who's by the table to pick from
 			auto people = PlayersNear(table.get());
@@ -315,8 +339,9 @@ namespace fp
 						continue;
 					}
 					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+					const auto r = RecordOf(a->GetFormID());
 					pick.who.push_back(a->GetHandle());
-					pick.names.push_back(std::move(name));
+					pick.names.push_back(std::format("{}   {}-{}", name, r.wins, r.losses));
 				}
 				if (!pick.names.empty()) {
 					pick.touched = std::chrono::steady_clock::now();
@@ -431,6 +456,91 @@ namespace fp
 		}
 	}
 
+	// ---------------------------------------------------------------- win/loss records (in the co-save)
+
+	namespace
+	{
+		std::unordered_map<RE::TESFormID, Game::Record> g_records;
+		std::mutex                                     g_recordsMutex;
+		constexpr std::uint32_t                        kRecordsType = 0x52434453;  // 'RCDS'
+		constexpr std::uint32_t                        kRecordsVersion = 1;
+		constexpr RE::TESFormID                        kPlayerID = 0x14;
+	}
+
+	Game::Record Game::RecordOf(RE::TESFormID a_id) const
+	{
+		std::scoped_lock lock(g_recordsMutex);
+		const auto       it = g_records.find(a_id);
+		return it == g_records.end() ? Record{} : it->second;
+	}
+
+	void Game::CountResult(int a_winner)
+	{
+		if (a_winner < 0 || a_winner > 1 || (!_opponent && !_npcGame)) {
+			return;  // two at one keyboard, or Solo Play: no record
+		}
+		std::array<RE::TESFormID, 2> ids{};
+		for (int p = 0; p < 2; ++p) {
+			auto* actor = SeatActor(p);
+			ids[p] = actor ? actor->GetFormID() : (!_npcGame && p == 0 ? kPlayerID : 0);
+		}
+		std::scoped_lock lock(g_recordsMutex);
+		for (int p = 0; p < 2; ++p) {
+			if (!ids[p]) {
+				continue;
+			}
+			auto& r = g_records[ids[p]];
+			(p == a_winner ? r.wins : r.losses) += 1;
+			log::info("record: {} ({:08X}) {}-{}", PlayerName(p), ids[p], r.wins, r.losses);
+		}
+	}
+
+	void Game::SaveRecords(const F4SE::SerializationInterface* a_intfc)
+	{
+		std::scoped_lock lock(g_recordsMutex);
+		if (!a_intfc->OpenRecord(kRecordsType, kRecordsVersion)) {
+			return;
+		}
+		const auto count = static_cast<std::uint32_t>(g_records.size());
+		a_intfc->WriteRecordData(count);
+		for (const auto& [id, r] : g_records) {
+			a_intfc->WriteRecordData(id);
+			a_intfc->WriteRecordData(r.wins);
+			a_intfc->WriteRecordData(r.losses);
+		}
+	}
+
+	void Game::LoadRecords(const F4SE::SerializationInterface* a_intfc)
+	{
+		std::scoped_lock lock(g_recordsMutex);
+		g_records.clear();
+		std::uint32_t type = 0, version = 0, length = 0;
+		while (a_intfc->GetNextRecordInfo(type, version, length)) {
+			if (type != kRecordsType || version != kRecordsVersion) {
+				continue;
+			}
+			std::uint32_t count = 0;
+			a_intfc->ReadRecordData(count);
+			for (std::uint32_t i = 0; i < count; ++i) {
+				RE::TESFormID id = 0;
+				Record        r;
+				a_intfc->ReadRecordData(id);
+				a_intfc->ReadRecordData(r.wins);
+				a_intfc->ReadRecordData(r.losses);
+				if (const auto now = a_intfc->ResolveFormID(id)) {
+					g_records[*now] = r;  // (an NPC from a mod that's gone: dropped)
+				}
+			}
+		}
+		log::info("records: {} loaded from the save", g_records.size());
+	}
+
+	void Game::RevertRecords(const F4SE::SerializationInterface*)
+	{
+		std::scoped_lock lock(g_recordsMutex);
+		g_records.clear();
+	}
+
 	void Game::Forget()
 	{
 		_table = {};
@@ -450,6 +560,14 @@ namespace fp
 		_dots.clear();
 		_stick = {};
 		// a load: the opponent's still in the world, but the game's gone
+		if (_seatIdx != 1) {
+			static_cast<NpcSlot&>(*this) = _seats[1];
+			_seatIdx = 1;
+		}
+		_seats = {};
+		_npcGame = false;
+		_spectating = false;
+		_clearAfterTick = false;
 		_opponent = {};
 		_npcMarker = {};
 		_npcApproach = {};
@@ -473,6 +591,9 @@ namespace fp
 
 	void Game::ClearForSave()
 	{
+		if (_npcGame) {
+			EndNpcGame("");  // two NPCs' game doesn't survive a save: let them both go
+		}
 		ReleaseOpponent();  // SetRestrained is saved with the game: never leave it on in a save
 		if (_sim || !_markers.empty()) {
 			Clear();
@@ -774,6 +895,10 @@ namespace fp
 
 	void Game::Rack(RE::TESObjectREFR* a_table)
 	{
+		if (_npcGame && !_rackingNpcGame) {
+			EndNpcGame("");  // you rack: their game's over
+			Clear();
+		}
 		auto& s = Settings::Get();
 		s.Load();
 
@@ -833,28 +958,30 @@ namespace fp
 	void Game::Clear()
 	{
 		ExitAim();
-		if (auto* actor = Opponent(); actor && (_npcStep != NpcStep::kNone || _npcWaitIdle)) {
-			Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table or waiting with a cue
-		}
-		_npcWaitIdle = false;
-		_npcFacing = false;  // the next game's wait spot holds them again (and starts PoolWait)
-		HideOpponentStick();
-		_npcStep = NpcStep::kNone;
-		if (auto marker = _npcMarker.get()) {
-			marker->Disable();
-			marker->SetWantsDelete(true);
-		}
-		_npcMarker = {};
-		if (auto marker = _npcApproach.get()) {
-			marker->Disable();
-			marker->SetWantsDelete(true);
-		}
-		_npcApproach = {};
-		if (auto marker = _npcWaitMarker.get()) {
-			marker->Disable();
-			marker->SetWantsDelete(true);
-		}
-		_npcWaitMarker = {};
+		ForBothSeats([&]() {
+			if (auto* actor = Opponent(); actor && (_npcStep != NpcStep::kNone || _npcWaitIdle)) {
+				Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table or waiting with a cue
+			}
+			_npcWaitIdle = false;
+			_npcFacing = false;  // the next game's wait spot holds them again (and starts PoolWait)
+			HideOpponentStick();
+			_npcStep = NpcStep::kNone;
+			if (auto marker = _npcMarker.get()) {
+				marker->Disable();
+				marker->SetWantsDelete(true);
+			}
+			_npcMarker = {};
+			if (auto marker = _npcApproach.get()) {
+				marker->Disable();
+				marker->SetWantsDelete(true);
+			}
+			_npcApproach = {};
+			if (auto marker = _npcWaitMarker.get()) {
+				marker->Disable();
+				marker->SetWantsDelete(true);
+			}
+			_npcWaitMarker = {};
+		});
 		RemoveAimObjects();
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {
@@ -1007,7 +1134,26 @@ namespace fp
 		if (_shotLive && _sim->AtRest()) {
 			JudgeShot();
 		}
-		TickOpponent(frame, dt);
+		if (_npcGame) {
+			// two NPCs: the one waiting first, then the one who's up (left loaded, for the rest of the frame)
+			const int up = _rules.Shooter();
+			LoadSeat(1 - up);
+			TickOpponent(frame, dt);
+			if (_npcGame) {
+				LoadSeat(up);
+				TickOpponent(frame, dt);
+			}
+		} else {
+			TickOpponent(frame, dt);
+		}
+		if (_clearAfterTick) {
+			_clearAfterTick = false;
+			ExitAim();
+			Clear();
+			_watching = false;
+			UpdateHud();
+			return;
+		}
 
 		// the game's over: the result stays up for a moment, then the normal camera comes back and the table clears
 		if (_rules.Over() && !_shotLive && _sim->AtRest()) {
@@ -1086,7 +1232,7 @@ namespace fp
 		const auto& s = Settings::Get();
 		// whose balls: yours against an NPC, the shooter's in hotseat; none in Solo Play or before groups are set
 		const bool solo = _rules.GameMode() == pool::Mode::kSolo;
-		const int  who = _opponent ? 0 : _rules.Shooter();
+		const int  who = _opponent && !_npcGame ? 0 : _rules.Shooter();
 		const auto group = _rules.GroupOf(who);
 		const bool onEight = !solo && _rules.OnEight(who, *_sim);
 		for (int i = 1; i < pool::Sim::kBalls; ++i) {

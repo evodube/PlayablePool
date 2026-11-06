@@ -105,6 +105,8 @@ namespace fp
 		float carryGrip{ 0.3f };            // ...held this far up from the butt (0..1)
 		float carryIn{ 1.2f };              // ...this far in from the finger joint, on the palm side
 		float carryOut{ 0.12f };            // ...tip leaning out to the side this much (keeps it off the body)
+		bool  npcGames{ true };             // two settlers hanging round a table now and then play each other
+		float npcGameEvery{ 120.0f };       // ...about this often (seconds)
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 90.0f };         // about this often (seconds)
 		int   wanderMax{ 2 };               // at most this many at once

@@ -14,7 +14,8 @@ Form IDs (what fo4pool.ini expects by default):
     xx000815        package fo4poolWalkToSpot    (Travel to that linked ref, walking, facing the marker at the end)
     xx000816        quest fo4poolOpponent        (priority 100, start game enabled; alias 0 "Opponent" carries the
                                                  package, so it outranks settler sandboxes from other mods; alias 1
-                                                 "Watchers", a collection, carries fo4poolWatchTable)
+                                                 "Watchers", a collection, carries fo4poolWatchTable; alias 2
+                                                 "Opponent2", the second NPC of an NPC-vs-NPC game, the walk again)
     xx000817        keyword fo4poolLinkPoolTable (a watcher's linked ref: the table they hang round)
     xx000818        package fo4poolWatchTable    (Sandbox within 50 of that linked ref: a spot the plugin picks, well
                                                  clear of the table, so watchers never stand where a shot is taken)
@@ -190,12 +191,12 @@ def quest(form_id: int, editor_id: str, opponent_package: int, watch_package: in
     (properties Opponent and Watchers), fo4poolOpponentAlias and fo4poolWatchersAlias on the aliases (papyrus/)."""
     body = (
         subrecord(b"EDID", zstring(editor_id))
-        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", [("Opponent", 0), ("Watchers", 1)],
-                                        [(0, "fo4poolOpponentAlias"), (1, "fo4poolWatchersAlias")]))
+        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", [("Opponent", 0), ("Watchers", 1), ("Opponent2", 2)],
+                                        [(0, "fo4poolOpponentAlias"), (1, "fo4poolWatchersAlias"), (2, "fo4poolOpponentAlias")]))
         # flags (0x10 start game enabled, 0x1 as saved by the CK for those), priority, unknown, delay 0, type 0 (none)
         + subrecord(b"DNAM", struct.pack("<HBBfI", 0x0011, priority, 0, 0.0, 0))
         + subrecord(b"NEXT", b"")
-        + subrecord(b"ANAM", struct.pack("<I", 2))  # next alias id
+        + subrecord(b"ANAM", struct.pack("<I", 3))  # next alias id
         + subrecord(b"ALST", struct.pack("<I", 0))
         + subrecord(b"ALID", zstring("Opponent"))
         # optional, allow reuse in quest, allow reserved (settlers are often reserved by workshop quests)
@@ -210,6 +211,13 @@ def quest(form_id: int, editor_id: str, opponent_package: int, watch_package: in
         + subrecord(b"ALID", zstring("Watchers"))
         + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
         + subrecord(b"ALPC", struct.pack("<I", watch_package))
+        + subrecord(b"VTCK", struct.pack("<I", 0))
+        + subrecord(b"ALED", b"")
+        # alias 2 'Opponent2': the second NPC when two NPCs play each other; the same walk package
+        + subrecord(b"ALST", struct.pack("<I", 2))
+        + subrecord(b"ALID", zstring("Opponent2"))
+        + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
+        + subrecord(b"ALPC", struct.pack("<I", opponent_package))
         + subrecord(b"VTCK", struct.pack("<I", 0))
         + subrecord(b"ALED", b"")
     )

@@ -127,6 +127,10 @@ namespace fp
 			Notify("Pool: wait for the balls to stop");
 			return;
 		}
+		if (_npcGame) {
+			Notify(std::format("Pool: {} and {} are playing; you can watch", PlayerName(0), PlayerName(1)));
+			return;
+		}
 		if (OpponentsTurn()) {
 			Notify(std::format("Pool: it's {}'s shot", _opponentName));
 			return;

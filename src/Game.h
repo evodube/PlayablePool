@@ -6,12 +6,82 @@
 
 namespace fp
 {
+	enum class NpcStep
+	{
+		kNone,      // not their turn, or waiting for the balls to stop
+		kWalking,   // on the way to the shot
+		kAiming,    // PoolAim
+		kStriking,  // PoolStrike, up to the cue reaching the ball
+		kFollow,    // the rest of the strike clip
+	};
+
+	// One NPC at the table: who they are and where they are in their shot. Game derives from it, so the code that
+	// runs an NPC works on these members directly; a game between two NPCs keeps one per seat and swaps the one it's
+	// working on in (Game::LoadSeat).
+	struct NpcSlot
+	{
+		RE::ObjectRefHandle _opponent;     // empty: two players at one keyboard (or Solo Play)
+		std::string         _opponentName;
+		NpcStep             _npcStep{ NpcStep::kNone };
+		float               _npcTimer{ 0.0f };
+		pool::AiShot        _npcShot;
+		RE::NiPoint3        _npcStance;
+		float               _npcHeading{ 0.0f };
+		RE::ObjectRefHandle _npcMarker;    // an XMarkerHeading at the shot, for PathToReference / MoveTo
+		RE::ObjectRefHandle _npcWaitMarker; // where they wait for their turn, by the table
+		float               _npcWaitHeading{ 0.0f };
+		bool                _npcFacing{ false }; // turned to the table since arriving at the wait spot
+		bool                _npcHeld{ false };   // SetRestrained(true) is on them
+		RE::ObjectRefHandle _npcPathTarget;      // where they were last sent walking
+		std::uint32_t       _npcPathId{ 0 };     // that walk's id (Anim::PathResult)
+		int                 _npcResends{ 0 };    // times that walk was re-sent after stalling
+		RE::ObjectRefHandle _npcApproach;        // where they walk to for a shot: clear of the table, by the spot
+		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
+		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
+		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
+		float               _npcGlideSum{ 0.0f };     // GlideOntoLine: the tip's offset from the ball's line, summed over a few frames
+		int                 _npcGlideSamples{ 0 };
+		float               _npcGlideT{ -1.0f };      // seconds into the glide (-1: not started)
+		bool                _npcGlideDone{ false };
+		RE::NiPoint3        _npcGlideFrom;
+		RE::NiPoint3        _npcGlideBy;
+		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
+		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)
+		float               _npcPathAge{ 0.0f }; // seconds since
+		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack
+		float               _npcLogTimer{ 0.0f };
+		std::string         _npcLogLast;          // the last line's state part, to log changes at once
+		RE::NiPoint3        _npcHeldAt;           // where they were when the hold went on
+		RE::NiPoint3        _npcLastPos;          // for their speed
+		bool                _npcMovedWarned{ false };
+		RE::ObjectRefHandle _npcStick;            // their own cue (yours is _stick), so you can both hold one
+		bool                _npcStickReady{ false };
+		bool                _npcWaitIdle{ false }; // PoolWait is playing
+		float               _npcWaitWalk{ 0.0f };  // seconds they've been on their way to the wait spot
+		float               _npcBestDist{ 0.0f };  // closest they've got to where they're walking
+		float               _npcStall{ 0.0f };     // seconds without getting closer
+		bool                _npcLooking{ false }; // SetLookAt(player) is on them
+	};
+
 	// Racks balls on a pool table, runs the physics and moves the balls' 3D, and the shot camera ("aim mode", Aim.cpp).
 	// Everything runs on the game's main thread except OnPresent/PollKeys (render thread) and Hud() (UI thread),
 	// which only touch the atomics.
-	class Game
+	class Game : private NpcSlot
 	{
 	public:
+		// Wins and losses, kept in the save (F4SE co-save): every NPC who plays, and you (only games against NPCs; not
+		// Solo Play)
+		struct Record
+		{
+			std::uint32_t wins{ 0 };
+			std::uint32_t losses{ 0 };
+		};
+		static void SaveRecords(const F4SE::SerializationInterface* a_intfc);
+		static void LoadRecords(const F4SE::SerializationInterface* a_intfc);
+		static void RevertRecords(const F4SE::SerializationInterface* a_intfc);
+		Record      RecordOf(RE::TESFormID a_id) const;
+		void        CountResult(int a_winner);  // the game in play just ended: a win and a loss on the record
+
 		static Game& Get()
 		{
 			static Game instance;
@@ -61,6 +131,8 @@ namespace fp
 			std::string             bannerSub;
 			float                   bannerAge{ 0.0f };
 			std::string             prompt;           // looking at a pool table, no shot camera: "F) PLAY POOL" etc.
+			std::array<std::string, 2> names;         // the players, capitals: you (your character's name) or an NPC
+			bool                    npcGame{ false };  // two NPCs playing each other (you're watching)
 			std::vector<std::string> pick;            // F on a table with people by it: who to play (held F: their names)
 			int                     pickSel{ 0 };
 			std::string             pickHint;         // "UP/DOWN PICK   F PLAY"
@@ -119,18 +191,13 @@ namespace fp
 		void StartPlacement();
 		void ConfirmPlacement();
 		void TickPlacement(const Frame& a_frame);
-		std::string PlayerName(int a_player) const;  // "Player 1", "Player 2", or the opponent's name
+		std::string PlayerName(int a_player) const;  // your name, the NPC's, or "Player 2"
+		RE::Actor*  SeatActor(int a_seat) const;     // the NPC in that seat, if it's one
 
 		// the NPC opponent (Opponent.cpp)
-		enum class NpcStep
-		{
-			kNone,      // not their turn, or waiting for the balls to stop
-			kWalking,   // on the way to the shot
-			kAiming,    // PoolAim
-			kStriking,  // PoolStrike, up to the cue reaching the ball
-			kFollow,    // the rest of the strike clip
-		};
+		using NpcStep = fp::NpcStep;
 		void        Challenge(RE::Actor* a_actor = nullptr, RE::TESObjectREFR* a_table = nullptr);  // a_actor at a_table (racked first if need be)
+		void        StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // two NPCs play each other
 		void        EndChallenge(const std::string& a_why);
 		RE::Actor*  Opponent() const;
 		bool        OpponentsTurn() const;  // Player 2 is the NPC and it's their shot
@@ -152,7 +219,8 @@ namespace fp
 		bool        FrameOf(RE::TESObjectREFR* a_table, Frame& a_out) const;
 		// a spot for a watcher to stand, well clear of the table (no shot is taken from there), on navmesh, not
 		// another watcher's, nearest a_from; facing the table
-		RE::ObjectRefHandle WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from);
+		RE::ObjectRefHandle WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from, const RE::NiPoint3* a_avoid = nullptr);
+		void        StepAsideFrom(const RE::NiPoint3& a_shot);  // watchers (and whoever's waiting) by that shot spot move to another spot
 		bool        KeepWalking(RE::Actor* a_actor, const RE::ObjectRefHandle& a_target, float a_walkRun, float a_dt, int a_tries);  // true: gave up
 		void        OpponentLooksAtPlayer(RE::Actor* a_actor, bool a_look);
 		void        ReleaseOpponent();  // everything we set on them undone (before a save, when the game ends)
@@ -297,50 +365,23 @@ namespace fp
 		float                            _camYaw{ 0.0f };
 		RE::BSTSmartPointer<RE::BSInputEnableLayer> _inputLayer;
 
-		// the NPC opponent, main thread
-		RE::ObjectRefHandle _opponent;     // empty: two players at one keyboard (or Solo Play)
-		std::string         _opponentName;
-		NpcStep             _npcStep{ NpcStep::kNone };
-		float               _npcTimer{ 0.0f };
-		pool::AiShot        _npcShot;
-		RE::NiPoint3        _npcStance;
-		float               _npcHeading{ 0.0f };
-		RE::ObjectRefHandle _npcMarker;    // an XMarkerHeading at the shot, for PathToReference / MoveTo
-		RE::ObjectRefHandle _npcWaitMarker; // where they wait for their turn, by the table
-		float               _npcWaitHeading{ 0.0f };
-		bool                _npcFacing{ false }; // turned to the table since arriving at the wait spot
+		// the NPC opponent, main thread: their state is NpcSlot (the base class), one per seat (_seats)
+		// Two NPCs playing each other ([Opponent] bNpcGames): both seats are NPCs. The seat being worked on is in the
+		// base class (_seatIdx); the other waits in _seats. Against you, it's always seat 1 (you're 0)
+		std::array<NpcSlot, 2> _seats;
+		int                    _seatIdx{ 1 };
+		bool                   _npcGame{ false };
+		bool                   _spectating{ false };  // F on their table: the HUD shows their game
+		bool                   _clearAfterTick{ false };
+		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack  // the NPC game ended mid-tick: the table clears once it's done
+		std::chrono::steady_clock::time_point _lastNpcGame{};
+		void                   LoadSeat(int a_seat);
+		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with
+		void                   EndSeat(const std::string& a_why);
+		void                   EndNpcGame(const std::string& a_why);
+		void                   ForBothSeats(const std::function<void()>& a_do);  // each seat's NPC loaded in turn (NPC games), else the one
 		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
-		bool                _npcHeld{ false };   // SetRestrained(true) is on them
-		RE::ObjectRefHandle _npcPathTarget;      // where they were last sent walking
-		std::uint32_t       _npcPathId{ 0 };     // that walk's id (Anim::PathResult)
-		int                 _npcResends{ 0 };    // times that walk was re-sent after stalling
-		RE::ObjectRefHandle _npcApproach;        // where they walk to for a shot: clear of the table, by the spot
-		bool                _npcAtApproach{ false };  // got there: the last few steps onto the spot
-		bool                _npcTurnWarned{ false };  // logged a big turn off the shot this shot
-		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
-		float               _npcGlideSum{ 0.0f };     // GlideOntoLine: the tip's offset from the ball's line, summed over a few frames
-		int                 _npcGlideSamples{ 0 };
-		float               _npcGlideT{ -1.0f };      // seconds into the glide (-1: not started)
-		bool                _npcGlideDone{ false };
-		RE::NiPoint3        _npcGlideFrom;
-		RE::NiPoint3        _npcGlideBy;
-		float               _npcGetUpTimer{ 0.0f };   // seconds before trying to get them out of furniture again
 		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
-		float               _npcUnheldAge{ 10.0f };   // seconds since SetRestrained came off (walks wait for it)
-		float               _npcPathAge{ 0.0f }; // seconds since
-		bool                _npcReleasedForOver{ false };  // the game's over: we let them go until the next rack
-		float               _npcLogTimer{ 0.0f };
-		std::string         _npcLogLast;          // the last line's state part, to log changes at once
-		RE::NiPoint3        _npcHeldAt;           // where they were when the hold went on
-		RE::NiPoint3        _npcLastPos;          // for their speed
-		bool                _npcMovedWarned{ false };
-		RE::ObjectRefHandle _npcStick;            // their own cue (yours is _stick), so you can both hold one
-		bool                _npcStickReady{ false };
-		bool                _npcWaitIdle{ false }; // PoolWait is playing
-		float               _npcWaitWalk{ 0.0f };  // seconds they've been on their way to the wait spot
-		float               _npcBestDist{ 0.0f };  // closest they've got to where they're walking
-		float               _npcStall{ 0.0f };     // seconds without getting closer
-		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
 

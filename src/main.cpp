@@ -66,6 +66,16 @@ extern "C" __declspec(dllexport) bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadIn
 		return false;
 	}
 
+	// wins and losses go in the co-save
+	if (auto* serialization = F4SE::GetSerializationInterface()) {
+		serialization->SetUniqueID(0x46504F4C);  // 'FPOL'
+		serialization->SetSaveCallback(fp::Game::SaveRecords);
+		serialization->SetLoadCallback(fp::Game::LoadRecords);
+		serialization->SetRevertCallback(fp::Game::RevertRecords);
+	} else {
+		fp::log::warn("no F4SE serialization: win/loss records won't be saved");
+	}
+
 	fp::log::info("loaded; waiting for game data");
 	return true;
 }

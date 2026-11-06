@@ -30,16 +30,18 @@ namespace fp
 		// against an NPC it's always 8-ball
 		const auto mode = s.gameMode == 1 && !_opponent ? pool::Mode::kSolo : pool::Mode::kEightBall;
 		if (_opponent) {
-			if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
-				Anim::Stop(actor);
-			}
-			_npcStep = NpcStep::kNone;
-			_npcTimer = 0.0f;
-			_autoAim = _rules.Shooter() == 0;  // your break: straight into the shot camera
-			_npcReleasedForOver = false;
-			if (!_npcWaitMarker) {
-				WaitByTable();
-			}
+			_autoAim = !_npcGame && _nextBreaker == 0;  // your break: straight into the shot camera
+			ForBothSeats([&]() {
+				if (auto* actor = Opponent(); actor && _npcStep != NpcStep::kNone) {
+					Anim::Stop(actor);
+				}
+				_npcStep = NpcStep::kNone;
+				_npcTimer = 0.0f;
+				_npcReleasedForOver = false;
+				if (!_npcWaitMarker) {
+					WaitByTable();
+				}
+			});
 		}
 		_rules.NewGame(_nextBreaker, mode);
 		if (mode == pool::Mode::kEightBall) {
@@ -96,7 +98,7 @@ namespace fp
 
 	void Game::Forfeit()
 	{
-		if (!_sim || _rules.Over()) {
+		if (!_sim || _rules.Over() || _npcGame) {
 			return;
 		}
 		auto* player = RE::PlayerCharacter::GetSingleton();
@@ -128,7 +130,7 @@ namespace fp
 			std::string theyWin = _opponentName + " WINS";
 			std::ranges::transform(theyWin, theyWin.begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
 			Banner(3, theyWin, "YOU FORFEIT");
-			// the win/loss record will go here: a loss for you, a win for them
+			CountResult(1);  // a loss for you, a win for them
 			log::info("game over: forfeit to {} (a loss for you, a win for them)", _opponentName);
 			EndChallenge(std::format("you forfeit. {} wins", _opponentName));
 		}
@@ -203,20 +205,23 @@ namespace fp
 			break;
 		case pool::GameEnd::kEightOnBreak:
 			why = "THE 8 WENT IN ON THE BREAK";
-			line = "the 8 went in on the break. You lose";
+			line = solo ? "the 8 went in on the break. You lose" : std::format("the 8 went in on the break. {} wins", other);
 			break;
 		case pool::GameEnd::kScratchOnEight:
 			why = "SCRATCHED ON THE 8";
-			line = "scratched on the 8. You lose";
+			line = solo ? "scratched on the 8. You lose" : std::format("{} scratched on the 8. {} wins", shooter, other);
 			break;
 		default:
 			break;
 		}
 		if (r.end != pool::GameEnd::kNone) {
-			const bool won = r.winner == 0;
-			std::string theyWin = _opponent ? _opponentName + " WINS" : std::string("THEY WIN");
+			const bool won = r.winner == 0 && !_npcGame;
+			std::string theyWin = (_opponent || _npcGame) && r.winner >= 0 ? PlayerName(r.winner) + " WINS" : std::string("THEY WIN");
 			std::ranges::transform(theyWin, theyWin.begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
-			Banner(won ? 2 : 3, won ? "YOU WIN" : (solo ? "YOU LOSE" : theyWin), why);
+			Banner(won || _npcGame ? 2 : 3, won ? "YOU WIN" : (solo ? "YOU LOSE" : theyWin), why);
+			if (!solo) {
+				CountResult(r.winner);
+			}
 			Say(std::format("{}. {} racks again", line, rack));
 			log::info("game over: {}", line);
 			return;
@@ -279,7 +284,7 @@ namespace fp
 		if (OpponentsTurn() && _aiming) {
 			ExitAim();  // their shot: the table's theirs until the balls stop
 		}
-		if (_opponent && r.shooter == 1 && !_rules.Over() && _rules.Shooter() == 0) {
+		if (_opponent && !_npcGame && r.shooter == 1 && !_rules.Over() && _rules.Shooter() == 0) {
 			_autoAim = true;  // the opponent's tick puts you in the shot camera once they've finished their stroke
 		}
 		if (r.ballInHand && _aiming) {
@@ -359,6 +364,11 @@ namespace fp
 	{
 		HudState h;
 		h.activateVk = _activateVk.load();
+		h.npcGame = _npcGame;
+		for (int p = 0; p < 2; ++p) {
+			h.names[p] = PlayerName(p);
+			std::ranges::transform(h.names[p], h.names[p].begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
+		}
 		if (_sim) {
 			h.game = true;
 			h.solo = _rules.GameMode() == pool::Mode::kSolo;

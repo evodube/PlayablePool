@@ -53,7 +53,8 @@ namespace fp
 		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
-		constexpr float kWatchOut = 150.0f;  // watchers stand this far out from the felt's edge: clear of every shot
+		constexpr float kWatchOut = 50.0f;   // watchers stand this far out from the felt's edge (and step aside from a shot)
+		constexpr float kStepAside = 90.0f;  // a watcher (or the NPC waiting their turn) this close to where a shot's taken from moves
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
 		constexpr float kStrayed = 400.0f;       // this much further than their best: their own package has them, send the walk again
 		constexpr int   kWalkTries = 12;         // a walk that fails is sent again this many times before giving up
@@ -89,10 +90,26 @@ namespace fp
 
 	std::string Game::PlayerName(int a_player) const
 	{
-		if (a_player == 1 && _opponent) {
-			return _opponentName;
+		if (_npcGame) {
+			const NpcSlot& seat = a_player == _seatIdx ? static_cast<const NpcSlot&>(*this) : _seats[a_player];
+			return seat._opponentName.empty() ? std::format("Player {}", a_player + 1) : seat._opponentName;
 		}
-		return a_player == 0 ? "Player 1" : "Player 2";
+		if (a_player == 1) {
+			return _opponent ? _opponentName : std::string("Player 2");
+		}
+		auto*             player = RE::PlayerCharacter::GetSingleton();
+		const std::string name = player ? std::string(player->GetDisplayFullName()) : std::string();
+		return name.empty() ? std::string("Player 1") : name;
+	}
+
+	RE::Actor* Game::SeatActor(int a_seat) const
+	{
+		if (!_npcGame && a_seat == 0) {
+			return nullptr;  // you
+		}
+		const NpcSlot& seat = a_seat == _seatIdx ? static_cast<const NpcSlot&>(*this) : _seats[a_seat];
+		auto           ref = seat._opponent.get();
+		return ref ? ref->As<RE::Actor>() : nullptr;
 	}
 
 	RE::Actor* Game::Opponent() const
@@ -103,7 +120,70 @@ namespace fp
 
 	bool Game::OpponentsTurn() const
 	{
-		return _sim && _opponent && _rules.GameMode() == pool::Mode::kEightBall && _rules.Shooter() == 1 && !_rules.Over();
+		// the NPC being worked on (seat 1 against you; either seat in an NPC game) is up
+		return _sim && _opponent && _rules.GameMode() == pool::Mode::kEightBall && _rules.Shooter() == _seatIdx && !_rules.Over();
+	}
+
+	void Game::LoadSeat(int a_seat)
+	{
+		if (a_seat == _seatIdx || a_seat < 0 || a_seat > 1) {
+			return;
+		}
+		_seats[_seatIdx] = static_cast<NpcSlot&>(*this);
+		static_cast<NpcSlot&>(*this) = _seats[a_seat];
+		_seatIdx = a_seat;
+	}
+
+	void Game::ForBothSeats(const std::function<void()>& a_do)
+	{
+		if (!_npcGame) {
+			a_do();
+			return;
+		}
+		const int back = _seatIdx;
+		for (int i = 0; i < 2; ++i) {
+			LoadSeat(i);
+			a_do();
+		}
+		LoadSeat(back);
+	}
+
+	void Game::StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table)
+	{
+		if (!a_first || !a_second || !a_table || a_first == a_second) {
+			return;
+		}
+		if (_opponent) {
+			EndChallenge("");
+		}
+		ExitAim();
+		DropWatcher(a_first->GetFormID());
+		DropWatcher(a_second->GetFormID());
+		_npcGame = true;
+		_spectating = false;
+		_lastNpcGame = std::chrono::steady_clock::now();
+		const std::array<RE::Actor*, 2> who{ a_first, a_second };
+		for (int i = 0; i < 2; ++i) {
+			LoadSeat(i);
+			static_cast<NpcSlot&>(*this) = NpcSlot{};
+			_opponent = who[i]->GetHandle();
+			_opponentName = who[i]->GetDisplayFullName();
+			if (_opponentName.empty()) {
+				_opponentName = std::format("Player {}", i + 1);
+			}
+			Anim::JoinOwnPackage(who[i], i);
+		}
+		LoadSeat(1);
+		_nextBreaker = std::uniform_int_distribution<int>(0, 1)(_npcRng);
+		log::info("npc game: {} ({:08X}) and {} ({:08X}) at table {:08X}", PlayerName(0), a_first->GetFormID(), PlayerName(1),
+			a_second->GetFormID(), a_table->GetFormID());
+		_rackingNpcGame = true;
+		Rack(a_table);
+		_rackingNpcGame = false;
+		Notify(std::format("{} and {} are playing pool. {} at the table to watch", PlayerName(0), PlayerName(1), Settings::Key(_activateVk.load())));
+		if (Frame frame; GetFrame(frame)) {
+			ProbeNavmesh(frame);
+		}
 	}
 
 	RE::TESObjectREFR* Game::PoolTableNear(const RE::NiPoint3& a_pos, float a_within) const
@@ -178,6 +258,10 @@ namespace fp
 	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
+		if (_npcGame) {
+			EndNpcGame("");
+			Clear();
+		}
 		// asked with the play key: their table racked first, if it isn't the one in play
 		if (a_actor && a_table && (!_sim || _table.get().get() != a_table)) {
 			if (_opponent) {
@@ -211,7 +295,7 @@ namespace fp
 
 		ExitAim();
 		_opponent = actor->GetHandle();
-		Anim::JoinOwnPackage(actor);  // their walks go by fo4pool.esl's package from here on
+		Anim::JoinOwnPackage(actor, OwnSlot());  // their walks go by fo4pool.esl's package from here on
 		_opponentName = actor->GetDisplayFullName();
 		if (_opponentName.empty()) {
 			_opponentName = "Player 2";
@@ -376,7 +460,7 @@ namespace fp
 			NavmeshAt(a_actor->data.location));
 		_npcPathAge = 0.0f;
 		_npcWalkFrom = a_actor->data.location;
-		Anim::JoinOwnPackage(a_actor);  // if they aren't in the Opponent alias yet; this walk may still be PathToReference
+		Anim::JoinOwnPackage(a_actor, OwnSlot());  // if they aren't in the Opponent alias yet; this walk may still be PathToReference
 		_npcPathId = Anim::PathTo(a_actor, target.get(), a_walkRun, again);
 	}
 
@@ -416,6 +500,35 @@ namespace fp
 	}
 
 	void Game::EndChallenge(const std::string& a_why)
+	{
+		if (_npcGame) {
+			EndNpcGame(a_why);
+			return;
+		}
+		EndSeat(a_why);
+	}
+
+	void Game::EndNpcGame(const std::string& a_why)
+	{
+		if (!_npcGame) {
+			return;
+		}
+		for (int i = 0; i < 2; ++i) {
+			LoadSeat(i);
+			EndSeat("");
+		}
+		LoadSeat(1);
+		_seats = {};
+		_npcGame = false;
+		_spectating = false;
+		_watching = false;
+		if (!a_why.empty()) {
+			Say(a_why);
+		}
+		log::info("npc game over: {}", a_why);
+	}
+
+	void Game::EndSeat(const std::string& a_why)
 	{
 		ReleaseOpponent();
 		RemoveRef(_npcMarker);
@@ -516,8 +629,8 @@ namespace fp
 
 	void Game::TickWaiting(RE::Actor* a_actor, [[maybe_unused]] const Frame& a_frame, float a_dt)
 	{
-		// while it's your shot they watch you
-		OpponentLooksAtPlayer(a_actor, !OpponentsTurn() && !_rules.Over());
+		// while it's your shot they watch you (two NPCs: not you)
+		OpponentLooksAtPlayer(a_actor, !_npcGame && !OpponentsTurn() && !_rules.Over());
 
 		auto marker = _npcWaitMarker.get();
 		if (!marker || _npcReleasedForOver) {
@@ -748,7 +861,7 @@ namespace fp
 		p.stanceBack = kStanceBack / std::max(0.01f, a_frame.scale);
 		p.tableMargin = kTableMargin;
 		p.railClear = kRailClear;  // and the cue (sloping down to the ball) clear of the rail behind the cue ball
-		_npcShot = pool::ChooseShot(*_sim, _rules, 1, p, _npcRng);
+		_npcShot = pool::ChooseShot(*_sim, _rules, _seatIdx, p, _npcRng);
 		if (const double over = pool::Overreach(*_sim, _npcShot.placeCue ? _npcShot.cuePos : _sim->Balls()[0].pos, _npcShot.dir, p); over > p.reachSlack) {
 			log::info("{}: no shot they can stand behind from here; this one needs {:.0f} more reach", _opponentName, over);
 		}
@@ -758,11 +871,12 @@ namespace fp
 			_dropTime[0] = 0.0f;
 			Say(std::format("{} places the cue ball", _opponentName));
 		}
-		_manualPocket = _rules.OnEight(1, *_sim) ? _npcShot.pocket : -1;  // the HUD marks their call
+		_manualPocket = _rules.OnEight(_seatIdx, *_sim) ? _npcShot.pocket : -1;  // the HUD marks their call
 		log::info("{}: shot at ball {} into pocket {}{}, speed {:.0f}, dir ({:.3f}, {:.3f})", _opponentName, _npcShot.target, _npcShot.pocket,
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
 		_npcStance = StanceFor(a_frame, _sim->Balls()[0].pos, _npcShot.dir, _npcHeading);
+		StepAsideFrom(_npcStance);
 
 		auto* actor = Opponent();
 		auto* table = _table.get().get();
@@ -824,7 +938,7 @@ namespace fp
 	void Game::OpponentStrike(const Frame& a_frame)
 	{
 		const auto& s = Settings::Get();
-		const int   called = _rules.OnEight(1, *_sim) ? _npcShot.pocket : -1;
+		const int   called = _rules.OnEight(_seatIdx, *_sim) ? _npcShot.pocket : -1;
 		_strikePos = _sim->Balls()[0].pos;
 		const float power = static_cast<float>(std::clamp((_npcShot.speed - s.minSpeed) / std::max(1.0f, s.maxSpeed - s.minSpeed), 0.0, 1.0));
 		Audio::Play(Audio::Bank::kCue, ToWorld(a_frame, _strikePos, static_cast<float>(s.spec.ballRadius)), 0.25f + 0.75f * power);
@@ -945,7 +1059,7 @@ namespace fp
 		return out;
 	}
 
-	RE::ObjectRefHandle Game::WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from)
+	RE::ObjectRefHandle Game::WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from, const RE::NiPoint3* a_avoid)
 	{
 		Frame frame;
 		auto* markerForm = RE::TESForm::GetFormByID(kXMarkerHeading);
@@ -980,7 +1094,8 @@ namespace fp
 				auto ref = a_w.spot.get();
 				return ref && Distance2D(ref->data.location, w) < 80.0f;
 			});
-			if (on && !taken && Distance2D(w, a_from) < bestD) {
+			const bool inTheWay = a_avoid && Distance2D(w, *a_avoid) < kStepAside + 40.0f;
+			if (on && !taken && !inTheWay && Distance2D(w, a_from) < bestD) {
 				bestD = Distance2D(w, a_from);
 				best = w;
 			}
@@ -994,6 +1109,58 @@ namespace fp
 			ref->data.angle = { 0.0f, 0.0f, std::atan2(to.x, to.y) };
 		}
 		return spot;
+	}
+
+	void Game::StepAsideFrom(const RE::NiPoint3& a_shot)
+	{
+		auto table = _table.get();
+		if (!table) {
+			return;
+		}
+		// watchers standing where the shot's taken from (or on the way to it)
+		for (auto& w : _watchers) {
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto  spot = w.spot.get();
+			if (!actor || !spot) {
+				continue;
+			}
+			if (Distance2D(spot->data.location, a_shot) > kStepAside && Distance2D(actor->data.location, a_shot) > kStepAside) {
+				continue;
+			}
+			auto moved = WatchSpot(table.get(), actor->data.location, &a_shot);
+			if (auto ref = moved.get()) {
+				log::info("{}: in the way of the shot; watching from another spot", actor->GetDisplayFullName());
+				auto old = w.spot;
+				w.spot = moved;
+				RemoveRef(old);
+				Anim::AddWatcher(actor, ref.get());
+			}
+		}
+		// two NPCs: the one waiting their turn, if they're there
+		if (_npcGame) {
+			NpcSlot& other = _seats[1 - _seatIdx];
+			auto     ref = other._opponent.get();
+			auto*    actor = ref ? ref->As<RE::Actor>() : nullptr;
+			auto     wait = other._npcWaitMarker.get();
+			Frame    frame;
+			if (actor && GetFrame(frame) && ((wait && Distance2D(wait->data.location, a_shot) < kStepAside) || Distance2D(actor->data.location, a_shot) < kStepAside)) {
+				auto moved = WatchSpot(table.get(), actor->data.location, &a_shot);
+				if (auto spot = moved.get()) {
+					log::info("{}: waiting in the way of the shot; moving", other._opponentName);
+					const int me = _seatIdx;
+					const RE::NiPoint3 at = spot->data.location;
+					RemoveRef(moved);
+					LoadSeat(1 - me);
+					SetWaitSpot(frame, at);
+					HoldOpponent(actor, false);  // walk there (TickWaiting)
+					if (_npcWaitIdle) {
+						_npcWaitIdle = false;
+						Anim::Stop(actor);
+					}
+					LoadSeat(me);
+				}
+			}
+		}
 	}
 
 	std::string Game::NavmeshAt(const RE::NiPoint3& a_pos) const
@@ -1057,7 +1224,13 @@ namespace fp
 			return;
 		}
 		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-			_watching = Distance2D(player->data.location, a_frame.origin) < kWatchDistance;
+			const float near = Distance2D(player->data.location, a_frame.origin);
+			_watching = (!_npcGame || _spectating) && near < kWatchDistance;
+			if (_npcGame && near > kQuitDistance) {
+				EndNpcGame("");  // you've gone: their game (and its balls) goes too
+				_clearAfterTick = true;
+				return;
+			}
 		}
 		if (a_dt <= 0.0f) {
 			return;  // paused
@@ -1353,6 +1526,26 @@ namespace fp
 			}
 		}
 
+		// now and then two who've got to the table play each other: no game on (or only a finished one), you not
+		// at the shot camera
+		if (s.npcGames && table && !_npcGame && !_opponent && !_aiming && !_pick && (!_sim || _rules.Over()) &&
+			now - _lastNpcGame > std::chrono::duration<float>(s.npcGameEvery * 0.5f) &&
+			std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) < dt / std::max(5.0f, s.npcGameEvery)) {
+			std::vector<RE::Actor*> there;
+			for (const auto& w : _watchers) {
+				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+				auto  spot = w.spot.get();
+				if (actor && spot && !actor->IsInCombat() && Distance2D(actor->data.location, spot->data.location) < 120.0f) {
+					there.push_back(actor);
+				}
+			}
+			if (there.size() >= 2) {
+				std::shuffle(there.begin(), there.end(), rng);
+				StartNpcGame(there[0], there[1], table.get());
+				return;
+			}
+		}
+
 		if (!table || static_cast<int>(_watchers.size()) >= s.wanderMax) {
 			return;
 		}
@@ -1367,7 +1560,7 @@ namespace fp
 		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
 			a_cell->ForEachReferenceInRange(table->data.location, s.wanderRange, [&](RE::TESObjectREFR* a_ref) {
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-				if (!actor || actor == player || actor == opponent || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
+				if (!actor || actor == player || actor == opponent || actor == SeatActor(0) || actor == SeatActor(1) || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
 					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
 					(companions && actor->IsInFaction(companions)) ||
 					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); })) {

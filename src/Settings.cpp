@@ -136,6 +136,8 @@ namespace fp
 		carryGrip = ReadFloat(L"Opponent", L"fCarryGrip", carryGrip);
 		carryIn = ReadFloat(L"Opponent", L"fCarryIn", carryIn);
 		carryOut = ReadFloat(L"Opponent", L"fCarryOut", carryOut);
+		npcGames = ReadBool(L"Opponent", L"bNpcGames", npcGames);
+		npcGameEvery = ReadFloat(L"Opponent", L"fNpcGameEvery", npcGameEvery);
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));

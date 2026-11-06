@@ -22,7 +22,7 @@ namespace fp::Anim
 	// walks the actor to their linked ref (keyword fo4poolLinkPoolSpot) and keeps them there, facing it. Alias
 	// packages go by quest priority, so it outranks settler sandboxes from other mods, where PathToReference gets
 	// cut short. PathTo uses it for an actor in the alias ([Opponent] bOwnPackage); otherwise PathToReference.
-	void JoinOwnPackage(RE::Actor* a_actor);     // into the alias (ForceRefTo; takes a moment)
+	void JoinOwnPackage(RE::Actor* a_actor, int a_slot = 0);  // into seat a_slot's alias (ForceRefTo; takes a moment)
 	void ReleaseOwnPackage(RE::Actor* a_actor);  // out of it, no linked ref: their own AI again
 	bool InOwnPackage(RE::Actor* a_actor);       // the alias holds them
 	// The Watchers collection (fo4poolWatchTable: sandbox round their linked ref, keyword fo4poolLinkPoolTable):

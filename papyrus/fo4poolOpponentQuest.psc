@@ -6,33 +6,54 @@ Actors, refs and keywords come in as form IDs, not objects: an NPC with other sc
 from the plugin as an object Papyrus won't take as an Actor ("Type mismatch for argument 1").}
 
 ReferenceAlias Property Opponent Auto Const Mandatory
+ReferenceAlias Property Opponent2 Auto Const Mandatory  ; the second NPC when two NPCs play each other
 RefCollectionAlias Property Watchers Auto Const Mandatory  ; settlers hanging round a table (fo4poolWatchTable)
 
-; puts them in the alias. Returns "in ..." if the alias holds them afterwards, otherwise "NOT in ..." with what
-; it found, for fo4pool.log. If the first ForceRefTo doesn't take, the quest is restarted and it's tried again.
+; the alias for a seat: 0 Opponent (the NPC playing you, or the first of two NPCs), 1 Opponent2 (the second)
+ReferenceAlias Function SlotAlias(Int aiSlot)
+	if aiSlot == 1
+		return Opponent2
+	endif
+	return Opponent
+EndFunction
+
+; puts them in the Opponent alias (seat 0)
 String Function Join(Int aiActor)
+	return JoinSlot(aiActor, 0)
+EndFunction
+
+; puts them in the seat's alias. Returns "in ..." if the alias holds them afterwards, otherwise "NOT in ..." with
+; what it found, for fo4pool.log. If the first ForceRefTo doesn't take, the quest is restarted (whoever the other
+; seat held goes back in) and it's tried again.
+String Function JoinSlot(Int aiActor, Int aiSlot)
 	Actor akActor = Game.GetForm(aiActor) as Actor
 	if akActor == None
 		return "NOT in: no actor with form ID " + aiActor
 	endif
-	Debug.Trace("fo4pool: Join " + akActor + ", Opponent property " + Opponent)
-	String before = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
+	ReferenceAlias seat = SlotAlias(aiSlot)
+	ReferenceAlias other = SlotAlias(1 - aiSlot)
+	Debug.Trace("fo4pool: Join " + akActor + " seat " + aiSlot + ", alias " + seat)
+	String before = "running " + IsRunning() + ", alias held " + seat.GetReference()
 	if !IsRunning()
 		StartAndWait()
 	endif
 	; whoever it held before (an earlier opponent, kept by a save) out first
-	Actor previous = Opponent.GetActorReference()
+	Actor previous = seat.GetActorReference()
 	if previous && previous != akActor
-		Opponent.Clear()
+		seat.Clear()
 		previous.EvaluatePackage()
 	endif
-	Opponent.ForceRefTo(akActor)
-	if Opponent.GetActorReference() == akActor
+	if other.GetActorReference() == akActor
+		other.Clear()
+	endif
+	seat.ForceRefTo(akActor)
+	if seat.GetActorReference() == akActor
 		akActor.EvaluatePackage()
 		return "in (" + before + ")"
 	endif
-	String first = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
-	; a fresh start of the quest, then again
+	String first = "running " + IsRunning() + ", alias held " + seat.GetReference()
+	; a fresh start of the quest (a save from before this alias existed), then again
+	Actor keep = other.GetActorReference()
 	Stop()
 	Int tries = 0
 	while IsStopping() && tries < 50
@@ -40,9 +61,13 @@ String Function Join(Int aiActor)
 		tries += 1
 	endwhile
 	StartAndWait()
-	Opponent.ForceRefTo(akActor)
-	String second = "running " + IsRunning() + ", alias held " + Opponent.GetReference()
-	if Opponent.GetActorReference() == akActor
+	if keep
+		other.ForceRefTo(keep)
+		keep.EvaluatePackage()
+	endif
+	seat.ForceRefTo(akActor)
+	String second = "running " + IsRunning() + ", alias held " + seat.GetReference()
+	if seat.GetActorReference() == akActor
 		akActor.EvaluatePackage()
 		return "in, after restarting the quest (before: " + before + "; first ForceRefTo: " + first + ")"
 	endif
@@ -87,8 +112,13 @@ EndFunction
 
 ; out of the alias: their own AI again
 Function Leave()
-	Actor current = Opponent.GetActorReference()
-	Opponent.Clear()
+	LeaveSlot(0)
+EndFunction
+
+Function LeaveSlot(Int aiSlot)
+	ReferenceAlias seat = SlotAlias(aiSlot)
+	Actor current = seat.GetActorReference()
+	seat.Clear()
 	if current
 		current.EvaluatePackage()
 	endif
@@ -106,7 +136,7 @@ String Function AddWatcher(Int aiActor, Int aiTable, Int aiLink)
 	endif
 	akActor.SetLinkedRef(akTable, akLink)
 	Watchers.AddRef(akActor)
-	if Watchers.Find(akActor) < 0 && Opponent.GetReference() == None
+	if Watchers.Find(akActor) < 0 && Opponent.GetReference() == None && Opponent2.GetReference() == None
 		Stop()
 		Int tries = 0
 		while IsStopping() && tries < 50
