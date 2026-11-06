@@ -258,7 +258,8 @@ namespace fp
 		// X twice: you give up the game in play. Against an NPC it's their win (and, later, a loss on your record);
 		// Solo Play just ends
 		void Forfeit();
-		void StopAllGames();  // [Keys] iStopAll: every table's game ends (nothing counted), watchers sent home
+		void StopAllGames();
+		bool WithinEarshot() const;  // you're near enough the loaded table to hear its turn and rack sounds  // [Keys] iStopAll: every table's game ends (nothing counted), watchers sent home
 		std::chrono::steady_clock::time_point _forfeitAsked{};
 		void StartGame();  // the rules side of a rack
 		void StartPlacement();

@@ -56,7 +56,7 @@ namespace fp
 		_log = {};
 		_banner = 0;
 		Say(mode == pool::Mode::kSolo ? "racked. Solo Play: all 14, then the 8" : std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
-		if (!_quietStart && !_bgTick) {
+		if (!_quietStart && !_bgTick && WithinEarshot()) {
 			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 		}
 	}
@@ -98,6 +98,17 @@ namespace fp
 		const int from = _manualPocket >= 0 ? _manualPocket : (_autoPocket >= 0 ? _autoPocket : 5);
 		_manualPocket = (from + 1) % pool::Sim::kPockets;
 		Say(std::format("calling the 8 in the {} (marked)", PocketName(_manualPocket)));
+	}
+
+	bool Game::WithinEarshot() const
+	{
+		// the turn and rack sounds aren't placed in the world: heard only at the table (or aiming at it)
+		if (_aiming) {
+			return true;
+		}
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto  table = _table.get();
+		return player && table && (player->data.location - table->data.location).Length() < Settings::Get().soundMaxDistance;
 	}
 
 	void Game::Forfeit()
@@ -283,7 +294,7 @@ namespace fp
 			                                  : std::string(". On the 8");
 		}
 		Say(line);
-		if (!r.turnContinues && !_bgTick) {
+		if (!r.turnContinues && !_bgTick && WithinEarshot()) {
 			Audio::PlayUI(Audio::Bank::kTurn, 0.7f);
 		}
 		log::info("shot judged: foul {} continues {} groups {} potted {} -> {}", static_cast<int>(r.foul), r.turnContinues, r.groupsSet,

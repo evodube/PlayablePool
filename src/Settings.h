@@ -131,7 +131,7 @@ namespace fp
 		bool  sound{ true };
 		float soundVolume{ 0.8f };        // 0..1, on top of how hard each hit was
 		float soundFullDistance{ 150.0f }; // full volume within this distance of the camera
-		float soundMaxDistance{ 3000.0f }; // silent beyond this
+		float soundMaxDistance{ 700.0f };  // silent beyond this (10 m); the turn and rack sounds too
 		bool  soundReturn{ true };         // the rolling-away sound after a ball drops
 		int   returnEnd{ 1 };              // which end the ball return is: 1 the foot (rack) end, -1 the head end
 
