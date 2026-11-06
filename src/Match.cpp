@@ -32,10 +32,8 @@ namespace fp
 		const bool nine = _gameType == 1;
 		const auto mode = solo ? (nine ? pool::Mode::kSoloNine : pool::Mode::kSolo) : (nine ? pool::Mode::kNineBall : pool::Mode::kEightBall);
 		_bet = 0;
-		if (_opponent && !_npcGame && Settings::Get().bets) {
-			if (auto* them = Opponent()) {
-				_bet = StakeFor(SkillOf(them->GetFormID()));  // for caps: what they play for, by their skill
-			}
+		if (_opponent && !_npcGame) {
+			_bet = StakeOf(Opponent());  // for caps (what they play for, by their skill), or for fun
 		}
 		if (_opponent) {
 			_autoAim = !_npcGame && _nextBreaker == 0;  // your break: straight into the shot camera

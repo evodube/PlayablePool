@@ -297,9 +297,9 @@ namespace fp
 	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
-		if (s.bets && a_actor && PlayerCaps() < StakeFor(SkillOf(a_actor->GetFormID()))) {
+		if (a_actor && PlayerCaps() < StakeOf(a_actor)) {
 			// not enough caps for their stake: nothing racked, nothing changed
-			Notify(std::format("Pool: {} plays for {} caps. You've got {}", a_actor->GetDisplayFullName(), StakeFor(SkillOf(a_actor->GetFormID())), PlayerCaps()));
+			Notify(std::format("Pool: {} plays for {} caps. You've got {}", a_actor->GetDisplayFullName(), StakeOf(a_actor), PlayerCaps()));
 			return;
 		}
 		if (a_table && !FocusTable(a_table)) {
@@ -338,8 +338,8 @@ namespace fp
 			Notify(std::format("Pool: {} isn't in the mood for pool", actor->GetDisplayFullName()));
 			return;
 		}
-		if (s.bets) {
-			const int stake = StakeFor(SkillOf(actor->GetFormID()));
+		{
+			const int stake = StakeOf(actor);
 			if (PlayerCaps() < stake) {
 				Notify(std::format("Pool: {} plays for {} caps. You've got {}", actor->GetDisplayFullName(), stake, PlayerCaps()));
 				return;

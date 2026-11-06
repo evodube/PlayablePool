@@ -106,6 +106,8 @@ namespace fp
 						case 7:
 							if (_kitPlacing) {
 								CancelKit(true);  // setting a kit table up: X puts it away again
+							} else if (_picking) {
+								ToggleForFun();   // the who-to-play list: for caps or for fun
 							} else {
 								Forfeit();
 							}
@@ -303,8 +305,12 @@ namespace fp
 			_hud.pickHint.clear();
 		} else {
 			const auto mine = RecordOf(0x14);
-			_hud.pickHint = std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
-				mine.losses);
+			const auto& set = Settings::Get();
+			_hud.pickHint = set.bets && set.keyForfeit > 0 ?
+			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {}) {} · {} PLAY · YOU {}-{}", Settings::Key(set.keyForfeit),
+									_forFun ? "PLAY FOR CAPS" : "PLAY FOR FUN", Settings::Key(_activateVk.load()), mine.wins, mine.losses) :
+			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
+									mine.losses);
 			_hud.pickTitle = WantType() == 1 ? "WHO PLAYS? · 9-BALL" : "WHO PLAYS? · 8-BALL";
 		}
 	}
@@ -412,20 +418,12 @@ namespace fp
 				Pick pick;
 				pick.table = table->GetHandle();
 				for (auto* a : people) {
-					std::string name = a->GetDisplayFullName();
-					if (name.empty()) {
+					std::string line = PickLine(a);
+					if (line.empty()) {
 						continue;
 					}
-					std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-					const auto r = RecordOf(a->GetFormID());
 					pick.who.push_back(a->GetHandle());
-					const float skill = SkillOf(a->GetFormID());
-					if (Settings::Get().bets) {
-						pick.names.push_back(std::format("{}   {}-{} · {} · {} · {} CAPS", name, r.wins, r.losses, SkillName(skill),
-							StyleName(StyleOf(a->GetFormID())), StakeFor(skill)));
-					} else {
-						pick.names.push_back(std::format("{}   {}-{} · {} · {}", name, r.wins, r.losses, SkillName(skill), StyleName(StyleOf(a->GetFormID()))));
-					}
+					pick.names.push_back(std::move(line));
 				}
 				if (kit) {
 					pick.who.push_back(table->GetHandle());  // a kit table: last, pack it back into its kit
@@ -609,6 +607,56 @@ namespace fp
 	const char* Game::StyleName(int a_style)
 	{
 		return a_style == 0 ? "SAFE" : a_style == 2 ? "AGGRESSIVE" : "BALANCED";
+	}
+
+	bool Game::BetsWithYou(RE::TESFormID a_id)
+	{
+		// some only ever play for fun: about a third of them, fixed per NPC
+		std::uint32_t h = a_id * 0x9E3779B1u + 0x7F4A7C15u;
+		h ^= h >> 13;
+		h *= 0x85EBCA6Bu;
+		h ^= h >> 16;
+		return h % 100 >= 35;
+	}
+
+	int Game::StakeOf(RE::Actor* a_actor) const
+	{
+		// caps on a game against them: none if betting's off, you've chosen to play for fun, or they never bet
+		if (!a_actor || !Settings::Get().bets || _forFun || !BetsWithYou(a_actor->GetFormID())) {
+			return 0;
+		}
+		return StakeFor(SkillOf(a_actor->GetFormID()));
+	}
+
+	std::string Game::PickLine(RE::Actor* a_actor) const
+	{
+		std::string name = a_actor ? a_actor->GetDisplayFullName() : "";
+		if (name.empty()) {
+			return {};
+		}
+		std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+		const auto  r = RecordOf(a_actor->GetFormID());
+		const float skill = SkillOf(a_actor->GetFormID());
+		const int   stake = StakeOf(a_actor);
+		return std::format("{}   {}-{} · {} · {} · {}", name, r.wins, r.losses, SkillName(skill), StyleName(StyleOf(a_actor->GetFormID())),
+			stake > 0 ? std::format("{} CAPS", stake) : std::string("FOR FUN"));
+	}
+
+	void Game::ToggleForFun()
+	{
+		_forFun = !_forFun;
+		if (_pick) {
+			for (std::size_t i = 0; i < _pick->who.size(); ++i) {
+				auto  ref = _pick->who[i].get();
+				auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
+				if (actor) {
+					_pick->names[i] = PickLine(actor);
+				}
+			}
+			_pick->touched = std::chrono::steady_clock::now();
+		}
+		_lookTime = {};
+		log::info("playing {}", _forFun ? "for fun (no bets)" : "for caps");
 	}
 
 	int Game::PlayerCaps()

@@ -143,6 +143,11 @@ namespace fp
 		static int         StyleOf(RE::TESFormID a_id);      // how they play: 0 safe, 1 balanced, 2 aggressive (fixed per NPC)
 		static const char* StyleName(int a_style);
 		static int         PlayerCaps();
+		static bool        BetsWithYou(RE::TESFormID a_id);  // some NPCs only play for fun (fixed per NPC)
+		int                StakeOf(RE::Actor* a_actor) const;  // caps on a game against them now (0: for fun)
+		std::string        PickLine(RE::Actor* a_actor) const;
+		void               ToggleForFun();
+		std::atomic<bool>  _forFun{ false };  // your choice in the who-to-play list: no bets with anyone
 		void               SettleBet(int a_winner);           // the game's over: the caps change hands           // BEGINNER, AMATEUR, SEMI-PRO, PRO
 		static void SaveRecords(const F4SE::SerializationInterface* a_intfc);
 		// the Pool Table Kit (Kit.cpp)
