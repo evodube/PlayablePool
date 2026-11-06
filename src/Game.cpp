@@ -286,7 +286,8 @@ namespace fp
 		}
 		if (_aiming) {
 			if (!a_hold) {
-				CallLookedAtPocket();  // on the 8: F calls the pocket you're looking at
+				ExitAim();  // F at the shot camera: get up from the table (on the 8, aiming at a pocket 2 s calls it)
+				Tell("Pool: stopped aiming");
 			}
 			return;
 		}

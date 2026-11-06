@@ -279,7 +279,7 @@ namespace fp
 			line = "the 8 on the break is spotted. " + line;
 		}
 		if (_rules.OnEight(_rules.Shooter(), *_sim)) {
-			line += Settings::Get().callEight ? std::format(". On the 8: aim at a pocket for 2 s, or {}, to call it", Settings::Key(_activateVk.load()))
+			line += Settings::Get().callEight ? std::string(". On the 8: aim at a pocket for 2 s to call it")
 			                                  : std::string(". On the 8");
 		}
 		Say(line);
@@ -377,6 +377,14 @@ namespace fp
 		h.activateVk = _activateVk.load();
 		h.npcGame = _npcGame;
 		for (int p = 0; p < 2; ++p) {
+			if (_opponent || _npcGame) {
+				auto*               actor = SeatActor(p);
+				const RE::TESFormID id = actor ? actor->GetFormID() : (p == 0 ? 0x14 : 0);
+				if (id) {
+					const auto r = RecordOf(id);
+					h.stats[p] = actor ? std::format("{}-{} · {}", r.wins, r.losses, SkillName(SkillOf(id))) : std::format("{}-{}", r.wins, r.losses);
+				}
+			}
 			h.names[p] = PlayerName(p);
 			std::ranges::transform(h.names[p], h.names[p].begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
 		}

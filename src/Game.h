@@ -186,6 +186,7 @@ namespace fp
 			float                   bannerAge{ 0.0f };
 			std::string             prompt;           // looking at a pool table, no shot camera: "F) PLAY POOL" etc.
 			std::array<std::string, 2> names;         // the players, capitals: you (your character's name) or an NPC
+			std::array<std::string, 2> stats;         // "3-1 · PRO" (NPCs), "5-2" (you); empty: no record kept
 			bool                    npcGame{ false };  // two NPCs playing each other (you're watching)
 			std::vector<std::string> pick;            // F on a table with people by it: who to play (held F: their names)
 			int                     pickSel{ 0 };

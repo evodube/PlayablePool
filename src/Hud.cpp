@@ -294,8 +294,10 @@ namespace fp::Hud
 					DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
 				}
 				Print(a_v, Title(), name, cx + 18, row - 2, 19, up ? kGreen.text : kGreen.off, up ? kGreen.glow : 0, 1.5f);
+				// their record and skill (against an NPC, or two NPCs); otherwise how many they've left
 				const int left = a_st.group[p] == 0 ? 7 : a_st.remaining[p];
-				Print(a_v, Mono(), std::format("{} LEFT", left), x0 + 380 - 29, row + 1, 13, kGreen.dim, 0, 0.0f, Align::kRight);
+				Print(a_v, Mono(), a_st.stats[p].empty() ? std::format("{} LEFT", left) : a_st.stats[p], x0 + 380 - 29, row + 1, 13, kGreen.dim, 0, 0.0f,
+					Align::kRight);
 				// the group's balls; with the table open, the solids on top and the stripes below
 				const int first = a_st.group[p] == 2 ? 9 : a_st.group[p] == 1 ? 1 : (p == 0 ? 1 : 9);
 				for (int i = 0; i < 7; ++i) {
@@ -405,17 +407,17 @@ namespace fp::Hud
 		void Keys(const View& a_v, const Game::HudState& a_st)
 		{
 			const auto& set = Settings::Get();
-			const std::string aim = KeyLabel(set.keyShoot), rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(a_st.activateVk),
+			const std::string rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(a_st.activateVk),
 							  forfeit = KeyLabel(set.keyForfeit);
 			std::vector<std::pair<std::string, std::string>> keys;
 			if (a_st.placing) {
-				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { aim, "LEAVE TABLE" } };
+				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { call, "LEAVE TABLE" } };
 			} else if (a_st.over) {
-				keys = { { rack, "RACK AGAIN" }, { clear, "CLEAR TABLE" }, { aim, "LEAVE TABLE" } };
+				keys = { { rack, "RACK AGAIN" }, { clear, "CLEAR TABLE" }, { call, "LEAVE TABLE" } };
 			} else if (a_st.calling) {
-				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { call, "CALL THE POCKET (OR AIM 2S)" }, { "RMB", "OVERHEAD" } };
+				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "AIM 2S", "CALLS THE POCKET" }, { "RMB", "OVERHEAD" }, { call, "LEAVE TABLE" } };
 			} else {
-				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { aim, "LEAVE TABLE" } };
+				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { call, "LEAVE TABLE" } };
 			}
 			if (!a_st.over && set.keyForfeit > 0) {
 				keys.push_back({ forfeit, "FORFEIT" });
