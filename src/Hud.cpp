@@ -293,11 +293,19 @@ namespace fp::Hud
 				if (up) {
 					DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
 				}
-				Print(a_v, Title(), name, cx + 18, row - 2, 19, up ? kGreen.text : kGreen.off, up ? kGreen.glow : 0, 1.5f);
-				// their record and skill (against an NPC, or two NPCs); otherwise how many they've left
-				const int left = a_st.group[p] == 0 ? 7 : a_st.remaining[p];
-				Print(a_v, Mono(), a_st.stats[p].empty() ? std::format("{} LEFT", left) : a_st.stats[p], x0 + 380 - 29, row + 1, 13, kGreen.dim, 0, 0.0f,
-					Align::kRight);
+				// their record and skill (against an NPC, or two NPCs); otherwise how many they've left. The name is drawn
+				// smaller when it would run into that
+				const int         left = a_st.group[p] == 0 ? 7 : a_st.remaining[p];
+				const std::string right = a_st.stats[p].empty() ? std::format("{} LEFT", left) : a_st.stats[p];
+				const float       rightX = x0 + 380 - 29;
+				const float       room = rightX - TextWidth(Mono(), right, 13, 0.0f) - 14.0f - (cx + 18);
+				float             size = 19.0f;
+				if (const float w = TextWidth(Title(), name, 19.0f, 1.5f); w > room && room > 0.0f) {
+					size = std::max(10.0f, 19.0f * room / w);
+				}
+				Print(a_v, Title(), name, cx + 18, row - 2 + (19.0f - size) * 0.5f, size, up ? kGreen.text : kGreen.off, up ? kGreen.glow : 0,
+					1.5f * size / 19.0f);
+				Print(a_v, Mono(), right, rightX, row + 1, 13, kGreen.dim, 0, 0.0f, Align::kRight);
 				// the group's balls; with the table open, the solids on top and the stripes below
 				const int first = a_st.group[p] == 2 ? 9 : a_st.group[p] == 1 ? 1 : (p == 0 ? 1 : 9);
 				for (int i = 0; i < 7; ++i) {
