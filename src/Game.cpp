@@ -308,10 +308,11 @@ namespace fp
 			const auto& set = Settings::Get();
 			_hud.pickHint = set.bets && set.keyForfeit > 0 ?
 			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {}) {} · {} PLAY · YOU {}-{}", Settings::Key(set.keyForfeit),
-									_forFun ? "PLAY FOR CAPS" : "PLAY FOR FUN", Settings::Key(_activateVk.load()), mine.wins, mine.losses) :
+									_forFun ? "SWITCH TO FOR CAPS" : "SWITCH TO FOR FUN", Settings::Key(_activateVk.load()), mine.wins, mine.losses) :
 			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
 									mine.losses);
-			_hud.pickTitle = WantType() == 1 ? "WHO PLAYS? · 9-BALL" : "WHO PLAYS? · 8-BALL";
+			_hud.pickTitle = std::format("WHO PLAYS? · {}{}", WantType() == 1 ? "9-BALL" : "8-BALL",
+				!set.bets ? "" : _forFun ? " · FOR FUN" : " · FOR CAPS");
 		}
 	}
 
@@ -415,6 +416,7 @@ namespace fp
 			if (people.empty() && !kit) {
 				Notify(std::format("Pool: nobody's by the table to play. {} plays Solo", Settings::Key(_activateVk.load())));
 			} else {
+				_forFun = false;  // every list starts on playing for caps; X switches it for this game only
 				Pick pick;
 				pick.table = table->GetHandle();
 				for (auto* a : people) {
@@ -670,6 +672,7 @@ namespace fp
 	{
 		const int bet = _bet;
 		_bet = 0;
+		_forFun = false;  // a game played for fun doesn't make the next one for fun too
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* caps = RE::TESForm::GetFormByID(0x0000000F);
 		if (bet <= 0 || _npcGame || !_opponent || !player || !caps || !caps->IsBoundObject() || a_winner < 0) {
