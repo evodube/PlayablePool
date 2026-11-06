@@ -61,6 +61,7 @@ namespace fp
 		float               _npcBestDist{ 0.0f };  // closest they've got to where they're walking
 		float               _npcStall{ 0.0f };     // seconds without getting closer
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
+		int                 _npcWaitVariant{ 0 }; // 0 PoolWait, 1 PoolWait2
 		int                 _npcAimVariant{ 0 };  // this shot's aim (0 PoolAim, 1 PoolAim2): its strike follows it
 	};
 

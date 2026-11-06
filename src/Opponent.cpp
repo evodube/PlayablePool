@@ -18,13 +18,17 @@ namespace fp
 		// origin, facing +Y), as the game places it from their hands: the tip, and the cue's direction as a yaw (+ =
 		// to their right). Measured in Blender for the clips as shipped (tools/anim/README.md): right hand 8.8 out and
 		// 9 up, fingers wrapped round the cue, which slopes 7.3 degrees down to the tip.
-		constexpr float kTipX = 0.59f;
-		constexpr float kTipY = 73.37f;
-		constexpr float kCueYaw = -10.85f * 0.017453292f;
+		// PoolAim2 / PoolStrike2 (variant 1), measured the same way at their contact (frame 35): the bridge hand ~30
+		// further forward, so the tip is further ahead of the root, and the cue turned a little more to their left
+		constexpr float kTipX[2] = { 0.59f, -3.53f };
+		constexpr float kTipY[2] = { 73.37f, 85.53f };
+		constexpr float kCueYawOf[2] = { -10.85f * 0.017453292f, -14.8f * 0.017453292f };
 		constexpr float kTipGap = 1.5f;  // between the tip and the ball at contact
 		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
-		const float     kStanceBack = kTipX * std::sin(kCueYaw) + kTipY * std::cos(kCueYaw) + 3.51f + kTipGap;
-		const float     kStanceSide = kTipX * std::cos(kCueYaw) - kTipY * std::sin(kCueYaw);
+		float StanceBackOf(int v) { return kTipX[v] * std::sin(kCueYawOf[v]) + kTipY[v] * std::cos(kCueYawOf[v]) + 3.51f + kTipGap; }
+		float StanceSideOf(int v) { return kTipX[v] * std::cos(kCueYawOf[v]) - kTipY[v] * std::sin(kCueYawOf[v]); }
+		// PoolWait2 is a side-on lean: the body faces the clip's -X, a quarter turn left of the root's facing
+		constexpr float kWait2Turn = 1.5707963f;
 		constexpr float kContactSeconds = 35.0f / 30.0f;  // PoolStrike: the cue reaches the ball on frame 35
 		constexpr float kStrikeLength = 60.0f / 30.0f;
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
@@ -598,7 +602,8 @@ namespace fp
 		// how far back along the shot line the cue ball is from the root: the clip's distance, or further if that's
 		// over the table (they lean in from the rail and the cue reaches less far than the clip shows; the shot
 		// picker avoids those shots where it can)
-		double       back = kStanceBack / scale;
+		const int    v = std::clamp(_npcAimVariant, 0, 1);
+		double       back = StanceBackOf(v) / scale;
 		const double hx = s.spec.length * 0.5 + kTableMargin;
 		const double hy = s.spec.width * 0.5 + kTableMargin;
 		auto inside = [&](double k) {
@@ -612,10 +617,10 @@ namespace fp
 		const RE::NiPoint3 dirWorld = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(a_dir.x), static_cast<float>(a_dir.y), 0.0f });
 		const RE::NiPoint3 flat = util::Normalized(RE::NiPoint3{ dirWorld.x, dirWorld.y, 0.0f });
 		const RE::NiPoint3 left{ -flat.y, flat.x, 0.0f };
-		// they face a little off the shot line, so that the cue (which points kCueYaw off their facing) lies along it
-		a_heading = std::atan2(flat.x, flat.y) - kCueYaw;
+		// they face a little off the shot line, so that the cue (which points kCueYawOf[v] off their facing) lies along it
+		a_heading = std::atan2(flat.x, flat.y) - kCueYawOf[v];
 
-		RE::NiPoint3 root = ToWorld(a_frame, a_cue - a_dir * back, 0.0f) + left * kStanceSide;
+		RE::NiPoint3 root = ToWorld(a_frame, a_cue - a_dir * back, 0.0f) + left * StanceSideOf(v);
 		root.z = a_frame.origin.z;  // the clip has the felt 70.4 above the feet: the table's own height
 		return root;
 	}
@@ -700,10 +705,12 @@ namespace fp
 			_npcWaitWalk = 0.0f;
 			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
-			a_actor->SetHeading(_npcWaitHeading);
+			// standing with the cue until their turn: one of the two waits, at random; PoolWait2's body is turned a
+			// quarter left of the root, so the root is turned a quarter right to have them face the table
+			_npcWaitVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);
+			a_actor->SetHeading(_npcWaitHeading + (_npcWaitVariant == 1 ? kWait2Turn : 0.0f));
 			HoldOpponent(a_actor, true);
-			// standing with the cue until their turn: one of the two waits, at random
-			_npcWaitIdle = Anim::PlayWait(a_actor, std::uniform_int_distribution<int>(0, 1)(_npcRng));
+			_npcWaitIdle = Anim::PlayWait(a_actor, _npcWaitVariant);
 		}
 	}
 
@@ -827,11 +834,13 @@ namespace fp
 			return false;
 		}
 		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
-		// PoolWait has the butt on the floor at (11, 7) in their own space, by the right foot
+		// PoolWait has the butt on the floor at (11, 7) in the root's space, by the right foot; PoolWait2 holds the cue
+		// out to their right, its hand at (-5.6, 27.9): the butt below it, a little further out
 		const float        h = a_actor->data.angle.z;
 		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
 		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
-		RE::NiPoint3       butt = a_actor->data.location + right * 11.0f + fwd * 7.0f;
+		const bool         lean = _npcWaitVariant == 1;
+		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? -4.0f : 11.0f) + fwd * (lean ? 32.0f : 7.0f);
 		butt.z = a_actor->data.location.z + 0.6f;
 		const RE::NiPoint3 dir = util::Normalized(palm - butt);
 		const auto&        s = Settings::Get();
@@ -902,7 +911,8 @@ namespace fp
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;
 		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)
-		p.stanceBack = kStanceBack / std::max(0.01f, a_frame.scale);
+		// (with PoolAim2's reach, the longer of the two: the aim is picked to suit the shot below)
+		p.stanceBack = StanceBackOf(1) / std::max(0.01f, a_frame.scale);
 		p.tableMargin = kTableMargin;
 		p.railClear = kRailClear;  // and the cue (sloping down to the ball) clear of the rail behind the cue ball
 		_npcShot = pool::ChooseShot(*_sim, _rules, _seatIdx, p, _npcRng);
@@ -919,6 +929,14 @@ namespace fp
 		log::info("{}: shot at ball {} into pocket {}{}, speed {:.0f}, dir ({:.3f}, {:.3f})", _opponentName, _npcShot.target, _npcShot.pocket,
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
+		// which aim: PoolAim reaches less far; if this shot needs more than it has, PoolAim2 (it leans further in),
+		// otherwise either, at random
+		{
+			pool::AiParams p0 = p;
+			p0.stanceBack = StanceBackOf(0) / std::max(0.01f, a_frame.scale);
+			const double over0 = pool::Overreach(*_sim, _sim->Balls()[0].pos, _npcShot.dir, p0);
+			_npcAimVariant = over0 > p0.reachSlack ? 1 : std::uniform_int_distribution<int>(0, 1)(_npcRng);
+		}
 		_npcStance = StanceFor(a_frame, _sim->Balls()[0].pos, _npcShot.dir, _npcHeading);
 		StepAsideFrom(_npcStance);
 
@@ -1414,8 +1432,7 @@ namespace fp
 					log::info("{}: {:.1f} off the spot before the aim: put on it", _opponentName, off);
 					Anim::SetPosition(actor, RE::NiPoint3{ _npcStance.x, _npcStance.y, actor->data.location.z });
 				}
-				_npcAimVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);  // one of the two aims, at random
-				Anim::PlayAim(actor, _npcAimVariant);
+				Anim::PlayAim(actor, _npcAimVariant);  // the aim the stance was set for (PlanOpponentShot)
 			}
 			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
 				GlideOntoLine(actor, a_frame, a_dt);  // also places the stick

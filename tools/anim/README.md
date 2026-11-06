@@ -71,3 +71,9 @@ pose plus small rotations about the bones' heads in the armature's space.
 
 Exported with PyNifly (FO4, 30 fps, the vanilla skeleton.hkx); re-imported within 0.02 units. The originals' "WeaponDraw"
 annotation isn't in these. Each NPC shot picks PoolAim or PoolAim2 at random and then plays the matching strike.
+
+In game (`src/Opponent.cpp`): PoolAim2 / PoolStrike2 measured like PoolStrike at contact (frame 35): tip at
+(-3.53, 85.53), the cue 14.8 degrees to their left, so the stance stands them further back. Each shot's aim is picked
+when the shot is planned: PoolAim2 when PoolAim can't reach it, otherwise either. PoolWait2 is a side-on lean whose
+body faces the clip's -X, so the root is turned a quarter right to have them face the table; the cue's butt goes
+under the right hand at (-4, 32).
