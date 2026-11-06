@@ -54,6 +54,9 @@ namespace fp
 		constexpr float kStallSeconds = 4.0f;    // ...but is, once they've gone this long without getting closer (going round the table can take a while)
 		constexpr float kProgress = 10.0f;       // closer by this much counts as progress
 		constexpr float kWaitBeyondRail = 55.0f; // the first wait spot: this far outside the felt, on their side
+		constexpr float kInTable = 30.0f;        // a root nearer the felt than this is standing in the rail (the body overlaps it)
+		constexpr float kWaitClear = 42.0f;      // a wait spot in there is moved out to this far from the felt
+		constexpr float kOutOfTableSeconds = 3.0f;  // walking out of the table: put on the spot if not out by then
 		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
@@ -640,6 +643,39 @@ namespace fp
 		log::info("table {:08X}: collision {}", table->GetFormID(), a_on ? "back on" : "off while they shoot");
 	}
 
+	pool::Vec2 Game::TablePoint(const Frame& a_frame, const RE::NiPoint3& a_pos) const
+	{
+		const RE::NiPoint3 rel = (a_pos - a_frame.origin) * (1.0f / std::max(0.01f, a_frame.scale));
+		const RE::NiPoint3 t = a_frame.rot * RE::NiPoint3{ rel.x, rel.y, 0.0f };
+		return { t.x, t.y };
+	}
+
+	bool Game::InTable(const Frame& a_frame, const RE::NiPoint3& a_pos, float a_beyond) const
+	{
+		const auto&      s = Settings::Get();
+		const pool::Vec2 p = TablePoint(a_frame, a_pos);
+		return std::abs(p.x) < s.spec.length * 0.5 + a_beyond && std::abs(p.y) < s.spec.width * 0.5 + a_beyond;
+	}
+
+	RE::NiPoint3 Game::OutOfTable(const Frame& a_frame, const RE::NiPoint3& a_pos, float a_beyond) const
+	{
+		if (!InTable(a_frame, a_pos, a_beyond)) {
+			return a_pos;
+		}
+		const auto&  s = Settings::Get();
+		const double hx = s.spec.length * 0.5 + a_beyond;
+		const double hy = s.spec.width * 0.5 + a_beyond;
+		pool::Vec2   p = TablePoint(a_frame, a_pos);
+		if (hx - std::abs(p.x) < hy - std::abs(p.y)) {  // out across the nearer edge
+			p.x = p.x < 0 ? -hx : hx;
+		} else {
+			p.y = p.y < 0 ? -hy : hy;
+		}
+		RE::NiPoint3 out = ToWorld(a_frame, p, 0.0f);
+		out.z = a_pos.z;
+		return out;
+	}
+
 	void Game::SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos)
 	{
 		auto* table = _table.get().get();
@@ -649,7 +685,8 @@ namespace fp
 		if (!bound || !table) {
 			return;
 		}
-		RE::NiPoint3 pos = a_pos;
+		// never in the table: a spot in the rail (where they shot from, say) is moved out past it
+		RE::NiPoint3 pos = OutOfTable(a_frame, a_pos, kWaitClear);
 		pos.z = a_frame.origin.z;
 		// facing the middle of the table while they wait
 		_npcWaitHeading = std::atan2(a_frame.origin.x - pos.x, a_frame.origin.y - pos.y);
@@ -685,13 +722,13 @@ namespace fp
 		}
 		RE::NiPoint3 spot = ToWorld(frame, p, 0.0f);
 		spot.z = frame.origin.z;
-		if (Distance2D(actor->data.location, spot) < kAlreadyThere) {
-			spot = actor->data.location;  // near enough: no walk, they're held where they stand
+		if (Distance2D(actor->data.location, spot) < kAlreadyThere && !InTable(frame, actor->data.location, kInTable)) {
+			spot = actor->data.location;  // near enough (and clear of the table): no walk, they're held where they stand
 		}
 		SetWaitSpot(frame, spot);
 	}
 
-	void Game::TickWaiting(RE::Actor* a_actor, [[maybe_unused]] const Frame& a_frame, float a_dt)
+	void Game::TickWaiting(RE::Actor* a_actor, const Frame& a_frame, float a_dt)
 	{
 		// while it's your shot they watch you (two NPCs: not you)
 		OpponentLooksAtPlayer(a_actor, !_npcGame && !OpponentsTurn() && !_rules.Over());
@@ -700,13 +737,24 @@ namespace fp
 		if (!marker || _npcReleasedForOver) {
 			return;
 		}
+		// standing in the table (where they shot from, with its collision off; the wait spot itself is always clear of
+		// it): they turn and walk out to the spot, and if that doesn't get them out in a few seconds they're put there
+		const bool  inTable = !_tableNoCollide && InTable(a_frame, a_actor->data.location, kInTable);
 		const float away = Distance2D(a_actor->data.location, marker->data.location);
-		if (away > kWaitRadius) {
+		if (away > kWaitRadius || inTable) {
 			// not there yet (or pulled off it): walk there, and if the walk doesn't get them there in time (their
 			// sandbox package can keep winning), put them there
+			if (inTable && !_npcInTableLogged) {
+				_npcInTableLogged = true;
+				log::info("{}: standing in the table: walking out to the wait spot", _opponentName);
+			}
+			if (_npcFacing && _npcWaitIdle) {
+				Anim::Stop(a_actor);  // out of the wait pose to walk
+				_npcWaitIdle = false;
+			}
 			_npcFacing = false;
 			_npcWaitWalk += a_dt;
-			if (_npcWaitWalk > Settings::Get().opponentWalkTimeout) {
+			if (_npcWaitWalk > (inTable ? kOutOfTableSeconds : Settings::Get().opponentWalkTimeout)) {
 				log::warn("{}: didn't reach the wait spot in {:.0f} s ({:.0f} away; package {}): putting them there", _opponentName, _npcWaitWalk, away,
 					PackageName(a_actor));
 				_npcWaitWalk = 0.0f;
@@ -720,6 +768,7 @@ namespace fp
 		} else if (!_npcFacing) {
 			// there (anywhere within kWaitRadius: there's no gap between "walk back" and "hold")
 			_npcWaitWalk = 0.0f;
+			_npcInTableLogged = false;
 			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
 			// standing with the cue until their turn (the wait picked with the spot)

@@ -62,6 +62,7 @@ namespace fp
 		float               _npcStall{ 0.0f };     // seconds without getting closer
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		int                 _npcWaitVariant{ 0 }; // 0 PoolWait, 1 PoolWait2
+		bool                _npcInTableLogged{ false };
 		int                 _npcAimVariant{ 0 };  // this shot's aim (0 PoolAim, 1 PoolAim2, 2 PoolAim3): its strike follows it
 	};
 
@@ -327,6 +328,11 @@ namespace fp
 		void  ExitAim();
 		void  ToggleOverhead();
 		void  SetTableCollision(bool a_on);
+		// a point in table space (felt units) and whether it's within a_beyond of the felt; and the nearest point
+		// a_beyond out from it if so (else the point itself)
+		pool::Vec2   TablePoint(const Frame& a_frame, const RE::NiPoint3& a_pos) const;
+		bool         InTable(const Frame& a_frame, const RE::NiPoint3& a_pos, float a_beyond) const;
+		RE::NiPoint3 OutOfTable(const Frame& a_frame, const RE::NiPoint3& a_pos, float a_beyond) const;
 		void  ShootAim(float a_power);
 		void  TickAim(const Frame& a_frame, float a_dt);
 		void  PlaceAimObjects(const Frame& a_frame, float a_yaw, float a_dt);
