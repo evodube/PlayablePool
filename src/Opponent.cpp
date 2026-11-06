@@ -297,6 +297,11 @@ namespace fp
 	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
+		if (s.bets && a_actor && PlayerCaps() < StakeFor(SkillOf(a_actor->GetFormID()))) {
+			// not enough caps for their stake: nothing racked, nothing changed
+			Notify(std::format("Pool: {} plays for {} caps. You've got {}", a_actor->GetDisplayFullName(), StakeFor(SkillOf(a_actor->GetFormID())), PlayerCaps()));
+			return;
+		}
 		if (a_table && !FocusTable(a_table)) {
 			return;
 		}
@@ -332,6 +337,13 @@ namespace fp
 		if (actor->IsInCombat() || (player && actor->GetHostileToActor(player))) {
 			Notify(std::format("Pool: {} isn't in the mood for pool", actor->GetDisplayFullName()));
 			return;
+		}
+		if (s.bets) {
+			const int stake = StakeFor(SkillOf(actor->GetFormID()));
+			if (PlayerCaps() < stake) {
+				Notify(std::format("Pool: {} plays for {} caps. You've got {}", actor->GetDisplayFullName(), stake, PlayerCaps()));
+				return;
+			}
 		}
 		if (current) {
 			EndChallenge(std::format("{} stops playing", _opponentName));
@@ -1028,6 +1040,7 @@ namespace fp
 		pool::AiParams p;
 		// their own skill (0-100, from how much they've played): a beginner misses a lot, a pro hardly ever
 		p.skill = std::clamp(0.2 + 0.78 * SkillOf(Opponent() ? Opponent()->GetFormID() : 0) / 100.0, 0.0, 1.0);
+		p.style = StyleOf(Opponent() ? Opponent()->GetFormID() : 0);  // safe / balanced / aggressive
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;
 		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)

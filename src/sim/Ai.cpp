@@ -178,7 +178,16 @@ namespace pool
 					s.target = t;
 					s.pocket = p;
 					s.speed = SpeedFor(a_sim, d1, d2, cutCos, a_p);
-					s.score = cutCos * cutCos / (1.0 + (d1 + 2.0 * d2) / 250.0);
+					// how good a shot it is: straighter and shorter is better; how much that counts is their style
+					if (a_p.style == 0) {
+						s.score = cutCos * cutCos * cutCos / (1.0 + (d1 + 2.0 * d2) / 180.0);
+						s.speed = std::clamp(s.speed * 0.9, a_p.minSpeed, a_p.maxSpeed);
+					} else if (a_p.style == 2) {
+						s.score = cutCos / (1.0 + (d1 + 2.0 * d2) / 500.0);
+						s.speed = std::clamp(s.speed * 1.25, a_p.minSpeed, a_p.maxSpeed);
+					} else {
+						s.score = cutCos * cutCos / (1.0 + (d1 + 2.0 * d2) / 250.0);
+					}
 					out.push_back(s);
 				}
 			}
@@ -271,6 +280,10 @@ namespace pool
 		{
 			auto cands = Candidates(a_sim, a_rules, a_player, a_p);
 			if (cands.empty()) {
+				return Safety(a_sim, a_rules, a_player, a_p);
+			}
+			// a safe player doesn't take on a hard pot (a thin cut, a long way): a safety instead
+			if (a_p.style == 0 && cands.front().score < 0.2) {
 				return Safety(a_sim, a_rules, a_player, a_p);
 			}
 			if (a_validate) {

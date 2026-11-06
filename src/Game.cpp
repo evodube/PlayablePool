@@ -420,7 +420,12 @@ namespace fp
 					const auto r = RecordOf(a->GetFormID());
 					pick.who.push_back(a->GetHandle());
 					const float skill = SkillOf(a->GetFormID());
-					pick.names.push_back(std::format("{}   {}-{} · {}", name, r.wins, r.losses, SkillName(skill)));
+					if (Settings::Get().bets) {
+						pick.names.push_back(std::format("{}   {}-{} · {} · {} · {} CAPS", name, r.wins, r.losses, SkillName(skill),
+							StyleName(StyleOf(a->GetFormID())), StakeFor(skill)));
+					} else {
+						pick.names.push_back(std::format("{}   {}-{} · {} · {}", name, r.wins, r.losses, SkillName(skill), StyleName(StyleOf(a->GetFormID()))));
+					}
 				}
 				if (kit) {
 					pick.who.push_back(table->GetHandle());  // a kit table: last, pack it back into its kit
@@ -588,8 +593,60 @@ namespace fp
 		return a_skill <= 25.5f ? "BEGINNER" : a_skill <= 50.5f ? "AMATEUR" : a_skill <= 74.5f ? "SEMI-PRO" : "PRO";
 	}
 
+	int Game::StakeFor(float a_skill)
+	{
+		return a_skill <= 25.5f ? 25 : a_skill <= 50.5f ? 50 : a_skill <= 74.5f ? 150 : 300;
+	}
+
+	int Game::StyleOf(RE::TESFormID a_id)
+	{
+		// fixed per NPC (the same every game, every save): from their form ID
+		std::uint32_t h = a_id * 2654435761u;
+		h ^= h >> 15;
+		return static_cast<int>(h % 3);
+	}
+
+	const char* Game::StyleName(int a_style)
+	{
+		return a_style == 0 ? "SAFE" : a_style == 2 ? "AGGRESSIVE" : "BALANCED";
+	}
+
+	int Game::PlayerCaps()
+	{
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* caps = RE::TESForm::GetFormByID(0x0000000F);  // Caps001
+		return player && caps && caps->IsBoundObject() ? static_cast<int>(player->GetInventoryObjectCount(static_cast<RE::TESBoundObject*>(caps))) : 0;
+	}
+
+	void Game::SettleBet(int a_winner)
+	{
+		const int bet = _bet;
+		_bet = 0;
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* caps = RE::TESForm::GetFormByID(0x0000000F);
+		if (bet <= 0 || _npcGame || !_opponent || !player || !caps || !caps->IsBoundObject() || a_winner < 0) {
+			return;
+		}
+		auto* capsObject = static_cast<RE::TESBoundObject*>(caps);
+		if (a_winner == 0) {
+			player->AddObjectToContainer(capsObject, nullptr, bet, nullptr, RE::ITEM_REMOVE_REASON::kNone);
+			RE::UIUtils::PlayMenuSound("ITMBottlecapsBarterReceive");
+			Notify(std::format("Pool: you win {} caps from {}", bet, _opponentName));
+		} else {
+			const int pay = std::min(bet, PlayerCaps());
+			if (pay > 0) {
+				RE::TESObjectREFR::RemoveItemData data(capsObject, pay);
+				player->RemoveItem(data);
+			}
+			RE::UIUtils::PlayMenuSound("ITMBottlecapsBarterGive");
+			Notify(std::format("Pool: you lose {} caps to {}", pay, _opponentName));
+		}
+		log::info("bet: {} caps {} {}", bet, a_winner == 0 ? "won from" : "lost to", _opponentName);
+	}
+
 	void Game::CountResult(int a_winner)
 	{
+		SettleBet(a_winner);  // (you against an NPC, for caps)
 		if (a_winner < 0 || a_winner > 1 || (!_opponent && !_npcGame)) {
 			return;  // two at one keyboard, or Solo Play: no record
 		}

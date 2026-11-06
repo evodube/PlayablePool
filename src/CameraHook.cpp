@@ -66,17 +66,57 @@ namespace fp::CameraHook
 		}
 	}
 
+	namespace
+	{
+		// a vtable slot swapped for ours: the old one back
+		std::uintptr_t SwapSlot(void** a_vtable, std::size_t a_index, const void* a_hook)
+		{
+			DWORD old = 0;
+			if (!::VirtualProtect(&a_vtable[a_index], sizeof(void*), PAGE_EXECUTE_READWRITE, &old)) {
+				return 0;
+			}
+			const auto was = reinterpret_cast<std::uintptr_t>(a_vtable[a_index]);
+			a_vtable[a_index] = const_cast<void*>(a_hook);
+			::VirtualProtect(&a_vtable[a_index], sizeof(void*), old, &old);
+			return was;
+		}
+	}
+
 	void Install()
 	{
 		if (g_installed) {
 			return;
 		}
-		REL::Relocation<std::uintptr_t> vtable{ RE::VTABLE::FreeCameraState[0] };
-		g_mouseMove = reinterpret_cast<MouseMove_t>(vtable.write_vfunc(0x06, &HookedMouseMove));
-		g_update = reinterpret_cast<Update_t>(vtable.write_vfunc(0x0B, &HookedUpdate));
-		g_getTranslation = reinterpret_cast<GetTranslation_t>(vtable.write_vfunc(0x0D, &HookedGetTranslation));
-		REL::Relocation<std::uintptr_t> look{ RE::VTABLE::LookHandler[0] };
-		g_lookMouse = reinterpret_cast<LookMouse_t>(look.write_vfunc(0x06, &HookedLookMouse));
+		if (REX::FModule::IsRuntimeOG()) {
+			// 1.10.163: the vtables by their Address Library IDs
+			REL::Relocation<std::uintptr_t> vtable{ RE::VTABLE::FreeCameraState[0] };
+			g_mouseMove = reinterpret_cast<MouseMove_t>(vtable.write_vfunc(0x06, &HookedMouseMove));
+			g_update = reinterpret_cast<Update_t>(vtable.write_vfunc(0x0B, &HookedUpdate));
+			g_getTranslation = reinterpret_cast<GetTranslation_t>(vtable.write_vfunc(0x0D, &HookedGetTranslation));
+			REL::Relocation<std::uintptr_t> look{ RE::VTABLE::LookHandler[0] };
+			g_lookMouse = reinterpret_cast<LookMouse_t>(look.write_vfunc(0x06, &HookedLookMouse));
+		} else {
+			// next-gen / Anniversary: the library only has the old game's vtable IDs, so the vtables are read off the
+			// live objects instead (the player camera's free camera state, the player's look handler)
+			auto* camera = RE::PlayerCamera::GetSingleton();
+			auto* controls = RE::PlayerControls::GetSingleton();
+			auto* free = camera ? camera->cameraStates[RE::CameraStates::kFree].get() : nullptr;
+			auto* look = controls ? controls->lookHandler : nullptr;
+			if (!free || !look) {
+				log::error("free camera hooks: the camera or look handler isn't there yet");
+				return;
+			}
+			auto** freeTable = *reinterpret_cast<void***>(free);
+			auto** lookTable = *reinterpret_cast<void***>(look);
+			g_mouseMove = reinterpret_cast<MouseMove_t>(SwapSlot(freeTable, 0x06, reinterpret_cast<const void*>(&HookedMouseMove)));
+			g_update = reinterpret_cast<Update_t>(SwapSlot(freeTable, 0x0B, reinterpret_cast<const void*>(&HookedUpdate)));
+			g_getTranslation = reinterpret_cast<GetTranslation_t>(SwapSlot(freeTable, 0x0D, reinterpret_cast<const void*>(&HookedGetTranslation)));
+			g_lookMouse = reinterpret_cast<LookMouse_t>(SwapSlot(lookTable, 0x06, reinterpret_cast<const void*>(&HookedLookMouse)));
+			if (!g_mouseMove || !g_update || !g_getTranslation || !g_lookMouse) {
+				log::error("free camera hooks: couldn't write the vtables");
+				return;
+			}
+		}
 		g_installed = true;
 		log::info("free camera hooks installed");
 	}

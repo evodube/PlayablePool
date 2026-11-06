@@ -31,6 +31,12 @@ namespace fp
 		const bool solo = s.gameMode == 1 && !_opponent;
 		const bool nine = _gameType == 1;
 		const auto mode = solo ? (nine ? pool::Mode::kSoloNine : pool::Mode::kSolo) : (nine ? pool::Mode::kNineBall : pool::Mode::kEightBall);
+		_bet = 0;
+		if (_opponent && !_npcGame && Settings::Get().bets) {
+			if (auto* them = Opponent()) {
+				_bet = StakeFor(SkillOf(them->GetFormID()));  // for caps: what they play for, by their skill
+			}
+		}
 		if (_opponent) {
 			_autoAim = !_npcGame && _nextBreaker == 0;  // your break: straight into the shot camera
 			ForBothSeats([&]() {
@@ -59,8 +65,8 @@ namespace fp
 		_banner = 0;
 		Say(mode == pool::Mode::kSolo     ? std::string("racked. Solo Play: all 14, then the 8") :
 			mode == pool::Mode::kSoloNine ? std::string("racked. Solo 9-ball: always the lowest ball first; the 9 wins") :
-			nine                          ? std::format("racked for 9-ball. {} breaks", PlayerName(_rules.Shooter())) :
-			                                std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
+			nine                          ? std::format("racked for 9-ball. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} caps on it", _bet) : "") :
+			                                std::format("racked. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} caps on it", _bet) : ""));
 		if (!_quietStart && !_bgTick && WithinEarshot()) {
 			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 		}
@@ -417,7 +423,9 @@ namespace fp
 				const RE::TESFormID id = actor ? actor->GetFormID() : (p == 0 ? 0x14 : 0);
 				if (id) {
 					const auto r = RecordOf(id);
-					h.stats[p] = actor ? std::format("{}-{} · {}", r.wins, r.losses, SkillName(SkillOf(id))) : std::format("{}-{}", r.wins, r.losses);
+					h.stats[p] = actor ? std::format("{}-{} · {} · {}", r.wins, r.losses, SkillName(SkillOf(id)), StyleName(StyleOf(id))) :
+					             _bet > 0       ? std::format("{}-{} · {} CAPS ON IT", r.wins, r.losses, _bet) :
+					                              std::format("{}-{}", r.wins, r.losses);
 				}
 			}
 			h.names[p] = PlayerName(p);

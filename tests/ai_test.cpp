@@ -85,9 +85,10 @@ namespace
 	}
 
 	// whole games, the computer against itself
-	void Games(double a_skill, int a_games, Mode a_mode = Mode::kEightBall)
+	void Games(double a_skill, int a_games, Mode a_mode = Mode::kEightBall, int a_style = 1)
 	{
-		std::printf("%s games at skill %.1f\n", a_mode == Mode::kNineBall ? "9-ball" : "8-ball", a_skill);
+		static const char* kStyles[] = { "safe", "balanced", "aggressive" };
+		std::printf("%s games at skill %.1f, %s\n", a_mode == Mode::kNineBall ? "9-ball" : "8-ball", a_skill, kStyles[a_style]);
 		int totalShots = 0;
 		int totalPots = 0;
 		int fouls = 0;
@@ -106,6 +107,7 @@ namespace
 			std::mt19937 rng(7 + g);
 			AiParams     p;
 			p.skill = a_skill;
+			p.style = a_style;
 			int shots = 0;
 			for (; shots < 300 && !rules.Over(); ++shots) {
 				const int  shooter = rules.Shooter();
@@ -181,6 +183,8 @@ int main()
 	Games(0.2, 10);
 	Games(0.6, 20, Mode::kNineBall);
 	Games(0.2, 10, Mode::kNineBall);
+	Games(0.6, 20, Mode::kEightBall, 0);  // play styles: every game still finishes
+	Games(0.6, 20, Mode::kEightBall, 2);
 	std::printf("%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed ? 1 : 0;
 }

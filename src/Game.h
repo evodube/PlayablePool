@@ -97,6 +97,7 @@ namespace fp
 		int                                                 _gameType{ 0 };   // this table's game: 0 8-ball, 1 9-ball
 		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
 		float                                               _overTime{ 0.0f };   // seconds since the game ended
+		int                                                 _bet{ 0 };           // caps on this game (you against an NPC)
 		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
 		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
 		int                                                 _lookPocket{ -1 };
@@ -137,7 +138,12 @@ namespace fp
 		};
 		static float       StartingSkill(RE::TESFormID a_id);  // an NPC's skill before their first game: 10-40
 		float              SkillOf(RE::TESFormID a_id) const;  // 0-100
-		static const char* SkillName(float a_skill);           // BEGINNER, AMATEUR, SEMI-PRO, PRO
+		static const char* SkillName(float a_skill);
+		static int         StakeFor(float a_skill);         // caps on a game against them (bBets)
+		static int         StyleOf(RE::TESFormID a_id);      // how they play: 0 safe, 1 balanced, 2 aggressive (fixed per NPC)
+		static const char* StyleName(int a_style);
+		static int         PlayerCaps();
+		void               SettleBet(int a_winner);           // the game's over: the caps change hands           // BEGINNER, AMATEUR, SEMI-PRO, PRO
 		static void SaveRecords(const F4SE::SerializationInterface* a_intfc);
 		// the Pool Table Kit (Kit.cpp)
 		static void SetUpKit();     // game data ready: the Dugout Inn sells it; listen for it being used

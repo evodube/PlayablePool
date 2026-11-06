@@ -32,6 +32,9 @@ namespace pool
 		// through the rail. The cue ball has to be at least this far from the felt's edge behind it (back along the
 		// shot); short of it counts as overreach too. 0 = no limit.
 		double railClear{ 0.0 };
+		// How they play: 0 safe (easy pots, soft, a safety rather than a long shot), 1 balanced, 2 aggressive (hard
+		// cuts and long pots go, hit firmly)
+		int style{ 1 };
 	};
 
 	// How much further back than `stanceBack` they'd have to stand to be clear of the table for this shot (0 = they
