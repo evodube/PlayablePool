@@ -1027,7 +1027,7 @@ namespace fp
 		// Pathing only goes where there's navmesh. Every navmesh with a vertex within 2500 of the table, then rings
 		// of points round the felt (a point every ~25 units) at a few distances out: how many have navmesh under them
 		const auto start = std::chrono::steady_clock::now();
-		_navmeshes = NavmeshesNear(a_frame.origin);
+		_navmeshes = NavmeshesFor(_table.get().get(), a_frame.origin);
 		const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
 		std::string ids;
 		for (const auto id : _navmeshes) {
@@ -1080,6 +1080,9 @@ namespace fp
 
 	std::vector<RE::TESFormID> Game::NavmeshesNear(const RE::NiPoint3& a_pos) const
 	{
+		// every navmesh in memory is looked at: slow with a big load order, so each table's list is kept
+		// (NavmeshesFor) and this runs once per table
+		const auto                 start = std::chrono::steady_clock::now();
 		std::vector<RE::TESFormID> out;
 		const auto& [map, lock] = RE::TESForm::GetAllForms();
 		RE::BSAutoReadLock l{ lock };
@@ -1097,7 +1100,19 @@ namespace fp
 				}
 			}
 		}
+		const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
+		log::info("navmesh scan: {} near ({:.0f}, {:.0f}) in {:.0f} ms", out.size(), a_pos.x, a_pos.y, ms);
 		return out;
+	}
+
+	const std::vector<RE::TESFormID>& Game::NavmeshesFor(const RE::TESObjectREFR* a_table, const RE::NiPoint3& a_origin)
+	{
+		const RE::TESFormID id = a_table ? a_table->GetFormID() : 0;
+		auto                it = _navCache.find(id);
+		if (it == _navCache.end() || (it->second.first - a_origin).Length() > 50.0f) {  // (a table moved in the workshop)
+			it = _navCache.insert_or_assign(id, std::make_pair(a_origin, NavmeshesNear(a_origin))).first;
+		}
+		return it->second.second;
 	}
 
 	RE::ObjectRefHandle Game::WatchSpot(RE::TESObjectREFR* a_table, const RE::NiPoint3& a_from, const RE::NiPoint3* a_avoid)
@@ -1110,7 +1125,7 @@ namespace fp
 		}
 		if (_watchNavTable.get().get() != a_table) {
 			_watchNavTable = a_table->GetHandle();
-			_watchNavmeshes = NavmeshesNear(frame.origin);
+			_watchNavmeshes = NavmeshesFor(a_table, frame.origin);
 		}
 		const auto& s = Settings::Get();
 		// round the felt, kWatchOut beyond its edges: past where anyone stands to shoot (the cue's length and more)

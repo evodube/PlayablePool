@@ -55,7 +55,8 @@ extern "C" __declspec(dllexport) bool F4SEAPI F4SEPlugin_Query(const F4SE::Query
 
 extern "C" __declspec(dllexport) bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f4se)
 {
-	F4SE::Init(a_f4se, { .log = true, .logName = kName, .trampoline = false });
+	// fo4pool.log is this run; fo4pool.1.log .. .3.log the runs before (so a freeze's log survives the restart)
+	F4SE::Init(a_f4se, { .log = true, .logName = kName, .logRotate = 3, .trampoline = false });
 
 	fp::log::info("fo4pool loading on runtime {} ({})", a_f4se->RuntimeVersion().string(),
 		REX::FModule::IsRuntimeOG() ? "OG" : REX::FModule::IsRuntimeNG() ? "NG" : "AE");

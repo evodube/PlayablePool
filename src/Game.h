@@ -285,6 +285,8 @@ namespace fp
 		void        ProbeNavmesh(const Frame& a_frame);                 // logs how much navmesh is around the table
 		std::string NavmeshAt(const RE::NiPoint3& a_pos) const;         // "on navmesh <id>" / "NO navmesh" (for the log)
 		std::vector<RE::TESFormID> NavmeshesNear(const RE::NiPoint3& a_pos) const;
+		const std::vector<RE::TESFormID>& NavmeshesFor(const RE::TESObjectREFR* a_table, const RE::NiPoint3& a_origin);  // cached per table
+		std::unordered_map<RE::TESFormID, std::pair<RE::NiPoint3, std::vector<RE::TESFormID>>> _navCache;
 		bool        FrameOf(RE::TESObjectREFR* a_table, Frame& a_out) const;
 		// a spot for a watcher to stand, well clear of the table (no shot is taken from there), on navmesh, not
 		// another watcher's, nearest a_from; facing the table

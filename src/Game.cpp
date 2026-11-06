@@ -584,6 +584,7 @@ namespace fp
 			_others.clear();  // the other tables' games went with the old game too
 		}
 		_pairSince.clear();
+		_navCache.clear();
 		_table = {};
 		_sim.reset();
 		_balls.fill({});
