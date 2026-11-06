@@ -1,0 +1,3 @@
+The HUD lettering is rendered from Chakra Petch (c) 2018 The Chakra Petch Project Authors and Share Tech Mono
+(c) 2012 Carrois Type Design, both under the SIL Open Font License 1.1 (the two OFL files here).
+The panels and ball icons are made for fo4pool (tools/hud/panels.html, rendered by tools/hud/render_hud.py).
