@@ -143,19 +143,42 @@ namespace fp
 		if (!player || !camera || !camera->cameraRoot || !base || !base->IsBoundObject() || !cell) {
 			return;
 		}
-		// where the crosshair meets the ground you stand on, between kPlaceNear and kPlaceFar away
+		// where the crosshair meets the ground, between kPlaceNear and kPlaceFar away; then the ground right under
+		// that spot (a slope, a step, a floor higher or lower than yours): the table stands on it
 		const auto         origin = camera->cameraRoot->GetWorldTranslate();
 		const float        pitch = player->data.angle.x;
 		const float        yaw = player->data.angle.z;
 		const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
 		const RE::NiPoint3 flat{ std::sin(yaw), std::cos(yaw), 0.0f };
-		float              reach = kPlaceFar;
-		if (dir.z < -0.02f) {
+		auto ray = [&](const RE::NiPoint3& a_from, const RE::NiPoint3& a_to, RE::NiPoint3& a_hit) {
+			RE::bhkPickData pick;
+			pick.SetStartEnd(a_from, a_to);
+			cell->Pick(pick);
+			if (!pick.HasHit()) {
+				return false;
+			}
+			a_hit = a_from + (a_to - a_from) * std::clamp(pick.GetHitFraction(), 0.0f, 1.0f);
+			return true;
+		};
+		float reach = kPlaceFar;
+		// (from past you: in third person the camera's behind you, and the ray would stop at your back)
+		const float  past = std::max(0.0f, (player->data.location - origin).Dot(dir)) + 40.0f;
+		const auto   from = origin + dir * past;
+		if (RE::NiPoint3 hit; ray(from, from + dir * (kPlaceFar * 2.0f), hit)) {
+			reach = std::clamp(std::hypot(hit.x - player->data.location.x, hit.y - player->data.location.y), kPlaceNear, kPlaceFar);
+		} else if (dir.z < -0.02f) {
 			const float t = (origin.z - player->data.location.z) / -dir.z;
 			reach = std::clamp(t * std::cos(pitch), kPlaceNear, kPlaceFar);
 		}
 		RE::NiPoint3 pos = player->data.location + flat * reach;
 		pos.z = player->data.location.z;
+		{
+			const float  top = std::max(origin.z, player->data.location.z + 150.0f);
+			RE::NiPoint3 ground;
+			if (ray({ pos.x, pos.y, top }, { pos.x, pos.y, player->data.location.z - 400.0f }, ground)) {
+				pos.z = ground.z;
+			}
+		}
 		const float angle = yaw + 1.5707963f + _kitTurn;  // its long side towards you, turned as you like
 		_kitPos = pos;
 		_kitAngle = angle;
