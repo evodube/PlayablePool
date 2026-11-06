@@ -74,9 +74,10 @@ annotation isn't in these. Each NPC shot picks PoolAim or PoolAim2 at random and
 
 In game (`src/Opponent.cpp`): PoolAim2 / PoolStrike2 measured like PoolStrike at contact (frame 35): tip at
 (-3.53, 85.53), the cue 14.8 degrees to their left, so the stance stands them further back. Each shot's aim is picked
-when the shot is planned: PoolAim2 when PoolAim can't reach it, otherwise either. PoolWait2 is a side-on lean whose
-body faces the clip's -X, so the root is turned a quarter right to have them face the table; the cue's butt goes
-under the right hand at (-4, 32).
+when the shot is planned: PoolAim2 when PoolAim can't reach it, otherwise either. PoolWait2 was exported side-on (the
+body facing the clip's -X); it's now re-exported turned a quarter right (Root's children rotated -90 degrees about Z,
+`PoolWait2Front` in `anim3\pool_anims_v4.blend`) so it faces +Y like PoolWait; the cue's butt goes under the right
+hand, at (32, 4).
 
 ## PoolAim3 / PoolStrike3
 

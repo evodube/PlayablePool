@@ -29,8 +29,6 @@ namespace fp
 		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
 		float StanceBackOf(int v) { return kTipX[v] * std::sin(kCueYawOf[v]) + kTipY[v] * std::cos(kCueYawOf[v]) + 3.51f + kTipGap; }
 		float StanceSideOf(int v) { return kTipX[v] * std::cos(kCueYawOf[v]) - kTipY[v] * std::sin(kCueYawOf[v]); }
-		// PoolWait2 is a side-on lean: the body faces the clip's -X, a quarter turn left of the root's facing
-		constexpr float kWait2Turn = 1.5707963f;
 		constexpr float kContactSeconds = 35.0f / 30.0f;  // PoolStrike: the cue reaches the ball on frame 35
 		constexpr float kStrikeLength = 60.0f / 30.0f;
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
@@ -640,12 +638,8 @@ namespace fp
 		pos.z = a_frame.origin.z;
 		// facing the middle of the table while they wait
 		_npcWaitHeading = std::atan2(a_frame.origin.x - pos.x, a_frame.origin.y - pos.y);
-		// one of the two waits, at random; PoolWait2's body is turned a quarter left of the root, so for it the root
-		// (and the marker they walk onto, whose heading they take when they get there) is turned a quarter right
+		// one of the two waits, at random (both clips face the root's forward, so the same heading for either)
 		_npcWaitVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);
-		if (_npcWaitVariant == 1) {
-			_npcWaitHeading += kWait2Turn;
-		}
 		_npcWaitMarker = Spawn(bound, table, pos);
 		if (auto marker = _npcWaitMarker.get()) {
 			marker->data.angle = { 0.0f, 0.0f, _npcWaitHeading };
@@ -717,6 +711,8 @@ namespace fp
 			a_actor->SetHeading(_npcWaitHeading);
 			HoldOpponent(a_actor, true);
 			_npcWaitIdle = Anim::PlayWait(a_actor, _npcWaitVariant);
+			log::info("{}: waiting ({}), facing the table: heading {:.0f} deg (now {:.0f})", _opponentName, _npcWaitVariant == 1 ? "PoolWait2" : "PoolWait",
+				_npcWaitHeading * 57.29578f, a_actor->data.angle.z * 57.29578f);
 		} else if (_npcWaitIdle) {
 			// and kept that way: the end of their walk, or the hold, can turn them back to the marker's old facing
 			float diff = std::remainder(a_actor->data.angle.z - _npcWaitHeading, 6.2831853f);
@@ -847,12 +843,12 @@ namespace fp
 		}
 		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
 		// PoolWait has the butt on the floor at (11, 7) in the root's space, by the right foot; PoolWait2 holds the cue
-		// out to their right, its hand at (-5.6, 27.9): the butt below it, a little further out
+		// out to their right, its hand at (27.9, 5.6): the butt below it, a little further out
 		const float        h = a_actor->data.angle.z;
 		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
 		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
 		const bool         lean = _npcWaitVariant == 1;
-		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? -4.0f : 11.0f) + fwd * (lean ? 32.0f : 7.0f);
+		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? 32.0f : 11.0f) + fwd * (lean ? 4.0f : 7.0f);
 		butt.z = a_actor->data.location.z + 0.6f;
 		const RE::NiPoint3 dir = util::Normalized(palm - butt);
 		const auto&        s = Settings::Get();
