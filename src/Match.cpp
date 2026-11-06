@@ -421,7 +421,7 @@ namespace fp
 				const RE::TESFormID id = actor ? actor->GetFormID() : (p == 0 ? 0x14 : 0);
 				if (id) {
 					const auto r = RecordOf(id);
-					h.stats[p] = actor ? std::format("{}-{} · {} · {}", r.wins, r.losses, SkillName(SkillOf(id)), StyleName(StyleOf(id))) :
+					h.stats[p] = actor ? std::format("{}-{} · {}", r.wins, r.losses, SkillName(SkillOf(id))) :
 					             _bet > 0       ? std::format("{}-{} · {} CAP BET", r.wins, r.losses, _bet) :
 					                              std::format("{}-{}", r.wins, r.losses);
 				}

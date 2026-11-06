@@ -632,7 +632,7 @@ namespace fp
 		const auto  r = RecordOf(a_actor->GetFormID());
 		const float skill = SkillOf(a_actor->GetFormID());
 		const int   stake = StakeOf(a_actor);
-		return std::format("{}   {}-{} · {} · {} · {}", name, r.wins, r.losses, SkillName(skill), StyleName(StyleOf(a_actor->GetFormID())),
+		return std::format("{}   {}-{} · {} · {}", name, r.wins, r.losses, SkillName(skill),
 			stake > 0 ? std::format("{} CAP BET", stake) : std::string("FOR FUN"));
 	}
 
