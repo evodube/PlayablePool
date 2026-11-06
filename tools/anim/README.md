@@ -77,3 +77,15 @@ In game (`src/Opponent.cpp`): PoolAim2 / PoolStrike2 measured like PoolStrike at
 when the shot is planned: PoolAim2 when PoolAim can't reach it, otherwise either. PoolWait2 is a side-on lean whose
 body faces the clip's -X, so the root is turned a quarter right to have them face the table; the cue's butt goes
 under the right hand at (-4, 32).
+
+## PoolAim3 / PoolStrike3
+
+From the user's aim3 pose, in `anim_tests\anim3\pool_anims_v4.blend` (PoolAim3Anim / PoolStrike3Anim):
+
+| Clip | File | Frames (30 fps) | What |
+|---|---|---|---|
+| PoolAim3 | PoolAim3.hkx | 120 (4 s), loops | the pose with PoolAim2's breath and nod; two practice strokes (~3.6) with the grip sliding along the cue's line (shoulder and elbow solved together, the hand keeping its orientation), so the cue keeps its angle |
+| PoolStrike3 | PoolStrike3.hkx | 60 (2 s) | PoolStrike2's stroke profile along the same straight line, **contact on frame 35**; nothing but the right arm moves |
+
+Contact (frame 35): the tip at (8.06, 92.02), the cue 3.6 degrees to their left, sloping 9 degrees down. The
+export wrote 1 fps again; patched to 30 like PoolAim2. Each shot picks at random among the aims that reach it.

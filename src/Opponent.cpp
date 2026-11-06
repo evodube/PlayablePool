@@ -20,9 +20,11 @@ namespace fp
 		// 9 up, fingers wrapped round the cue, which slopes 7.3 degrees down to the tip.
 		// PoolAim2 / PoolStrike2 (variant 1), measured the same way at their contact (frame 35): the bridge hand ~30
 		// further forward, so the tip is further ahead of the root, and the cue turned a little more to their left
-		constexpr float kTipX[2] = { 0.59f, -3.53f };
-		constexpr float kTipY[2] = { 73.37f, 85.53f };
-		constexpr float kCueYawOf[2] = { -10.85f * 0.017453292f, -14.8f * 0.017453292f };
+		// PoolAim3 / PoolStrike3 (variant 2): the cue nearly straight ahead, the tip furthest out of the three
+		constexpr int   kAims = 3;
+		constexpr float kTipX[kAims] = { 0.59f, -3.53f, 8.06f };
+		constexpr float kTipY[kAims] = { 73.37f, 85.53f, 92.02f };
+		constexpr float kCueYawOf[kAims] = { -10.85f * 0.017453292f, -14.8f * 0.017453292f, -3.59f * 0.017453292f };
 		constexpr float kTipGap = 1.5f;  // between the tip and the ball at contact
 		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
 		float StanceBackOf(int v) { return kTipX[v] * std::sin(kCueYawOf[v]) + kTipY[v] * std::cos(kCueYawOf[v]) + 3.51f + kTipGap; }
@@ -602,7 +604,7 @@ namespace fp
 		// how far back along the shot line the cue ball is from the root: the clip's distance, or further if that's
 		// over the table (they lean in from the rail and the cue reaches less far than the clip shows; the shot
 		// picker avoids those shots where it can)
-		const int    v = std::clamp(_npcAimVariant, 0, 1);
+		const int    v = std::clamp(_npcAimVariant, 0, kAims - 1);
 		double       back = StanceBackOf(v) / scale;
 		const double hx = s.spec.length * 0.5 + kTableMargin;
 		const double hy = s.spec.width * 0.5 + kTableMargin;
@@ -921,8 +923,8 @@ namespace fp
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;
 		// only shots they can stand behind: no leaning across the table (table units: the table may be scaled)
-		// (with PoolAim2's reach, the longer of the two: the aim is picked to suit the shot below)
-		p.stanceBack = StanceBackOf(1) / std::max(0.01f, a_frame.scale);
+		// (with the longest reach of the aims, PoolAim3's: the aim is picked to suit the shot below)
+		p.stanceBack = StanceBackOf(2) / std::max(0.01f, a_frame.scale);
 		p.tableMargin = kTableMargin;
 		p.railClear = kRailClear;  // and the cue (sloping down to the ball) clear of the rail behind the cue ball
 		_npcShot = pool::ChooseShot(*_sim, _rules, _seatIdx, p, _npcRng);
@@ -939,13 +941,19 @@ namespace fp
 		log::info("{}: shot at ball {} into pocket {}{}, speed {:.0f}, dir ({:.3f}, {:.3f})", _opponentName, _npcShot.target, _npcShot.pocket,
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
-		// which aim: PoolAim reaches less far; if this shot needs more than it has, PoolAim2 (it leans further in),
-		// otherwise either, at random
+		// which aim: any of them that reaches this shot, at random (PoolAim reaches least far, PoolAim3 furthest);
+		// if none does, the one that reaches furthest
 		{
-			pool::AiParams p0 = p;
-			p0.stanceBack = StanceBackOf(0) / std::max(0.01f, a_frame.scale);
-			const double over0 = pool::Overreach(*_sim, _sim->Balls()[0].pos, _npcShot.dir, p0);
-			_npcAimVariant = over0 > p0.reachSlack ? 1 : std::uniform_int_distribution<int>(0, 1)(_npcRng);
+			int fits[kAims];
+			int n = 0;
+			for (int v = 0; v < kAims; ++v) {
+				pool::AiParams pv = p;
+				pv.stanceBack = StanceBackOf(v) / std::max(0.01f, a_frame.scale);
+				if (pool::Overreach(*_sim, _sim->Balls()[0].pos, _npcShot.dir, pv) <= pv.reachSlack) {
+					fits[n++] = v;
+				}
+			}
+			_npcAimVariant = n > 0 ? fits[std::uniform_int_distribution<int>(0, n - 1)(_npcRng)] : kAims - 1;
 		}
 		_npcStance = StanceFor(a_frame, _sim->Balls()[0].pos, _npcShot.dir, _npcHeading);
 		StepAsideFrom(_npcStance);

@@ -306,6 +306,9 @@ namespace fp::Anim
 		if (a_variant == 1) {
 			return Play(a_actor, Settings::Get().animAim2FormID, "PoolAim2");
 		}
+		if (a_variant == 2) {
+			return Play(a_actor, Settings::Get().animAim3FormID, "PoolAim3");
+		}
 		return Play(a_actor, Settings::Get().animAimFormID, "PoolAim");
 	}
 
@@ -313,6 +316,9 @@ namespace fp::Anim
 	{
 		if (a_variant == 1) {
 			return Play(a_actor, Settings::Get().animStrike2FormID, "PoolStrike2");
+		}
+		if (a_variant == 2) {
+			return Play(a_actor, Settings::Get().animStrike3FormID, "PoolStrike3");
 		}
 		return Play(a_actor, Settings::Get().animStrikeFormID, "PoolStrike");
 	}

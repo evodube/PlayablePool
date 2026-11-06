@@ -155,6 +155,8 @@ namespace fp
 		animAim2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAim2FormID", animAim2FormID));
 		animWait2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iWait2FormID", animWait2FormID));
 		animStrike2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrike2FormID", animStrike2FormID));
+		animAim3FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAim3FormID", animAim3FormID));
+		animStrike3FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrike3FormID", animStrike3FormID));
 
 		hudScale = std::clamp(ReadFloat(L"HUD", L"fScale", hudScale), 0.3f, 3.0f);
 		notifications = ReadBool(L"HUD", L"bNotifications", notifications);

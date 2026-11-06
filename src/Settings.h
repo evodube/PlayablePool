@@ -126,6 +126,8 @@ namespace fp
 		std::uint32_t animAim2FormID{ 0x819 };    // PoolAim2: another aim (each shot picks one of the two)
 		std::uint32_t animWait2FormID{ 0x81A };   // PoolWait2: another wait (picked each time they settle)
 		std::uint32_t animStrike2FormID{ 0x81B }; // PoolStrike2: the strike from PoolAim2's stance
+		std::uint32_t animAim3FormID{ 0x81C };    // PoolAim3: a third aim
+		std::uint32_t animStrike3FormID{ 0x81D }; // PoolStrike3: the strike from PoolAim3's stance
 
 		// [HUD] the terminal HUD (needs F4SE Menu Framework)
 		float hudScale{ 1.0f };  // on top of the automatic scale (screen height / 720)
