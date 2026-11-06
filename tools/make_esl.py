@@ -110,6 +110,21 @@ def potion(form_id: int, editor_id: str, name: str, desc: str, mesh: str, bounds
     )
 
 
+def recipe(form_id: int, editor_id: str, created: int, components: list[tuple[int, int]], workbench: int, category: int) -> bytes:
+    """A crafting recipe (COBJ), laid out as Fallout4.esm's chem station ones (co_food_CuttingFluid)."""
+    return record(
+        b"COBJ",
+        0,
+        form_id,
+        subrecord(b"EDID", zstring(editor_id))
+        + subrecord(b"FVPA", b"".join(struct.pack("<II", c, n) for c, n in components))
+        + subrecord(b"CNAM", struct.pack("<I", created))
+        + subrecord(b"BNAM", struct.pack("<I", workbench))
+        + subrecord(b"FNAM", struct.pack("<I", category))
+        + subrecord(b"INTV", struct.pack("<HH", 1, 0)),  # makes one
+    )
+
+
 def keyword(form_id: int, editor_id: str) -> bytes:
     # colour (white), type 0 (none): as vanilla link keywords (RELinkTravel)
     return record(
@@ -290,12 +305,18 @@ def build(with_stick: bool) -> bytes:
                       "A folding pool table, balls and cues. Use it to set the table up in front of you; hold the activate key at it to pack it away again.",
                       "", bytes(12), 350, 20.0)]
 
-    count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests) + len(potions)
+    # ...and made at a chem station (its Utility tab): wood 10, steel 6, cloth 4, screws 2, adhesive 2
+    recipes = [recipe(own | (FIRST_ID + 56), "fo4poolco_TableKit", own | (FIRST_ID + 55),
+                      [(0x0001FAC2, 10), (0x0001FABD, 6), (0x001223C7, 4), (0x0003D294, 2), (0x0001FAA5, 2)],
+                      0x00102158,   # WorkbenchChemlab
+                      0x0006980C)]  # RecipeUtility
+
+    count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests) + len(potions) + len(recipes)
     header = record(
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 56))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 57))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
@@ -310,6 +331,7 @@ def build(with_stick: bool) -> bytes:
         + group(b"QUST", b"".join(quests))
         + group(b"IDLE", b"".join(idles))
         + group(b"PACK", b"".join(packages))
+        + group(b"COBJ", b"".join(recipes))
     )
 
 
