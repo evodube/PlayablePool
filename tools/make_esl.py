@@ -191,12 +191,13 @@ def quest(form_id: int, editor_id: str, opponent_package: int, watch_package: in
     (properties Opponent and Watchers), fo4poolOpponentAlias and fo4poolWatchersAlias on the aliases (papyrus/)."""
     body = (
         subrecord(b"EDID", zstring(editor_id))
-        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", [("Opponent", 0), ("Watchers", 1), ("Opponent2", 2)],
-                                        [(0, "fo4poolOpponentAlias"), (1, "fo4poolWatchersAlias"), (2, "fo4poolOpponentAlias")]))
+        + subrecord(b"VMAD", quest_vmad(form_id, "fo4poolOpponentQuest", [("Opponent", 0), ("Watchers", 1), ("Opponent2", 2), ("Players", 3)],
+                                        [(0, "fo4poolOpponentAlias"), (1, "fo4poolWatchersAlias"), (2, "fo4poolOpponentAlias"),
+                                         (3, "fo4poolWatchersAlias")]))
         # flags (0x10 start game enabled, 0x1 as saved by the CK for those), priority, unknown, delay 0, type 0 (none)
         + subrecord(b"DNAM", struct.pack("<HBBfI", 0x0011, priority, 0, 0.0, 0))
         + subrecord(b"NEXT", b"")
-        + subrecord(b"ANAM", struct.pack("<I", 3))  # next alias id
+        + subrecord(b"ANAM", struct.pack("<I", 4))  # next alias id
         + subrecord(b"ALST", struct.pack("<I", 0))
         + subrecord(b"ALID", zstring("Opponent"))
         # optional, allow reuse in quest, allow reserved (settlers are often reserved by workshop quests)
@@ -216,6 +217,15 @@ def quest(form_id: int, editor_id: str, opponent_package: int, watch_package: in
         # alias 2 'Opponent2': the second NPC when two NPCs play each other; the same walk package
         + subrecord(b"ALST", struct.pack("<I", 2))
         + subrecord(b"ALID", zstring("Opponent2"))
+        + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
+        + subrecord(b"ALPC", struct.pack("<I", opponent_package))
+        + subrecord(b"VTCK", struct.pack("<I", 0))
+        + subrecord(b"ALED", b"")
+        # alias 3 'Players': a collection, every NPC playing at any table (up to four tables at once); the walk package
+        + subrecord(b"ALCS", struct.pack("<I", 3))
+        + subrecord(b"ALMI", b"\x00")
+        + subrecord(b"ALST", struct.pack("<I", 3))
+        + subrecord(b"ALID", zstring("Players"))
         + subrecord(b"FNAM", struct.pack("<I", 0x0000020A))
         + subrecord(b"ALPC", struct.pack("<I", opponent_package))
         + subrecord(b"VTCK", struct.pack("<I", 0))

@@ -50,11 +50,13 @@ namespace fp
 		_shotLive = false;
 		_overTime = 0.0f;
 		_manualPocket = _autoPocket = -1;
-		_placing = false;
+		if (!_bgTick) {
+			_placing = false;
+		}
 		_log = {};
 		_banner = 0;
 		Say(mode == pool::Mode::kSolo ? "racked. Solo Play: all 14, then the 8" : std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
-		if (!_quietStart) {
+		if (!_quietStart && !_bgTick) {
 			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 		}
 	}
@@ -281,7 +283,7 @@ namespace fp
 			                                  : std::string(". On the 8");
 		}
 		Say(line);
-		if (!r.turnContinues) {
+		if (!r.turnContinues && !_bgTick) {
 			Audio::PlayUI(Audio::Bank::kTurn, 0.7f);
 		}
 		log::info("shot judged: foul {} continues {} groups {} potted {} -> {}", static_cast<int>(r.foul), r.turnContinues, r.groupsSet,
@@ -302,7 +304,7 @@ namespace fp
 
 	void Game::StartPlacement()
 	{
-		if (_placing || !_sim) {
+		if (_placing || !_sim || _bgTick) {
 			return;
 		}
 		_overheadBeforePlacing = _overhead;
@@ -368,6 +370,9 @@ namespace fp
 
 	void Game::UpdateHud()
 	{
+		if (_bgTick) {
+			return;  // the HUD is the loaded table's
+		}
 		HudState h;
 		h.activateVk = _activateVk.load();
 		h.npcGame = _npcGame;

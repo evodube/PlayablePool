@@ -138,7 +138,7 @@ namespace fp
 		carryOut = ReadFloat(L"Opponent", L"fCarryOut", carryOut);
 		npcGames = ReadBool(L"Opponent", L"bNpcGames", npcGames);
 		npcGameChance = ReadFloat(L"Opponent", L"iNpcGameChance", npcGameChance);
-		npcGameEvery = ReadFloat(L"Opponent", L"fNpcGameEvery", npcGameEvery);
+		npcGameDelay = ReadFloat(L"Opponent", L"fNpcGameDelay", npcGameDelay);
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));

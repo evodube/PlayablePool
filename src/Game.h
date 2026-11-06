@@ -63,10 +63,60 @@ namespace fp
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 	};
 
+	struct Marker  // a calibration marker (Game::ToggleCalibrate)
+	{
+		RE::ObjectRefHandle ref;
+		pool::Vec2          pos;
+	};
+
+	// Everything about one table's game: the table, its balls and physics, the rules, the log and banners, and the
+	// NPCs playing at it (the seat being worked on in NpcSlot, the other in _seats). Game derives from it: the table
+	// you're at (or watching) is the one in Game itself; up to kMaxTables - 1 others carry on in Game::_others and
+	// are swapped in for their tick (Game::TickOthers).
+	struct TableSlot : NpcSlot
+	{
+		RE::ObjectRefHandle                                 _table;
+		std::unique_ptr<pool::Sim>                          _sim;
+		std::array<RE::ObjectRefHandle, pool::Sim::kBalls> _balls;
+		std::array<float, pool::Sim::kBalls>                _dropTime{};
+		std::vector<Marker>                                 _markers;
+		std::chrono::steady_clock::time_point               _last{};
+		bool                                                _haveLast{ false };
+		bool                                                _scratch{ false };
+		bool                                                _warned3D{ false };
+		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
+		pool::Rules                                         _rules;
+		int                                                 _nextBreaker{ 0 };
+		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
+		float                                               _overTime{ 0.0f };   // seconds since the game ended
+		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
+		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
+		int                                                 _lookPocket{ -1 };
+		int                                                 _dwellPocket{ -1 };
+		std::chrono::steady_clock::time_point               _dwellSince{};
+		std::string                                         _message;
+		std::chrono::steady_clock::time_point               _messageTime{};
+		std::array<std::string, 2>                          _log;
+		int                                                 _banner{ 0 };
+		std::string                                         _bannerTitle;
+		std::string                                         _bannerSub;
+		std::chrono::steady_clock::time_point               _bannerTime{};
+		pool::Vec2                       _strikePos;
+		std::array<NpcSlot, 2> _seats;
+		int                    _seatIdx{ 1 };
+		bool                   _npcGame{ false };
+		bool                   _spectating{ false };  // F on their table: the HUD shows their game
+		bool                   _clearAfterTick{ false };
+		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
+		std::array<float, pool::Sim::kBalls>                _glow{};  // the glow each ball has now (-1: not set yet)
+		std::array<RE::NiAVObject*, pool::Sim::kBalls>      _glow3D{}; // the 3D it was set on (a reload needs it again)
+		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
+	};
+
 	// Racks balls on a pool table, runs the physics and moves the balls' 3D, and the shot camera ("aim mode", Aim.cpp).
 	// Everything runs on the game's main thread except OnPresent/PollKeys (render thread) and Hud() (UI thread),
 	// which only touch the atomics.
-	class Game : private NpcSlot
+	class Game : private TableSlot
 	{
 	public:
 		// Wins and losses, kept in the save (F4SE co-save): every NPC who plays, and you (only games against NPCs; not
@@ -165,15 +215,28 @@ namespace fp
 			float         scale{ 1.0f };
 		};
 
-		struct Marker
-		{
-			RE::ObjectRefHandle ref;
-			pool::Vec2          pos;
-		};
+		using Marker = fp::Marker;
 
 		void PollKeys();
 		void PollMouse();
 		void Tick();
+		// Several tables at once: the one in Game is "loaded" (yours, or the one you're watching); the others are in
+		// _others and each gets its tick swapped in (TickOthers). A background tick must leave you alone: _bgTick
+		// makes the aim, HUD and UI-sound code skip it. The camera hooks lock _tableMutex, so they never see a table
+		// mid-swap.
+		static constexpr std::size_t kMaxTables = 4;
+		std::vector<TableSlot> _others;
+		bool                   _bgTick{ false };
+		std::mutex             _tableMutex;
+		void TickTable();                              // the loaded table's frame (balls, rules, NPCs)
+		void TickOthers();
+		void SwapWith(std::size_t a_other);            // _others[a_other] <-> the loaded table
+		int  SlotOf(const RE::TESObjectREFR* a_table) const;  // 0 loaded, i + 1 = _others[i], -1 none
+		bool Busy(const TableSlot& a_slot) const;      // a game's on there (racked, or NPCs in it)
+		std::size_t RunningGames() const;
+		bool FocusTable(RE::TESObjectREFR* a_table);   // make a_table the loaded one (an NPC game here goes to the background); false: no room
+		bool IsPlaying(const RE::Actor* a_actor) const; // in a game at any table
+		std::string SlotNames(const TableSlot& a_slot) const;  // "HEATHER VS PIPER"
 		void PlaySounds(const Frame& a_frame, const std::vector<pool::Event>& a_events);
 
 		// the 8-ball game
@@ -197,7 +260,9 @@ namespace fp
 		// the NPC opponent (Opponent.cpp)
 		using NpcStep = fp::NpcStep;
 		void        Challenge(RE::Actor* a_actor = nullptr, RE::TESObjectREFR* a_table = nullptr);  // a_actor at a_table (racked first if need be)
-		void        StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // two NPCs play each other
+		void        StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // two NPCs play each other (at the loaded table)
+		void        StartNpcGameAt(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // ...wherever: the loaded table or one of its own
+		bool        TableFree(const RE::TESObjectREFR* a_table) const;  // no game on there (or only a finished one)
 		void        EndChallenge(const std::string& a_why);
 		RE::Actor*  Opponent() const;
 		bool        OpponentsTurn() const;  // Player 2 is the NPC and it's their shot
@@ -286,41 +351,13 @@ namespace fp
 		static void         Tell(const std::string& a_message);    // only without the HUD, or with bNotifications=1
 
 		// main thread
-		RE::ObjectRefHandle                                 _table;
-		std::unique_ptr<pool::Sim>                          _sim;
-		std::array<RE::ObjectRefHandle, pool::Sim::kBalls> _balls;
-		std::array<float, pool::Sim::kBalls>                _dropTime{};
-		std::vector<Marker>                                 _markers;
 		float                                               _modelRadius{ 0.0f };
-		std::chrono::steady_clock::time_point               _last{};
-		bool                                                _haveLast{ false };
-		bool                                                _scratch{ false };
-		bool                                                _warned3D{ false };
-		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
-		std::array<float, pool::Sim::kBalls>                _glow{};  // the glow each ball has now (-1: not set yet)
-		std::array<RE::NiAVObject*, pool::Sim::kBalls>      _glow3D{}; // the 3D it was set on (a reload needs it again)
 		bool                                                _glowLogged{ false };
-		pool::Rules                                         _rules;
-		int                                                 _nextBreaker{ 0 };
-		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
-		float                                               _overTime{ 0.0f };   // seconds since the game ended
-		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
-		int                                                 _autoPocket{ -1 };   // where the guide says the 8 is going
 		// On the 8: aim at a pocket for 2 s (the 8 heading into it, or the cue ball pointing at it) to call it; look
 		// at another for 2 s to change; or F calls it at once
-		int                                                 _lookPocket{ -1 };
-		int                                                 _dwellPocket{ -1 };
-		std::chrono::steady_clock::time_point               _dwellSince{};
 		void                                                TickPocketCall();
 		void                                                CallLookedAtPocket();
 		bool                                                _overheadBeforePlacing{ false };
-		std::string                                         _message;
-		std::chrono::steady_clock::time_point               _messageTime{};
-		std::array<std::string, 2>                          _log;
-		int                                                 _banner{ 0 };
-		std::string                                         _bannerTitle;
-		std::string                                         _bannerSub;
-		std::chrono::steady_clock::time_point               _bannerTime{};
 		mutable std::mutex                                  _hudMutex;
 		HudState                                            _hud;  // under _hudMutex
 
@@ -337,7 +374,6 @@ namespace fp
 		bool                             _haveCamTarget{ false };
 		float                            _strikeShow{ 0.0f };  // the stick stays visible this much longer after a shot
 		pool::Vec2                       _lastDir{ 1.0, 0.0 };
-		pool::Vec2                       _strikePos;
 		std::vector<RE::ObjectRefHandle> _dots;
 		RE::ObjectRefHandle              _stick;
 		bool                             _stickLogged{ false };
@@ -368,21 +404,14 @@ namespace fp
 		// the NPC opponent, main thread: their state is NpcSlot (the base class), one per seat (_seats)
 		// Two NPCs playing each other ([Opponent] bNpcGames): both seats are NPCs. The seat being worked on is in the
 		// base class (_seatIdx); the other waits in _seats. Against you, it's always seat 1 (you're 0)
-		std::array<NpcSlot, 2> _seats;
-		int                    _seatIdx{ 1 };
-		bool                   _npcGame{ false };
-		bool                   _spectating{ false };  // F on their table: the HUD shows their game
-		bool                   _clearAfterTick{ false };
 		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack
-		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		std::chrono::steady_clock::time_point _lastNpcGame{};
+		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);
 		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with
 		void                   EndSeat(const std::string& a_why);
 		void                   EndNpcGame(const std::string& a_why);
 		void                   ForBothSeats(const std::function<void()>& a_do);  // each seat's NPC loaded in turn (NPC games), else the one
-		bool                _autoAim{ false };   // their shot's done and it's yours: straight into the shot camera
-		std::vector<RE::TESFormID> _navmeshes;        // navmeshes near the table (NavmeshAt), found by ProbeNavmesh
 		std::mt19937        _npcRng{ std::random_device{}() };
 		bool                             _controlsBlocked{ false };
 
@@ -417,6 +446,7 @@ namespace fp
 			RE::TESFormID id{ 0 };
 			float         left{ 0.0f };     // seconds before they go back to their own business
 			bool          offered{ false };  // asked you for a game already (or decided not to)
+			RE::ObjectRefHandle table;       // the table they hang round
 			RE::ObjectRefHandle spot;        // where they hang round (WatchSpot)
 		};
 		// Someone hanging round the table asking you for a game ([Opponent] bOffers): F at that table plays them
@@ -442,7 +472,8 @@ namespace fp
 		std::vector<Watcher> _watchers;
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
-		RE::ObjectRefHandle  _watchTable;
+		std::vector<RE::ObjectRefHandle> _watchTables;  // the pool tables near you (TickWatchers), nearest first
+		std::vector<std::pair<RE::ObjectRefHandle, std::chrono::steady_clock::time_point>> _pairSince;  // tables with two watchers there, since when
 		RE::ObjectRefHandle  _watchNavTable;           // _watchNavmeshes are round this one
 		std::vector<RE::TESFormID> _watchNavmeshes;
 		float                _watchScan{ 0.0f };

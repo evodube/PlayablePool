@@ -1,5 +1,7 @@
 #include "Anim.h"
 
+#include <unordered_set>
+
 #include "Settings.h"
 #include "Util.h"
 
@@ -149,7 +151,14 @@ namespace fp::Anim
 		}
 
 		bool                       g_ownWarned{ false };
-		std::array<std::atomic<std::uint32_t>, 2> g_joined{};  // the actor each seat's alias (Opponent, Opponent2) holds, as the quest script says
+		// who the Players collection holds, as the quest script says (any number: up to four tables of two)
+		std::mutex                        g_joinedMutex;
+		std::unordered_set<std::uint32_t> g_joined;
+		bool Joined(std::uint32_t a_id)
+		{
+			std::scoped_lock lock(g_joinedMutex);
+			return g_joined.contains(a_id);
+		}
 		std::atomic<bool>          g_joining{ false };  // a Join is on its way (one at a time: it may restart the quest)
 		std::atomic<bool>          g_diagnose{ false };  // a Join didn't take: log what the quest looks like
 		bool                       g_diagnosed{ false };
@@ -195,10 +204,9 @@ namespace fp::Anim
 		class JoinDone final : public RE::BSScript::IStackCallbackFunctor
 		{
 		public:
-			JoinDone(std::string a_what, std::uint32_t a_formID, int a_slot) :
+			JoinDone(std::string a_what, std::uint32_t a_formID) :
 				_what(std::move(a_what)),
-				_formID(a_formID),
-				_slot(a_slot)
+				_formID(a_formID)
 			{}
 
 			void CallQueued() override {}
@@ -232,17 +240,14 @@ namespace fp::Anim
 				log::info("papyrus {} -> {}", _what, text);
 				g_joining = false;
 				if (held) {
-					g_joined[_slot] = _formID;
-					if (g_joined[1 - _slot] == _formID) {
-						g_joined[1 - _slot] = 0;  // JoinSlot takes them out of the other seat
-					}
+					std::scoped_lock lock(g_joinedMutex);
+					g_joined.insert(_formID);
 				}
 			}
 
 		private:
 			std::string   _what;
 			std::uint32_t _formID;
-			int           _slot;
 		};
 
 		// a form as the script's Int argument (it does Game.GetForm): objects for NPCs with other scripts on them
@@ -318,14 +323,13 @@ namespace fp::Anim
 		}
 	}
 
-	void JoinOwnPackage(RE::Actor* a_actor, int a_slot)
+	void JoinOwnPackage(RE::Actor* a_actor, [[maybe_unused]] int a_slot)
 	{
-		a_slot = std::clamp(a_slot, 0, 1);
 		if (g_diagnose.exchange(false) && !g_diagnosed) {
 			g_diagnosed = true;
 			DiagnoseQuest();
 		}
-		if (!a_actor || !Settings::Get().opponentOwnPackage || g_joined[a_slot] == a_actor->GetFormID()) {
+		if (!a_actor || !Settings::Get().opponentOwnPackage || Joined(a_actor->GetFormID())) {
 			return;
 		}
 		if (!OwnQuest() || !LinkKeyword()) {
@@ -340,9 +344,9 @@ namespace fp::Anim
 		if (g_joining.exchange(true)) {
 			return;  // the last one hasn't answered yet
 		}
-		const std::string what = What(a_actor, a_slot ? "fo4poolOpponentQuest.JoinSlot (seat 2)" : "fo4poolOpponentQuest.JoinSlot");
-		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> done{ new JoinDone(what, a_actor->GetFormID(), a_slot) };
-		if (!CallQuest("JoinSlot", what, done, FormArg(a_actor), static_cast<std::int32_t>(a_slot))) {
+		const std::string what = What(a_actor, "fo4poolOpponentQuest.JoinPlayer");
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> done{ new JoinDone(what, a_actor->GetFormID()) };
+		if (!CallQuest("JoinPlayer", what, done, FormArg(a_actor))) {
 			g_joining = false;
 		}
 	}
@@ -384,7 +388,7 @@ namespace fp::Anim
 
 	bool InOwnPackage(RE::Actor* a_actor)
 	{
-		return a_actor && Settings::Get().opponentOwnPackage && (g_joined[0] == a_actor->GetFormID() || g_joined[1] == a_actor->GetFormID());
+		return a_actor && Settings::Get().opponentOwnPackage && Joined(a_actor->GetFormID());
 	}
 
 	bool RunningOwnPackage(RE::Actor* a_actor)
@@ -396,17 +400,21 @@ namespace fp::Anim
 
 	void ReleaseOwnPackage(RE::Actor* a_actor)
 	{
-		const int slot = !a_actor ? -1 : g_joined[0] == a_actor->GetFormID() ? 0 : g_joined[1] == a_actor->GetFormID() ? 1 : -1;
-		if (slot < 0) {
+		if (!a_actor) {
 			return;
 		}
-		g_joined[slot] = 0;
+		{
+			std::scoped_lock lock(g_joinedMutex);
+			if (!g_joined.erase(a_actor->GetFormID())) {
+				return;
+			}
+		}
 		if (auto* keyword = LinkKeyword()) {
 			a_actor->SetLinkedRef(nullptr, keyword);
 		}
-		const std::string what = What(a_actor, "fo4poolOpponentQuest.LeaveSlot");
+		const std::string what = What(a_actor, "fo4poolOpponentQuest.LeavePlayer");
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
-		CallQuest("LeaveSlot", what, logged, static_cast<std::int32_t>(slot));  // Clear, then EvaluatePackage: their own AI again
+		CallQuest("LeavePlayer", what, logged, FormArg(a_actor));  // out of the collection, EvaluatePackage: their own AI again
 	}
 
 	void Arrived(RE::Actor* a_actor)

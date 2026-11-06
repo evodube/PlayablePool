@@ -148,6 +148,37 @@ namespace fp
 		LoadSeat(back);
 	}
 
+	bool Game::TableFree(const RE::TESObjectREFR* a_table) const
+	{
+		const int slot = SlotOf(a_table);
+		if (slot < 0) {
+			return true;
+		}
+		const TableSlot& t = slot == 0 ? static_cast<const TableSlot&>(*this) : _others[static_cast<std::size_t>(slot - 1)];
+		return !t._opponent && !t._npcGame && (!t._sim || t._rules.Over());
+	}
+
+	void Game::StartNpcGameAt(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table)
+	{
+		// at the loaded table if that's free (nothing of yours on), otherwise as a table of its own in the background
+		const int slot = SlotOf(a_table);
+		if (slot == 0 || (slot < 0 && !Busy(*this) && !_aiming)) {
+			StartNpcGame(a_first, a_second, a_table);
+			return;
+		}
+		if (slot > 0 || _others.size() + 1 >= kMaxTables) {
+			return;
+		}
+		std::scoped_lock lock(_tableMutex);
+		_others.emplace_back();
+		const std::size_t i = _others.size() - 1;
+		SwapWith(i);
+		_bgTick = true;
+		StartNpcGame(a_first, a_second, a_table);
+		_bgTick = false;
+		SwapWith(i);
+	}
+
 	void Game::StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table)
 	{
 		if (!a_first || !a_second || !a_table || a_first == a_second) {
@@ -258,6 +289,9 @@ namespace fp
 	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
+		if (a_table && !FocusTable(a_table)) {
+			return;
+		}
 		if (_npcGame) {
 			EndNpcGame("");
 			Clear();
@@ -523,7 +557,9 @@ namespace fp
 		_seats = {};
 		_npcGame = false;
 		_spectating = false;
-		_watching = false;
+		if (!_bgTick) {
+			_watching = false;
+		}
 		if (!a_why.empty()) {
 			Say(a_why);
 		}
@@ -542,7 +578,9 @@ namespace fp
 		_opponent = {};
 		_npcStep = NpcStep::kNone;
 		_npcTimer = 0.0f;
-		_watching = false;
+		if (!_bgTick) {
+			_watching = false;
+		}
 		_manualPocket = -1;
 		if (!a_why.empty()) {
 			Say(a_why);
@@ -1119,8 +1157,11 @@ namespace fp
 		if (!table) {
 			return;
 		}
-		// watchers standing where the shot's taken from (or on the way to it)
+		// watchers at this table standing where the shot's taken from (or on the way to it)
 		for (auto& w : _watchers) {
+			if (w.table != _table) {
+				continue;
+			}
 			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
 			auto  spot = w.spot.get();
 			if (!actor || !spot) {
@@ -1208,7 +1249,9 @@ namespace fp
 	void Game::TickOpponent(const Frame& a_frame, float a_dt)
 	{
 		if (!_opponent) {
-			_watching = false;
+			if (!_bgTick) {
+				_watching = false;
+			}
 			return;
 		}
 		auto* actor = Opponent();
@@ -1227,7 +1270,9 @@ namespace fp
 		}
 		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
 			const float fromTable = Distance2D(player->data.location, a_frame.origin);
-			_watching = (!_npcGame || _spectating) && fromTable < kWatchDistance;
+			if (!_bgTick) {
+				_watching = (!_npcGame || _spectating) && fromTable < kWatchDistance;
+			}
 			if (_npcGame && fromTable > kQuitDistance) {
 				EndNpcGame("");  // you've gone: their game (and its balls) goes too
 				_clearAfterTick = true;
@@ -1457,40 +1502,40 @@ namespace fp
 			return;
 		}
 
-		// the pool table nearest you, within reach (looked for every 5 s)
+		// the pool tables near you, nearest first, up to kMaxTables (looked for every 5 s)
 		_watchScan -= dt;
 		if (_watchScan <= 0.0f) {
 			_watchScan = 5.0f;
-			RE::TESObjectREFR* best = nullptr;
-			float              bestD = 2500.0f;
+			std::vector<std::pair<float, RE::TESObjectREFR*>> found;
 			util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
 				a_cell->ForEachReferenceInRange(player->data.location, 2500.0f, [&](RE::TESObjectREFR* a_ref) {
-					if (a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && IsPoolTable(a_ref)) {
-						if (const float d = (a_ref->data.location - player->data.location).Length(); d < bestD) {
-							bestD = d;
-							best = a_ref;
-						}
+					if (a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && IsPoolTable(a_ref) &&
+						std::ranges::none_of(found, [&](const auto& f) { return f.second == a_ref; })) {
+						found.emplace_back((a_ref->data.location - player->data.location).Length(), a_ref);
 					}
 					return RE::BSContainer::ForEachResult::kContinue;
 				});
 			});
-			if (_sim && _table) {
-				best = _table.get().get();  // the table you're playing at
+			std::ranges::sort(found, {}, &std::pair<float, RE::TESObjectREFR*>::first);
+			_watchTables.clear();
+			for (std::size_t i = 0; i < found.size() && i < kMaxTables; ++i) {
+				_watchTables.push_back(found[i].second->GetHandle());
 			}
-			_watchTable = best ? best->GetHandle() : RE::ObjectRefHandle{};
 		}
-		auto table = _watchTable.get();
+		auto nearYou = [&](const RE::ObjectRefHandle& a_table) {
+			return std::ranges::any_of(_watchTables, [&](const RE::ObjectRefHandle& t) { return t == a_table; });
+		};
 
-		auto* opponent = Opponent();
 		for (std::size_t i = _watchers.size(); i-- > 0;) {
-			auto&  w = _watchers[i];
-			auto*  actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto&      w = _watchers[i];
+			auto*      actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto       table = w.table.get();
 			w.left -= dt;
-			const bool gone = !actor || actor->IsDead(false) || actor->IsDisabled() || !table ||
+			const bool gone = !actor || actor->IsDead(false) || actor->IsDisabled() || !table || !nearYou(w.table) ||
 			                  (actor->data.location - table->data.location).Length() > s.wanderRange + 1000.0f;
-			if (actor && actor == opponent) {
-				log::info("{}: playing you now, not just watching", actor->GetDisplayFullName());
-				DropWatcher(w.id);  // their walks are the Opponent alias's now
+			if (actor && IsPlaying(actor)) {
+				log::info("{}: playing now, not just watching", actor->GetDisplayFullName());
+				DropWatcher(w.id);  // their walks are the Players collection's now
 			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
 				if (actor) {
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
@@ -1499,18 +1544,22 @@ namespace fp
 			}
 		}
 		static std::mt19937 rng{ std::random_device{}() };
+		auto arrived = [&](const Watcher& w) {
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto  spot = w.spot.get();
+			return actor && spot && !actor->IsInCombat() && Distance2D(actor->data.location, spot->data.location) < 120.0f;
+		};
 
-		// now and then one who's got to the table asks you for a game: F at the table plays them
+		// now and then one who's got to a table with no game on asks you for a game: F at that table plays them
 		if (_offerID && now > _offerUntil) {
 			_offerID = 0;
 		}
-		if (s.offers && table && !_offerID && !opponent && !_aiming && !(_sim && !_rules.Over() && _table.get().get() == table.get()) &&
-			now - _lastOffer > std::chrono::duration<float>(s.offerEvery) &&
-			(player->data.location - table->data.location).Length() < 1500.0f) {
+		if (s.offers && !_offerID && !_aiming && now - _lastOffer > std::chrono::duration<float>(s.offerEvery)) {
 			for (auto& w : _watchers) {
 				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
-				auto spot = w.spot.get();
-				if (w.offered || !actor || !spot || Distance2D(actor->data.location, spot->data.location) > 120.0f) {
+				auto  table = w.table.get();
+				if (w.offered || !table || !arrived(w) || !TableFree(table.get()) ||
+					(player->data.location - table->data.location).Length() > 1500.0f) {
 					continue;
 				}
 				w.offered = true;
@@ -1518,7 +1567,7 @@ namespace fp
 					continue;  // not everyone asks
 				}
 				_offerID = w.id;
-				_offerTable = table->GetHandle();
+				_offerTable = w.table;
 				_offerUntil = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(s.offerWait));
 				_lastOffer = now;
 				log::info("{} ({:08X}) asks you for a game", actor->GetDisplayFullName(), actor->GetFormID());
@@ -1528,48 +1577,76 @@ namespace fp
 			}
 		}
 
-		// now and then two who've got to the table play each other: no game on (or only a finished one), you not
-		// at the shot camera
-		// (iNpcGameChance: the chance, each minute two are there, that they start one; fNpcGameEvery: the least time
-		// between two NPC games)
-		const float perMinute = std::clamp(s.npcGameChance / 100.0f, 0.0f, 1.0f);
-		const float thisTick = perMinute >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - perMinute, dt / 60.0f);
-		if (s.npcGames && table && !_npcGame && !_opponent && !_aiming && !_pick && (!_sim || _rules.Over()) &&
-			now - _lastNpcGame > std::chrono::duration<float>(s.npcGameEvery) &&
-			std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) < thisTick) {
-			std::vector<RE::Actor*> there;
-			for (const auto& w : _watchers) {
-				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
-				auto  spot = w.spot.get();
-				if (actor && spot && !actor->IsInCombat() && Distance2D(actor->data.location, spot->data.location) < 120.0f) {
-					there.push_back(actor);
+		// two who've got to a table with no game on play each other, fNpcGameDelay seconds after the second gets
+		// there (iNpcGameChance: the chance they do, 100 = always; a miss is tried again a minute later), while
+		// fewer than kMaxTables games are going
+		if (s.npcGames && !_pick && RunningGames() < kMaxTables) {
+			for (const auto& handle : _watchTables) {
+				auto table = handle.get();
+				std::vector<RE::Actor*> there;
+				if (table && TableFree(table.get())) {
+					for (const auto& w : _watchers) {
+						if (w.table == handle && arrived(w) && _offerID != w.id) {
+							there.push_back(RE::TESForm::GetFormByID<RE::Actor>(w.id));
+						}
+					}
 				}
-			}
-			if (there.size() >= 2) {
+				auto pair = std::ranges::find_if(_pairSince, [&](const auto& p) { return p.first == handle; });
+				if (there.size() < 2) {
+					if (pair != _pairSince.end()) {
+						_pairSince.erase(pair);
+					}
+					continue;
+				}
+				if (pair == _pairSince.end()) {
+					_pairSince.emplace_back(handle, now);
+					log::info("two at a table: {} and {}; a game in {:.0f} s?", there[0]->GetDisplayFullName(), there[1]->GetDisplayFullName(), s.npcGameDelay);
+					continue;
+				}
+				if (now - pair->second < std::chrono::duration<float>(s.npcGameDelay)) {
+					continue;
+				}
+				if (std::uniform_real_distribution<float>(0.0f, 100.0f)(rng) >= s.npcGameChance) {
+					pair->second = now + std::chrono::seconds(60) - std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(s.npcGameDelay));
+					log::info("they didn't feel like a game (iNpcGameChance {:.0f}); again in a minute", s.npcGameChance);
+					continue;
+				}
+				_pairSince.erase(pair);
 				std::shuffle(there.begin(), there.end(), rng);
-				StartNpcGame(there[0], there[1], table.get());
+				StartNpcGameAt(there[0], there[1], table.get());
 				return;
 			}
 		}
 
-		if (!table || static_cast<int>(_watchers.size()) >= s.wanderMax) {
+		if (_watchTables.empty() || std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
 			return;
 		}
-		if (std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
+		// a table with room for one more (iWanderMax each)
+		std::vector<RE::ObjectRefHandle> room;
+		for (const auto& handle : _watchTables) {
+			const auto n = std::ranges::count_if(_watchers, [&](const Watcher& w) { return w.table == handle; });
+			if (handle.get() && n < s.wanderMax) {
+				room.push_back(handle);
+			}
+		}
+		if (room.empty()) {
 			return;
 		}
+		const auto tableHandle = room[std::uniform_int_distribution<std::size_t>(0, room.size() - 1)(rng)];
+		auto       table = tableHandle.get();
 
-		// someone: a grown-up NPC near the table who isn't fighting, following you, playing you or already there
+		// someone: a grown-up NPC near the table who isn't fighting, following you, playing or already watching
 		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);    // ActorTypeNPC
 		static auto* companions = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
 		std::vector<RE::Actor*> candidates;
 		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
 			a_cell->ForEachReferenceInRange(table->data.location, s.wanderRange, [&](RE::TESObjectREFR* a_ref) {
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-				if (!actor || actor == player || actor == opponent || actor == SeatActor(0) || actor == SeatActor(1) || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
+				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
 					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
-					(companions && actor->IsInFaction(companions)) ||
-					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); })) {
+					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) ||
+					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); }) ||
+					std::ranges::any_of(candidates, [&](RE::Actor* c) { return c == actor; })) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
 				candidates.push_back(actor);
@@ -1589,6 +1666,7 @@ namespace fp
 		}
 		Watcher w{ who->GetFormID(), stay };
 		w.spot = spot;
+		w.table = tableHandle;
 		_watchers.push_back(w);
 		log::info("{} ({:08X}) wanders over to watch from {} for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(),
 			NavmeshAt(spotRef->data.location), stay, candidates.size());

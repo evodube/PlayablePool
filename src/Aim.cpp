@@ -119,6 +119,9 @@ namespace fp
 
 	void Game::EnterAim()
 	{
+		if (_bgTick) {
+			return;
+		}
 		if (!_sim) {
 			Notify(std::format("Pool: rack first ({})", Settings::Key(Settings::Get().keyRack)));
 			return;
@@ -175,7 +178,7 @@ namespace fp
 
 	void Game::ExitAim()
 	{
-		if (!_aiming) {
+		if (!_aiming || _bgTick) {
 			return;
 		}
 		_aiming = false;
@@ -466,6 +469,7 @@ namespace fp
 		if (!_aiming || !a_free) {
 			return;
 		}
+		std::scoped_lock tables(_tableMutex);  // the loaded table (its balls and rules) stays put while the guide is drawn
 		const auto& s = Settings::Get();
 		float       yaw = 0.0f;
 		float       camDt = 0.0f;

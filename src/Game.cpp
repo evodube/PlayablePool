@@ -207,7 +207,13 @@ namespace fp
 					_lookTable = table->GetHandle();
 					const std::string key = Settings::Key(_activateVk.load());
 					const bool        here = _sim && _table.get().get() == table;
-					if (here && _npcGame && !_rules.Over()) {
+					const int         slot = SlotOf(table);
+					const TableSlot*  away = slot > 0 ? &_others[static_cast<std::size_t>(slot - 1)] : nullptr;
+					if (away && away->_npcGame && !away->_rules.Over()) {
+						prompt = std::format("{}) WATCH {}", key, SlotNames(*away));
+					} else if (away && away->_sim && !away->_rules.Over()) {
+						prompt = key + ") BACK TO THIS GAME";
+					} else if (here && _npcGame && !_rules.Over()) {
 						std::string a = PlayerName(0), b = PlayerName(1);
 						for (auto* n : { &a, &b }) {
 							std::ranges::transform(*n, n->begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -299,7 +305,7 @@ namespace fp
 					log::info("picked {} ({:08X}) to play", actor->GetDisplayFullName(), actor->GetFormID());
 					Challenge(actor, table.get());
 				} else {
-					if (_opponent) {
+					if (_opponent && SlotOf(table.get()) == 0) {
 						EndChallenge("");
 					}
 					Rack(table.get());  // Solo Play
@@ -311,6 +317,9 @@ namespace fp
 		if (!table) {
 			return;  // not looking at a pool table: the key does what the game does with it
 		}
+		if (SlotOf(table.get()) > 0 && !FocusTable(table.get())) {
+			return;  // a game going on at another table: that table's the loaded one now (yours, or theirs to watch)
+		}
 		const bool here = _sim && _table.get().get() == table.get();
 		if (here && _npcGame && !_rules.Over()) {
 			// two NPCs at it: F watches their game (the HUD comes up; walk about as you like), F again stops
@@ -320,10 +329,6 @@ namespace fp
 			}
 			_lookTime = {};
 			return;
-		}
-		if (_npcGame && !a_hold) {
-			EndNpcGame("");  // one game at a time: theirs (at another table, or over) goes
-			Clear();
 		}
 		if (a_hold) {
 			// held: two players. A list of who's by the table to pick from
@@ -355,7 +360,7 @@ namespace fp
 				_offerID = 0;
 				Challenge(asking, table.get());
 			} else {
-				if (_opponent) {
+				if (_opponent && SlotOf(table.get()) == 0) {
 					EndChallenge("");
 				}
 				Rack(table.get());  // tapped: Solo Play
@@ -543,6 +548,11 @@ namespace fp
 
 	void Game::Forget()
 	{
+		{
+			std::scoped_lock lock(_tableMutex);
+			_others.clear();  // the other tables' games went with the old game too
+		}
+		_pairSince.clear();
 		_table = {};
 		_sim.reset();
 		_balls.fill({});
@@ -591,6 +601,24 @@ namespace fp
 
 	void Game::ClearForSave()
 	{
+		{
+			// the other tables first: every NPC let go, every ball taken off
+			std::scoped_lock lock(_tableMutex);
+			_bgTick = true;
+			for (std::size_t i = 0; i < _others.size(); ++i) {
+				SwapWith(i);
+				if (_npcGame) {
+					EndNpcGame("");
+				}
+				ReleaseOpponent();
+				if (_sim || !_markers.empty()) {
+					Clear();
+				}
+				SwapWith(i);
+			}
+			_bgTick = false;
+			_others.clear();
+		}
 		if (_npcGame) {
 			EndNpcGame("");  // two NPCs' game doesn't survive a save: let them both go
 		}
@@ -895,9 +923,16 @@ namespace fp
 
 	void Game::Rack(RE::TESObjectREFR* a_table)
 	{
-		if (_npcGame && !_rackingNpcGame) {
-			EndNpcGame("");  // you rack: their game's over
-			Clear();
+		if (!_rackingNpcGame) {
+			// the table you're racking becomes the loaded one (two NPCs playing elsewhere carry on in the background)
+			auto* want = a_table ? a_table : _aiming ? nullptr : PickTable();
+			if (want && !FocusTable(want)) {
+				return;
+			}
+			if (_npcGame) {
+				EndNpcGame("");  // racking where two NPCs are playing: their game's over
+				Clear();
+			}
 		}
 		auto& s = Settings::Get();
 		s.Load();
@@ -982,7 +1017,9 @@ namespace fp
 			}
 			_npcWaitMarker = {};
 		});
-		RemoveAimObjects();
+		if (!_bgTick) {
+			RemoveAimObjects();  // your cue and guide (only ever at the loaded table)
+		}
 		auto remove = [](RE::ObjectRefHandle& a_handle) {
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
@@ -1002,7 +1039,9 @@ namespace fp
 		_sim.reset();
 		_table = {};
 		_shotLive = false;
-		_placing = false;
+		if (!_bgTick) {
+			_placing = false;
+		}
 		_message.clear();
 		_log = {};
 		_banner = 0;
@@ -1070,6 +1109,128 @@ namespace fp
 	{
 		UpdateLook();
 		TickWatchers();
+		TickTable();
+		TickOthers();
+	}
+
+	// ---------------------------------------------------------------- several tables
+
+	void Game::SwapWith(std::size_t a_other)
+	{
+		std::swap(static_cast<TableSlot&>(*this), _others[a_other]);
+	}
+
+	int Game::SlotOf(const RE::TESObjectREFR* a_table) const
+	{
+		if (!a_table) {
+			return -1;
+		}
+		if (_table.get().get() == a_table) {
+			return 0;
+		}
+		for (std::size_t i = 0; i < _others.size(); ++i) {
+			if (_others[i]._table.get().get() == a_table) {
+				return static_cast<int>(i) + 1;
+			}
+		}
+		return -1;
+	}
+
+	bool Game::Busy(const TableSlot& a_slot) const
+	{
+		return a_slot._sim || a_slot._opponent || a_slot._npcGame;
+	}
+
+	std::size_t Game::RunningGames() const
+	{
+		std::size_t n = Busy(*this) ? 1 : 0;
+		for (const auto& o : _others) {
+			n += Busy(o) ? 1 : 0;
+		}
+		return n;
+	}
+
+	bool Game::IsPlaying(const RE::Actor* a_actor) const
+	{
+		if (!a_actor) {
+			return false;
+		}
+		auto in = [&](const TableSlot& a_slot) {
+			if (a_slot._opponent.get().get() == a_actor) {
+				return true;
+			}
+			return a_slot._npcGame && std::ranges::any_of(a_slot._seats, [&](const NpcSlot& a_seat) { return a_seat._opponent.get().get() == a_actor; });
+		};
+		return in(*this) || std::ranges::any_of(_others, in);
+	}
+
+	std::string Game::SlotNames(const TableSlot& a_slot) const
+	{
+		std::array<std::string, 2> n;
+		for (int p = 0; p < 2; ++p) {
+			const NpcSlot& seat = p == a_slot._seatIdx ? static_cast<const NpcSlot&>(a_slot) : a_slot._seats[p];
+			n[p] = seat._opponentName;
+			std::ranges::transform(n[p], n[p].begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+		}
+		return std::format("{} VS {}", n[0], n[1]);
+	}
+
+	bool Game::FocusTable(RE::TESObjectREFR* a_table)
+	{
+		const int slot = SlotOf(a_table);
+		if (slot == 0) {
+			return true;
+		}
+		ExitAim();
+		std::scoped_lock lock(_tableMutex);
+		_spectating = false;
+		if (slot > 0) {
+			// its game is in the background: swap it in; the one here (yours or theirs) carries on in the background
+			SwapWith(static_cast<std::size_t>(slot - 1));
+		} else if (Busy(*this)) {
+			// a new table: the game here carries on in the background (yours waits for you to come back to it; an NPC's
+			// turn in it goes on), if there's room
+			if (_others.size() + 1 >= kMaxTables) {
+				Notify(std::format("Pool: {} games are going already. Finish (or forfeit) one first", kMaxTables));
+				return false;
+			}
+			_others.push_back(std::move(static_cast<TableSlot&>(*this)));
+			static_cast<TableSlot&>(*this) = TableSlot{};
+		}
+		std::erase_if(_others, [&](const TableSlot& a_slot) { return !Busy(a_slot); });
+		_watching = false;
+		return true;
+	}
+
+	void Game::TickOthers()
+	{
+		if (_others.empty()) {
+			return;
+		}
+		std::scoped_lock lock(_tableMutex);
+		_bgTick = true;
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		for (std::size_t i = 0; i < _others.size(); ++i) {
+			SwapWith(i);
+			// a game of yours you've walked far away from ends (an NPC game ends itself the same way)
+			auto table = _table.get();
+			if (!_npcGame && player && table && Distance(table->data.location, player->data.location) > 4000.0f) {
+				log::info("you've gone far from a table you were playing at: that game's over");
+				if (_opponent) {
+					EndChallenge("");
+				}
+				Clear();
+			} else {
+				TickTable();
+			}
+			SwapWith(i);
+		}
+		_bgTick = false;
+		std::erase_if(_others, [&](const TableSlot& a_slot) { return !Busy(a_slot); });
+	}
+
+	void Game::TickTable()
+	{
 		if (!_sim && _markers.empty()) {
 			return;
 		}
@@ -1150,7 +1311,9 @@ namespace fp
 			_clearAfterTick = false;
 			ExitAim();
 			Clear();
-			_watching = false;
+			if (!_bgTick) {
+				_watching = false;
+			}
 			UpdateHud();
 			return;
 		}
@@ -1168,7 +1331,9 @@ namespace fp
 				}
 				ExitAim();
 				Clear();
-				_watching = false;
+				if (!_bgTick) {
+					_watching = false;
+				}
 				UpdateHud();  // nothing racked: the HUD goes
 				return;       // no balls left to place
 			}
@@ -1194,6 +1359,9 @@ namespace fp
 		}
 
 		UpdateGlow();
+		if (_bgTick) {
+			return;  // a table in the background: nothing of yours to update
+		}
 		_rolling = !_sim->AtRest();
 		if (_aiming) {
 			TickAim(frame, dt);

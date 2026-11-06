@@ -6,7 +6,8 @@ Actors, refs and keywords come in as form IDs, not objects: an NPC with other sc
 from the plugin as an object Papyrus won't take as an Actor ("Type mismatch for argument 1").}
 
 ReferenceAlias Property Opponent Auto Const Mandatory
-ReferenceAlias Property Opponent2 Auto Const Mandatory  ; the second NPC when two NPCs play each other
+ReferenceAlias Property Opponent2 Auto Const Mandatory  ; (no longer used: Players)
+RefCollectionAlias Property Players Auto Const Mandatory  ; every NPC playing at any table (fo4poolWalkToSpot)
 RefCollectionAlias Property Watchers Auto Const Mandatory  ; settlers hanging round a table (fo4poolWatchTable)
 
 ; the alias for a seat: 0 Opponent (the NPC playing you, or the first of two NPCs), 1 Opponent2 (the second)
@@ -110,6 +111,44 @@ Function Arrived(Int aiActor, Int aiLink)
 	endif
 EndFunction
 
+; into the Players collection (its package walks them to their linked ref). "in ..." if the collection holds them
+; afterwards. A save from before the collection existed has the quest running without it: then the quest is
+; restarted (only with nobody else in it) and it's tried again.
+String Function JoinPlayer(Int aiActor)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	if akActor == None
+		return "NOT in: no actor with form ID " + aiActor
+	endif
+	if !IsRunning()
+		StartAndWait()
+	endif
+	Players.AddRef(akActor)
+	if Players.Find(akActor) < 0 && Players.GetCount() == 0
+		Stop()
+		Int tries = 0
+		while IsStopping() && tries < 50
+			Utility.Wait(0.1)
+			tries += 1
+		endwhile
+		StartAndWait()
+		Players.AddRef(akActor)
+	endif
+	akActor.EvaluatePackage()
+	if Players.Find(akActor) < 0
+		return "NOT in (collection " + Players + ", count " + Players.GetCount() + ", running " + IsRunning() + ")"
+	endif
+	return "in (" + Players.GetCount() + " playing)"
+EndFunction
+
+; out of the collection: their own AI again
+Function LeavePlayer(Int aiActor)
+	Actor akActor = Game.GetForm(aiActor) as Actor
+	if akActor
+		Players.RemoveRef(akActor)
+		akActor.EvaluatePackage()
+	endif
+EndFunction
+
 ; out of the alias: their own AI again
 Function Leave()
 	LeaveSlot(0)
@@ -136,7 +175,7 @@ String Function AddWatcher(Int aiActor, Int aiTable, Int aiLink)
 	endif
 	akActor.SetLinkedRef(akTable, akLink)
 	Watchers.AddRef(akActor)
-	if Watchers.Find(akActor) < 0 && Opponent.GetReference() == None && Opponent2.GetReference() == None
+	if Watchers.Find(akActor) < 0 && Opponent.GetReference() == None && Opponent2.GetReference() == None && Players.GetCount() == 0
 		Stop()
 		Int tries = 0
 		while IsStopping() && tries < 50
