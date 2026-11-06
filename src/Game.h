@@ -503,6 +503,7 @@ namespace fp
 		std::atomic<bool>          _picking{ false };  // the who-to-play list is up (arrow keys go to it)
 		std::atomic<bool>          _overhead{ false };
 		std::atomic<bool>          _noOverhead{ false };  // this aim: no top view (playing a SEMI-PRO or PRO)
+		bool                       _ceilingTooLow{ false };  // this aim: no top view because a ceiling is in the way
 		std::atomic<bool>          _noGuide{ false };     // this aim: no guide line (playing a PRO)
 		std::atomic<float>         _overheadCap{ 100000.0f };  // this table: the top view no higher than this above the felt (a ceiling)
 		std::atomic<bool>          _rolling{ false };

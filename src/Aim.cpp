@@ -16,8 +16,8 @@ namespace fp
 	{
 		constexpr float kDegToRad = 0.017453292f;
 		constexpr float kOverheadPitch = 89.0f * kDegToRad;
-		constexpr float kCeilingGap = 25.0f;    // the top view stays this far under a ceiling
-		constexpr float kMinOverhead = 120.0f;  // lower than this above the felt and it shows too little of the table: no top view
+		constexpr float kCeilingGap = 15.0f;    // the top view stays this far under a ceiling
+		constexpr float kMinOverhead = 90.0f;   // lower than this above the felt and it shows too little of the table: no top view
 		constexpr float kStrikeShowSeconds = 0.15f;
 		constexpr std::size_t kMaxDots = 96;
 
@@ -129,16 +129,23 @@ namespace fp
 		if (!cell) {
 			return a_upTo;
 		}
-		constexpr float    kFrom = 15.0f;
-		const RE::NiPoint3 start = ToWorld(a_frame, { 0.0, 0.0 }, kFrom);
-		const RE::NiPoint3 end = start + RE::NiPoint3{ 0.0f, 0.0f, a_upTo - kFrom };
-		RE::bhkPickData    pick;
-		pick.SetStartEnd(start, end);
-		cell->Pick(pick);
-		if (!pick.HasHit()) {
-			return a_upTo;
+		// five rays (the middle and four points round it), the highest one counts: a lamp hanging over the table
+		// stops one of them, a ceiling or roof stops them all
+		constexpr float kFrom = 15.0f;
+		constexpr std::array<std::array<double, 2>, 5> kSpots{ { { 0.0, 0.0 }, { 60.0, 30.0 }, { 60.0, -30.0 }, { -60.0, 30.0 }, { -60.0, -30.0 } } };
+		float best = 0.0f;
+		for (const auto& spot : kSpots) {
+			const RE::NiPoint3 start = ToWorld(a_frame, { spot[0], spot[1] }, kFrom);
+			const RE::NiPoint3 end = start + RE::NiPoint3{ 0.0f, 0.0f, a_upTo - kFrom };
+			RE::bhkPickData    pick;
+			pick.SetStartEnd(start, end);
+			cell->Pick(pick);
+			if (!pick.HasHit()) {
+				return a_upTo;
+			}
+			best = std::max(best, kFrom + (a_upTo - kFrom) * std::clamp(pick.GetHitFraction(), 0.0f, 1.0f));
 		}
-		return kFrom + (a_upTo - kFrom) * std::clamp(pick.GetHitFraction(), 0.0f, 1.0f);
+		return best;
 	}
 
 	void Game::EnterAim()
@@ -202,7 +209,8 @@ namespace fp
 			const float want = Settings::Get().overheadHeight;
 			const float room = CeilingAbove(frame, want + 60.0f);
 			_overheadCap = std::min(want, room - kCeilingGap);
-			if (room - kCeilingGap < kMinOverhead) {
+			_ceilingTooLow = room - kCeilingGap < kMinOverhead;
+			if (_ceilingTooLow) {
 				_noOverhead = true;
 			}
 			if (room < want + 60.0f) {
@@ -213,7 +221,8 @@ namespace fp
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f}){}{}", _entryYaw, _entryPitch, _noOverhead ? "; no top view" : "", _noGuide ? "; no guide" : "");
 		Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot.{} {}: stop",
-			_noOverhead ? "" : " Right button: overhead.", Settings::Key(Settings::Get().keyShoot)));
+			_noOverhead ? (_ceilingTooLow ? " The ceiling's too low here for the overhead view." : "") : " Right button: overhead.",
+			Settings::Key(Settings::Get().keyShoot)));
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
 		}
