@@ -103,7 +103,13 @@ namespace fp
 							break;
 						case 3: ToggleCalibrate(); break;
 						case 4: CyclePocket(); break;
-						case 7: Forfeit(); break;
+						case 7:
+							if (_kitPlacing) {
+								CancelKit(true);  // setting a kit table up: X puts it away again
+							} else {
+								Forfeit();
+							}
+							break;
 						case 8: StopAllGames(); break;
 						case 6:
 							// the NPC by a table under the crosshair (the prompt's), or nothing
@@ -122,11 +128,13 @@ namespace fp
 		const std::array<int, 4> arrows{ VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT };
 		for (std::size_t i = 0; i < arrows.size(); ++i) {
 			const bool down = (::GetAsyncKeyState(arrows[i]) & 0x8000) != 0;
-			const bool live = i < 2 ? _picking.load() : (_picking.load() || _canSwitchType.load());
+			const bool live = i < 2 ? _picking.load() : (_picking.load() || _canSwitchType.load() || _kitPlacing.load());
 			if (down && !_arrowWasDown[i] && live) {
 				if (auto* tasks = F4SE::GetTaskInterface()) {
 					tasks->AddTask([this, i]() {
-						if (i < 2) {
+						if (i >= 2 && _kitPlacing) {
+							TurnKit(i == 2 ? -1 : 1);  // turning the kit table about
+						} else if (i < 2) {
 							MovePick(i == 0 ? -1 : 1);
 						} else {
 							SwitchType();
@@ -281,6 +289,11 @@ namespace fp
 				prompt.clear();
 			}
 		}
+		if (_kitPlacing) {
+			prompt = KitPrompt();  // setting a kit table up: what F / the arrows / X do
+			canSwitch = false;
+			pick.clear();
+		}
 		_canSwitchType = canSwitch;
 		std::scoped_lock lock(_hudMutex);
 		_hud.prompt = std::move(prompt);
@@ -299,6 +312,12 @@ namespace fp
 	void Game::OnActivate(bool a_hold)
 	{
 		if (IsGamePaused()) {
+			return;
+		}
+		if (_kitPlacing) {
+			if (!a_hold) {
+				ConfirmKit();  // setting a kit table up: F puts it there
+			}
 			return;
 		}
 		if (_aiming) {
@@ -659,6 +678,9 @@ namespace fp
 
 	void Game::OnLoadingStarts()
 	{
+		if (_kitPlacing) {
+			CancelKit(true);  // travelling while setting a kit up: the kit back
+		}
 		if (!_sim && !_opponent && _others.empty()) {
 			return;
 		}
@@ -764,6 +786,8 @@ namespace fp
 
 	void Game::Forget()
 	{
+		_kitPlacing = false;  // loading a save: the preview went with the old game
+		_kitPreview = {};
 		{
 			std::scoped_lock lock(_tableMutex);
 			_others.clear();  // the other tables' games went with the old game too
@@ -819,6 +843,9 @@ namespace fp
 
 	void Game::ClearForSave()
 	{
+		if (_kitPlacing) {
+			CancelKit(true);  // a save mid-set-up: the kit back in your inventory, no half-made table saved
+		}
 		{
 			// the other tables first: every NPC let go, every ball taken off
 			std::scoped_lock lock(_tableMutex);
@@ -954,6 +981,9 @@ namespace fp
 
 	bool Game::IsPoolTable(const RE::TESObjectREFR* a_ref)
 	{
+		if (IsKitPreview(a_ref)) {
+			return false;  // the one following your crosshair while you set a kit up: not a table yet
+		}
 		auto path = ModelPath(a_ref);
 		std::ranges::transform(path, path.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
 		return path.find("pooltable") != std::string::npos && path.find("rack") == std::string::npos;
@@ -1384,6 +1414,9 @@ namespace fp
 					Tell("Pool: stopped watching");
 				}
 			}
+		}
+		if (_kitPlacing) {
+			TickKitPlacement();
 		}
 		TickWatchers();
 		TickTable();

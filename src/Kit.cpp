@@ -17,12 +17,15 @@ namespace fp
 		constexpr RE::TESFormID kDugoutVendorChest = 0x001338B7; // ...and its reference (ServicesDmndDugoutInn's VENC)
 		constexpr std::uint32_t kKitRecordType = 0x5054424C;      // 'PTBL'
 		constexpr std::uint32_t kKitRecordVersion = 1;
-		constexpr float         kPlaceAhead = 150.0f;        // the table's middle, this far in front of you
+		constexpr float         kPlaceNear = 140.0f;         // the table's middle: where you look on the ground, this far...
+		constexpr float         kPlaceFar = 450.0f;          // ...to this far from you
+		constexpr float         kTurnStep = 0.2617994f;      // an arrow press turns it 15 degrees
 		constexpr float         kTooClose = 260.0f;          // not on top of another pool table
 
 		std::mutex                        g_kitMutex;
 		std::unordered_set<RE::TESFormID> g_kitTables;  // tables set up from a kit (created refs: FF......)
 		bool                              g_kitStocked{ false };  // the Dugout Inn got its first kit in this save
+		std::atomic<RE::TESFormID>        g_previewID{ 0 };       // the table following the crosshair while you set one up
 
 		RE::TESBoundObject* KitForm()
 		{
@@ -39,7 +42,7 @@ namespace fp
 					// used from the Pip-Boy (it's gone from your inventory now): set the table up once you're back
 					// in the world
 					if (auto* tasks = F4SE::GetTaskInterface()) {
-						tasks->AddTask([]() { Game::Get().PlaceKitTable(); });
+						tasks->AddTask([]() { Game::Get().BeginKitPlacement(); });
 					}
 				}
 				return RE::BSEventNotifyControl::kContinue;
@@ -90,46 +93,184 @@ namespace fp
 		return a_table && g_kitTables.contains(a_table->GetFormID());
 	}
 
-	void Game::PlaceKitTable()
+	bool Game::IsKitPreview(const RE::TESObjectREFR* a_ref)
 	{
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		auto* kit = KitForm();
-		auto* base = RE::TESForm::GetFormByID(kTableBase);
-		auto* cell = player ? player->GetParentCell() : nullptr;
-		auto  giveBack = [&](const std::string& a_why) {
-			if (player && kit) {
-				player->AddObjectToContainer(kit, nullptr, 1, nullptr, RE::ITEM_REMOVE_REASON::kNone);
+		const auto id = g_previewID.load();
+		return a_ref && id != 0 && a_ref->GetFormID() == id;
+	}
+
+	void Game::BeginKitPlacement()
+	{
+		if (_kitPlacing) {
+			// (a second kit used while one's being set up: that one back)
+			if (auto* player = RE::PlayerCharacter::GetSingleton(); player && KitForm()) {
+				player->AddObjectToContainer(KitForm(), nullptr, 1, nullptr, RE::ITEM_REMOVE_REASON::kNone);
 			}
-			Notify("Pool: " + a_why + ". The kit's back in your inventory");
-		};
-		if (!player || !kit || !base || !base->IsBoundObject() || !cell) {
-			giveBack("can't set up a table here");
 			return;
 		}
-		// (no combat check: the player's IsInCombat reads true out of combat too)
-		const float        h = player->data.angle.z;
-		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
-		RE::NiPoint3       at = player->data.location + fwd * kPlaceAhead;
-		at.z = player->data.location.z;
-		// not on top of another table
+		ExitAim();
+		ClosePick();
+		_kitPlacing = true;
+		_kitTurn = 0.0f;
+		_kitReady = false;
+		_kitSign = 0;
+		_kitOk = false;
+		// out of the Pip-Boy and into the world: the table follows where you look until F sets it down
+		if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
+			queue->AddMessage(RE::BSFixedString("PipboyMenu"), RE::UI_MESSAGE_TYPE::kHide);
+		}
+		_lookTime = {};
+		log::info("kit: setting a table up");
+	}
+
+	std::string Game::KitPrompt() const
+	{
+		const std::string key = Settings::Key(_activateVk.load());
+		const std::string cancel = Settings::Key(Settings::Get().keyForfeit);
+		return _kitOk ? std::format("{}) SET UP THE TABLE  ·  LEFT/RIGHT TURN  ·  {}) CANCEL", key, cancel)
+		              : std::format("TOO CLOSE TO ANOTHER TABLE  ·  {}) CANCEL", cancel);
+	}
+
+	void Game::TickKitPlacement()
+	{
+		if (IsGamePaused()) {
+			return;  // (still in the Pip-Boy)
+		}
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* camera = RE::PlayerCamera::GetSingleton();
+		auto* base = RE::TESForm::GetFormByID(kTableBase);
+		auto* cell = player ? player->GetParentCell() : nullptr;
+		if (!player || !camera || !camera->cameraRoot || !base || !base->IsBoundObject() || !cell) {
+			return;
+		}
+		// where the crosshair meets the ground you stand on, between kPlaceNear and kPlaceFar away
+		const auto         origin = camera->cameraRoot->GetWorldTranslate();
+		const float        pitch = player->data.angle.x;
+		const float        yaw = player->data.angle.z;
+		const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
+		const RE::NiPoint3 flat{ std::sin(yaw), std::cos(yaw), 0.0f };
+		float              reach = kPlaceFar;
+		if (dir.z < -0.02f) {
+			const float t = (origin.z - player->data.location.z) / -dir.z;
+			reach = std::clamp(t * std::cos(pitch), kPlaceNear, kPlaceFar);
+		}
+		RE::NiPoint3 pos = player->data.location + flat * reach;
+		pos.z = player->data.location.z;
+		const float angle = yaw + 1.5707963f + _kitTurn;  // its long side towards you, turned as you like
+		_kitPos = pos;
+		_kitAngle = angle;
+
+		auto preview = _kitPreview.get();
+		if (!preview) {
+			RE::NEW_REFR_DATA data;
+			data.location = pos;
+			data.direction = { 0.0f, 0.0f, angle };
+			data.object = static_cast<RE::TESBoundObject*>(base);
+			if (cell->IsInterior()) {
+				data.interior = cell;
+			} else {
+				data.world = cell->worldSpace;
+			}
+			data.initializeScripts = false;
+			auto* dh = RE::TESDataHandler::GetSingleton();
+			_kitPreview = dh ? dh->CreateReferenceAtLocation(data) : RE::ObjectRefHandle{};
+			if (auto made = _kitPreview.get()) {
+				g_previewID = made->GetFormID();
+				_kitMadeAngle = angle;
+			}
+			return;
+		}
+		auto* root = preview->Get3D();
+		if (!root) {
+			return;  // (its 3D on the way)
+		}
+		if (!_kitReady) {
+			// nothing bumps into it while it follows you about; and which way round the 3D takes an angle
+			RE::bhkWorld::EnableCollision(root, false, true, true);
+			RE::NiMatrix3 plus, minus;
+			plus.FromEulerAnglesXYZ(0.0f, 0.0f, _kitMadeAngle);
+			minus.FromEulerAnglesXYZ(0.0f, 0.0f, -_kitMadeAngle);
+			const auto& w = root->world.rotate;
+			auto diff = [&](const RE::NiMatrix3& a_m) {
+				float d = 0.0f;
+				for (int r = 0; r < 3; ++r) {
+					for (int c = 0; c < 3; ++c) {
+						d += std::abs(a_m.entry[r][c] - w.entry[r][c]);
+					}
+				}
+				return d;
+			};
+			_kitSign = diff(plus) <= diff(minus) ? 1 : -1;
+			_kitReady = true;
+		}
+		RE::NiMatrix3 rot;
+		rot.FromEulerAnglesXYZ(0.0f, 0.0f, _kitSign * angle);
+		PlaceNode(preview.get(), pos, rot, 1.0f, false);
+
+		// clear of the other pool tables
 		bool crowded = false;
 		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
-			a_cell->ForEachReferenceInRange(at, kTooClose, [&](RE::TESObjectREFR* a_ref) {
-				if (a_ref && !a_ref->IsDisabled() && IsPoolTable(a_ref)) {
+			a_cell->ForEachReferenceInRange(pos, kTooClose, [&](RE::TESObjectREFR* a_ref) {
+				if (a_ref && a_ref != preview.get() && !a_ref->IsDisabled() && IsPoolTable(a_ref)) {
 					crowded = true;
 					return RE::BSContainer::ForEachResult::kStop;
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
 		});
-		if (crowded) {
-			giveBack("too close to another pool table");
+		if (_kitOk == crowded) {
+			_kitOk = !crowded;
+			_lookTime = {};  // the prompt says so at once
+		}
+	}
+
+	void Game::TurnKit(int a_dir)
+	{
+		if (_kitPlacing) {
+			_kitTurn += static_cast<float>(a_dir) * kTurnStep;
+		}
+	}
+
+	void Game::CancelKit(bool a_giveBack)
+	{
+		if (!_kitPlacing) {
 			return;
 		}
+		_kitPlacing = false;
+		g_previewID = 0;
+		if (auto preview = _kitPreview.get()) {
+			preview->Disable();
+			preview->SetWantsDelete(true);
+		}
+		_kitPreview = {};
+		_lookTime = {};
+		if (a_giveBack) {
+			if (auto* player = RE::PlayerCharacter::GetSingleton(); player && KitForm()) {
+				player->AddObjectToContainer(KitForm(), nullptr, 1, nullptr, RE::ITEM_REMOVE_REASON::kNone);
+			}
+			Notify("Pool: put the kit away");
+		}
+		log::info("kit: setting up cancelled");
+	}
+
+	void Game::ConfirmKit()
+	{
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		auto* base = RE::TESForm::GetFormByID(kTableBase);
+		auto* cell = player ? player->GetParentCell() : nullptr;
+		if (!_kitPlacing || !_kitPreview.get() || !player || !base || !base->IsBoundObject() || !cell) {
+			return;
+		}
+		if (!_kitOk) {
+			Notify("Pool: too close to another pool table");
+			return;
+		}
+		const RE::NiPoint3 pos = _kitPos;
+		const float        angle = _kitAngle;
+		CancelKit(false);  // the preview goes; the real one in its place
 		RE::NEW_REFR_DATA data;
-		data.location = at;
-		// its long side towards you
-		data.direction = { 0.0f, 0.0f, h + 1.5707963f };
+		data.location = pos;
+		data.direction = { 0.0f, 0.0f, angle };
 		data.object = static_cast<RE::TESBoundObject*>(base);
 		if (cell->IsInterior()) {
 			data.interior = cell;
@@ -141,14 +282,17 @@ namespace fp
 		auto* dh = RE::TESDataHandler::GetSingleton();
 		auto  table = dh ? dh->CreateReferenceAtLocation(data).get() : nullptr;
 		if (!table) {
-			giveBack("the table couldn't be set up");
+			if (KitForm()) {
+				player->AddObjectToContainer(KitForm(), nullptr, 1, nullptr, RE::ITEM_REMOVE_REASON::kNone);
+			}
+			Notify("Pool: the table couldn't be set up. The kit's back in your inventory");
 			return;
 		}
 		{
 			std::scoped_lock lock(g_kitMutex);
 			g_kitTables.insert(table->GetFormID());
 		}
-		log::info("kit: table {:08X} set up at ({:.0f}, {:.0f}, {:.0f})", table->GetFormID(), at.x, at.y, at.z);
+		log::info("kit: table {:08X} set up at ({:.0f}, {:.0f}, {:.0f})", table->GetFormID(), pos.x, pos.y, pos.z);
 		Notify(std::format("Pool: table set up. Hold {} at it to pack it away again", Settings::Key(_activateVk.load())));
 	}
 

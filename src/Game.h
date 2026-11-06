@@ -142,7 +142,22 @@ namespace fp
 		// the Pool Table Kit (Kit.cpp)
 		static void SetUpKit();     // game data ready: the Dugout Inn sells it; listen for it being used
 		void        StockKit();     // a save loaded / new game: one in the Dugout Inn's stock now (once a save)
-		void        PlaceKitTable();
+		void        BeginKitPlacement();   // the kit used: the Pip-Boy closes, a table follows where you look
+		void        TickKitPlacement();
+		void        ConfirmKit();          // F: set it up there
+		void        CancelKit(bool a_giveBack);  // X (or a save, a load): the kit back
+		void        TurnKit(int a_dir);    // left / right arrows
+		std::string KitPrompt() const;
+		static bool IsKitPreview(const RE::TESObjectREFR* a_ref);
+		std::atomic<bool>   _kitPlacing{ false };
+		RE::ObjectRefHandle _kitPreview;
+		float               _kitTurn{ 0.0f };     // the player's turn of it (radians) on top of facing you
+		float               _kitAngle{ 0.0f };    // where it is now
+		RE::NiPoint3        _kitPos;
+		bool                _kitOk{ false };      // clear of other tables: F sets it up
+		float               _kitMadeAngle{ 0.0f };
+		int                 _kitSign{ 0 };        // how the 3D's rotation reads the angle (found from the preview)
+		bool                _kitReady{ false };   // preview's collision off and its rotation sign known
 		void        PackUpTable(RE::TESObjectREFR* a_table);
 		static bool IsKitTable(const RE::TESObjectREFR* a_table);
 		static void SaveKit(const F4SE::SerializationInterface* a_intfc);
