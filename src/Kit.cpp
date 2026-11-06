@@ -106,10 +106,7 @@ namespace fp
 			giveBack("can't set up a table here");
 			return;
 		}
-		if (player->IsInCombat()) {
-			giveBack("not in the middle of a fight");
-			return;
-		}
+		// (no combat check: the player's IsInCombat reads true out of combat too)
 		const float        h = player->data.angle.z;
 		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
 		RE::NiPoint3       at = player->data.location + fwd * kPlaceAhead;
