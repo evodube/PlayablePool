@@ -102,7 +102,7 @@ def potion(form_id: int, editor_id: str, name: str, desc: str, mesh: str, bounds
         subrecord(b"EDID", zstring(editor_id))
         + subrecord(b"OBND", bounds)
         + subrecord(b"FULL", zstring(name))
-        + subrecord(b"MODL", zstring(mesh))
+        + (subrecord(b"MODL", zstring(mesh)) if mesh else b"")
         + subrecord(b"DESC", zstring(desc))
         + subrecord(b"DATA", struct.pack("<f", weight))
         # value, flags (1: no auto-calc, the value as given), addiction (none), addiction chance, consume sound (none)
@@ -285,10 +285,10 @@ def build(with_stick: bool) -> bytes:
     quests = [quest(own | (FIRST_ID + 22), "fo4poolOpponent", walk, watch)]
 
     # the Pool Table Kit (0x837): sold at the Dugout Inn (the plugin adds it to Vadim's stock); used, a pool table in
-    # front of you. Its model (the Pip-Boy and barter previews) is the game's own pool table, with its bounds
+    # front of you. No model: nothing shows in the Pip-Boy or barter previews
     potions = [potion(own | (FIRST_ID + 55), "fo4poolTableKit", "Pool Table Kit",
                       "A folding pool table, balls and cues. Use it to set the table up in front of you; hold the activate key at it to pack it away again.",
-                      "SetDressing\\PoolTable\\PoolTable01.nif", bytes.fromhex("b8ff80ff0000480080004b00"), 350, 20.0)]
+                      "", bytes(12), 350, 20.0)]
 
     count = len(stats) + len(idles) + len(keywords) + len(packages) + len(quests) + len(potions)
     header = record(
