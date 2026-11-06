@@ -702,7 +702,8 @@ namespace fp
 			_npcFacing = true;
 			a_actor->SetHeading(_npcWaitHeading);
 			HoldOpponent(a_actor, true);
-			_npcWaitIdle = Anim::PlayWait(a_actor);  // standing with the cue until their turn
+			// standing with the cue until their turn: one of the two waits, at random
+			_npcWaitIdle = Anim::PlayWait(a_actor, std::uniform_int_distribution<int>(0, 1)(_npcRng));
 		}
 	}
 
@@ -1413,7 +1414,7 @@ namespace fp
 					log::info("{}: {:.1f} off the spot before the aim: put on it", _opponentName, off);
 					Anim::SetPosition(actor, RE::NiPoint3{ _npcStance.x, _npcStance.y, actor->data.location.z });
 				}
-				Anim::PlayAim(actor);
+				Anim::PlayAim(actor, std::uniform_int_distribution<int>(0, 1)(_npcRng));  // one of the two aims, at random
 			}
 			if (_npcTimer >= kSettleSeconds + kAlignAfter) {
 				GlideOntoLine(actor, a_frame, a_dt);  // also places the stick

@@ -4,9 +4,9 @@
 // functions called from the plugin. Main thread only.
 namespace fp::Anim
 {
-	bool PlayAim(RE::Actor* a_actor);     // PoolAim: lined up over the table, loops
+	bool PlayAim(RE::Actor* a_actor, int a_variant = 0);   // PoolAim (1: PoolAim2): lined up over the table, loops
 	bool PlayStrike(RE::Actor* a_actor);  // PoolStrike: the cue reaches the ball on frame 35
-	bool PlayWait(RE::Actor* a_actor);    // PoolWait: standing at the table, cue upright, loops
+	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
 
 	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once with an id for the walk (0 =

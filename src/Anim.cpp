@@ -301,8 +301,11 @@ namespace fp::Anim
 		}
 	}
 
-	bool PlayAim(RE::Actor* a_actor)
+	bool PlayAim(RE::Actor* a_actor, int a_variant)
 	{
+		if (a_variant == 1) {
+			return Play(a_actor, Settings::Get().animAim2FormID, "PoolAim2");
+		}
 		return Play(a_actor, Settings::Get().animAimFormID, "PoolAim");
 	}
 
@@ -311,8 +314,11 @@ namespace fp::Anim
 		return Play(a_actor, Settings::Get().animStrikeFormID, "PoolStrike");
 	}
 
-	bool PlayWait(RE::Actor* a_actor)
+	bool PlayWait(RE::Actor* a_actor, int a_variant)
 	{
+		if (a_variant == 1) {
+			return Play(a_actor, Settings::Get().animWait2FormID, "PoolWait2");
+		}
 		return Play(a_actor, Settings::Get().animWaitFormID, "PoolWait");
 	}
 
