@@ -1160,6 +1160,21 @@ namespace fp
 			return;
 		}
 		UpdateLook();
+		// build mode: hands off the world. Every game (balls, NPCs, watchers) holds still until you leave it, so
+		// nothing of ours moves 3D or sends AI calls while the workshop is placing things
+		if (auto* ui = RE::UI::GetSingleton(); ui && ui->GetMenuOpen(RE::BSFixedString("WorkshopMenu"))) {
+			if (!_inWorkshop) {
+				_inWorkshop = true;
+				log::info("build mode: pool paused");
+			}
+			return;
+		}
+		if (_inWorkshop) {
+			_inWorkshop = false;
+			_haveLast = false;  // no catching up on the time spent building
+			_watchScan = 0.0f;  // and the tables are looked for again (some may have been placed or moved)
+			log::info("build mode closed: pool carries on");
+		}
 		TickWatchers();
 		TickTable();
 		TickOthers();

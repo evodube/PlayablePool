@@ -414,6 +414,7 @@ namespace fp
 		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack
 		std::atomic<bool>      _building{ false };        // the workshop menu is open: nothing of ours runs (no keys either)
 		std::chrono::steady_clock::time_point _lastNpcGame{};
+		bool                   _inWorkshop{ false };  // build mode is open: everything holds still
 		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);
 		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with
