@@ -1207,6 +1207,7 @@ namespace fp
 	void Game::Clear()
 	{
 		ExitAim();
+		SetTableCollision(true);
 		ForBothSeats([&]() {
 			if (auto* actor = Opponent(); actor && (_npcStep != NpcStep::kNone || _npcWaitIdle)) {
 				Anim::Stop(actor);  // no balls, no shot: don't leave them bent over the table or waiting with a cue
@@ -1556,6 +1557,10 @@ namespace fp
 			}
 		} else {
 			TickOpponent(frame, dt);
+		}
+		// the table's collision is off only while the NPC who's up is on their spot shooting
+		if (_tableNoCollide && !(_opponent && (_npcStep == NpcStep::kAiming || _npcStep == NpcStep::kStriking || _npcStep == NpcStep::kFollow))) {
+			SetTableCollision(true);
 		}
 		if (_clearAfterTick) {
 			_clearAfterTick = false;

@@ -63,6 +63,7 @@ namespace fp
 		h.charging = _charging;
 		h.rolling = _rolling;
 		h.overhead = _overhead;
+		h.noOverhead = _noOverhead;
 		h.power = PowerNow();
 		h.placing = _placing;
 		return h;
@@ -98,7 +99,7 @@ namespace fp
 				tasks->AddTask([this, power]() { ShootAim(power); });
 			}
 		}
-		if (rmb && !_rmbWasDown && tasks && !_placing) {
+		if (rmb && !_rmbWasDown && tasks && !_placing && !_noOverhead) {
 			tasks->AddTask([this]() { ToggleOverhead(); });
 		}
 		_lmbWasDown = lmb;
@@ -166,11 +167,17 @@ namespace fp
 		_overhead = false;
 		_charging = false;
 		_strikeShow = 0.0f;
+		// playing a skilled NPC: no top view against a SEMI-PRO or better, and no guide line against a PRO
+		{
+			const float skill = _opponent && !_npcGame && Opponent() ? SkillOf(Opponent()->GetFormID()) : 0.0f;
+			_noOverhead = skill > 50.5f;
+			_noGuide = skill > 74.5f;
+		}
 		_aiming = true;
 		BlockControls(true);
-		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f})", _entryYaw, _entryPitch);
-		Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot. Right button: overhead. {}: stop",
-			Settings::Key(Settings::Get().keyShoot)));
+		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f}){}{}", _entryYaw, _entryPitch, _noOverhead ? "; no top view" : "", _noGuide ? "; no guide" : "");
+		Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot.{} {}: stop",
+			_noOverhead ? "" : " Right button: overhead.", Settings::Key(Settings::Get().keyShoot)));
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
 		}
@@ -200,8 +207,8 @@ namespace fp
 
 	void Game::ToggleOverhead()
 	{
-		if (!_aiming || _placing) {
-			return;
+		if (!_aiming || _placing || (_noOverhead && !_overhead)) {
+			return;  // (against a SEMI-PRO or PRO it can only come back down, after placing the cue ball)
 		}
 		_overhead = !_overhead;
 		std::scoped_lock lock(_camMutex);
@@ -290,7 +297,7 @@ namespace fp
 				}
 			}
 			auto* dotForm = BallForm(0);
-			while (s.guide && dotForm && _dots.size() < std::min(_dotsWanted + 8, kMaxDots)) {
+			while (s.guide && !_noGuide && dotForm && _dots.size() < std::min(_dotsWanted + 8, kMaxDots)) {
 				_dots.push_back(Spawn(dotForm, table, ToWorld(a_frame, cue.pos, s.guideDotRadius)));
 			}
 		}
@@ -313,7 +320,7 @@ namespace fp
 			return;
 		}
 		if (_sim->AtRest() && cue.state == pool::BallState::kOnTable) {
-			if (s.guide) {
+			if (s.guide && !_noGuide) {
 				PlaceGuide(a_frame, _lastDir);
 			}
 			PlaceStick(a_frame, cue.pos, _lastDir, PowerNow() * s.stickMaxPull, true);

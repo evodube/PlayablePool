@@ -86,6 +86,7 @@ namespace fp
 		bool                                                _haveLast{ false };
 		bool                                                _scratch{ false };
 		bool                                                _warned3D{ false };
+		bool                                                _tableNoCollide{ false };  // the table's collision is off while an NPC shoots
 		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
 		pool::Rules                                         _rules;
 		int                                                 _nextBreaker{ 0 };
@@ -166,6 +167,7 @@ namespace fp
 			bool  charging{ false };
 			bool  rolling{ false };
 			bool  overhead{ false };
+			bool  noOverhead{ false };  // against a SEMI-PRO or PRO: no top view
 			float power{ 0.0f };
 
 			// the 8-ball game, while a table is racked
@@ -324,6 +326,7 @@ namespace fp
 		void  EnterAim();
 		void  ExitAim();
 		void  ToggleOverhead();
+		void  SetTableCollision(bool a_on);
 		void  ShootAim(float a_power);
 		void  TickAim(const Frame& a_frame, float a_dt);
 		void  PlaceAimObjects(const Frame& a_frame, float a_yaw, float a_dt);
@@ -453,6 +456,8 @@ namespace fp
 		std::atomic<bool>          _charging{ false };
 		std::atomic<bool>          _picking{ false };  // the who-to-play list is up (arrow keys go to it)
 		std::atomic<bool>          _overhead{ false };
+		std::atomic<bool>          _noOverhead{ false };  // this aim: no top view (playing a SEMI-PRO or PRO)
+		std::atomic<bool>          _noGuide{ false };     // this aim: no guide line (playing a PRO)
 		std::atomic<bool>          _rolling{ false };
 		std::atomic<float>         _power{ 0.0f };     // 0..1 while charging
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball

@@ -486,6 +486,9 @@ namespace fp::Hud
 			} else {
 				keys = { { "LMB", "HOLD · PULL BACK FOR POWER" }, { "RMB", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { call, "LEAVE TABLE" } };
 			}
+			if (a_st.noOverhead && !a_st.overhead) {
+				std::erase_if(keys, [](const auto& k) { return std::string_view(k.first) == "RMB"; });  // no top view against this one
+			}
 			if (!a_st.over && set.keyForfeit > 0) {
 				keys.push_back({ forfeit, "FORFEIT" });
 			}

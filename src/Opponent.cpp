@@ -625,6 +625,21 @@ namespace fp
 		return root;
 	}
 
+	void Game::SetTableCollision(bool a_on)
+	{
+		if (_tableNoCollide == !a_on) {
+			return;
+		}
+		_tableNoCollide = !a_on;
+		auto  table = _table.get();
+		auto* root = table ? table->Get3D() : nullptr;
+		if (!root) {
+			return;  // (unloaded: it comes back with its collision)
+		}
+		RE::bhkWorld::EnableCollision(root, a_on, true, true);
+		log::info("table {:08X}: collision {}", table->GetFormID(), a_on ? "back on" : "off while they shoot");
+	}
+
 	void Game::SetWaitSpot(const Frame& a_frame, const RE::NiPoint3& a_pos)
 	{
 		auto* table = _table.get().get();
@@ -1413,6 +1428,9 @@ namespace fp
 				_npcPathTarget = {};
 				_npcPathId = 0;
 				RemoveRef(_npcApproach);  // and the walk there (if it's still going) has nowhere to go
+				// the table's collision off while they shoot (on again after the follow-through: TickTable), or the
+				// rail pushes them back off the spot and the cue falls short of the ball
+				SetTableCollision(false);
 				if (marker) {
 					Anim::MoveTo(actor, marker.get());  // exactly on the spot, facing the shot
 				}
