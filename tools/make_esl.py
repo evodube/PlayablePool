@@ -257,6 +257,27 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 28), "fo4poolAim3", ANIM_DIR + "PoolAim3.hkx"),
         idle(own | (FIRST_ID + 29), "fo4poolStrike3", ANIM_DIR + "PoolStrike3.hkx"),
     ]
+    # watchers: the game's own smoking and coffee clips (Fallout4 - Animations.ba2, nothing shipped), male then
+    # female, each start / loop / flavour / end; the clips load and put away the cigarette or mug themselves
+    smoke = "Actors\\Character\\Animations\\MT\\Neutral\\"
+    coffee = "Actors\\Character\\Animations\\Furniture\\CoffeeDrinkStanding\\"
+    watch_idles = [
+        ("SmokeStart", smoke + "{}To_Smoking.hkx", "dyn_Activation"),
+        ("SmokeLoop", smoke + "{}Smoking\\PoseA_Idle1.hkx", "dyn_ActivationLoop"),
+        ("SmokeDrag", smoke + "{}Smoking\\PoseA_IdleFlavor1.hkx", "dyn_Activation"),
+        ("SmokeEnd", smoke + "{}Smoking\\To_Normal.hkx", "dyn_Activation"),
+        ("CoffeeStart", coffee + "{}EnterFromStand.hkx", "dyn_Activation"),
+        ("CoffeeLoop", coffee + "{}PoseA_Idle1.hkx", "dyn_ActivationLoop"),
+        ("CoffeeSip", coffee + "{}PoseA_IdleFlavor1.hkx", "dyn_Activation"),
+        ("CoffeeEnd", coffee + "{}ExitToStand.hkx", "dyn_Activation"),
+    ]
+    # 0x81E.. : SmokeStartM, SmokeLoopM, SmokeDragM, SmokeEndM, the same F, CoffeeStartM .. CoffeeEndM, the same F
+    n = 30
+    for group in (watch_idles[:4], watch_idles[4:]):
+        for sex, folder in (("M", ""), ("F", "Female\\")):
+            for name, path, event in group:
+                idles.append(idle(own | (FIRST_ID + n), f"fo4pool{name}{sex}", path.format(folder), event))
+                n += 1
 
     link = own | (FIRST_ID + 20)
     walk = own | (FIRST_ID + 21)
@@ -271,7 +292,7 @@ def build(with_stick: bool) -> bytes:
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 30))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 46))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))

@@ -141,6 +141,7 @@ namespace fp
 		npcGames = ReadBool(L"Opponent", L"bNpcGames", npcGames);
 		npcGameChance = ReadFloat(L"Opponent", L"iNpcGameChance", npcGameChance);
 		npcGameDelay = ReadFloat(L"Opponent", L"fNpcGameDelay", npcGameDelay);
+		watcherIdles = ReadBool(L"Opponent", L"bWatcherIdles", watcherIdles);
 		watchDistance = std::clamp(ReadFloat(L"Opponent", L"fWatchDistance", watchDistance), 60.0f, 400.0f);
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);

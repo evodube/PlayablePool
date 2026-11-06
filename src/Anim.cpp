@@ -301,6 +301,11 @@ namespace fp::Anim
 		}
 	}
 
+	bool PlayIdleID(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)
+	{
+		return Play(a_actor, a_rawID, a_name);
+	}
+
 	bool PlayAim(RE::Actor* a_actor, int a_variant)
 	{
 		if (a_variant == 1) {

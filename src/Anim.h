@@ -8,6 +8,7 @@ namespace fp::Anim
 	bool PlayStrike(RE::Actor* a_actor, int a_variant = 0);  // PoolStrike (1: PoolStrike2, after PoolAim2)  // PoolStrike: the cue reaches the ball on frame 35
 	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
+	bool PlayIdleID(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name);  // one of fo4pool.esl's idles, by its ID in the plugin
 
 	// Papyrus Actor.PathToReference: walks (0) or runs (1) to a_target. Returns at once with an id for the walk (0 =
 	// couldn't send it); the walk goes on.

@@ -1371,6 +1371,7 @@ namespace fp
 			}
 		}
 		TickWatchers();
+		TickWatcherIdles();
 		TickTable();
 		TickOthers();
 	}

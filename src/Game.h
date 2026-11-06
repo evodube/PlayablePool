@@ -491,7 +491,17 @@ namespace fp
 			bool          offered{ false };  // asked you for a game already (or decided not to)
 			RE::ObjectRefHandle table;       // the table they hang round
 			RE::ObjectRefHandle spot;        // where they hang round (WatchSpot)
+			// smoking or drinking coffee while they watch (TickWatcherIdles): which (-1 not picked yet, 0 smoke,
+			// 1 coffee), the stage (0 not started, 1 lighting up / lifting the mug, 2 the loop, 3 a drag / a sip,
+			// 4 putting it away, 5 done), seconds left in the stage, seconds to the next drag or sip
+			int   activity{ -1 };
+			int   stage{ 0 };
+			float stageLeft{ 0.0f };
+			float flavorIn{ 0.0f };
+			bool  leaving{ false };  // done watching: put the cigarette or mug away first, then go
 		};
+		void TickWatcherIdles();
+		std::chrono::steady_clock::time_point _watchIdleTime{};
 		// Someone hanging round the table asking you for a game ([Opponent] bOffers): F at that table plays them
 		RE::TESFormID                         _offerID{ 0 };
 		RE::ObjectRefHandle                   _offerTable;
