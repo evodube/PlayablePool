@@ -90,3 +90,12 @@ From the user's aim3 pose, in `anim_tests\anim3\pool_anims_v4.blend` (PoolAim3An
 
 Contact (frame 35): the tip at (8.06, 92.02), the cue 3.6 degrees to their left, sloping 9 degrees down. The
 export wrote 1 fps again; patched to 30 like PoolAim2. Each shot picks at random among the aims that reach it.
+
+## Later changes
+
+- PoolStrike2 rebuilt like PoolStrike3 (`PoolStrike2Still`): the body stays still, the grip slides along the cue's
+  line (no dip at the end). Contact (frame 35): tip (-3.46, 85.56), the cue 14.49 degrees to their left.
+- PoolWait re-exported (`PoolWaitClear`): the right hand moved (4, 16, -4) (arm re-solved, the hand keeping its
+  orientation) so the upright cue stands in front, clear of the chest and leg. The cue goes through the grip point
+  (as when shooting), from the butt at (14.5, 30.5); PoolWait2's butt is at (36, 13).
+- PoolAim / PoolStrike (the first pair) are no longer picked: each shot uses PoolAim2 or PoolAim3.

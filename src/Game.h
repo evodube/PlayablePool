@@ -63,7 +63,7 @@ namespace fp
 		bool                _npcLooking{ false }; // SetLookAt(player) is on them
 		int                 _npcWaitVariant{ 0 }; // 0 PoolWait, 1 PoolWait2
 		bool                _npcInTableLogged{ false };
-		int                 _npcAimVariant{ 0 };  // this shot's aim (0 PoolAim, 1 PoolAim2, 2 PoolAim3): its strike follows it
+		int                 _npcAimVariant{ 1 };  // this shot's aim (1 PoolAim2, 2 PoolAim3; 0 PoolAim no longer picked): its strike follows it
 	};
 
 	struct Marker  // a calibration marker (Game::ToggleCalibrate)

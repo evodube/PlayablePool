@@ -22,9 +22,9 @@ namespace fp
 		// further forward, so the tip is further ahead of the root, and the cue turned a little more to their left
 		// PoolAim3 / PoolStrike3 (variant 2): the cue nearly straight ahead, the tip furthest out of the three
 		constexpr int   kAims = 3;
-		constexpr float kTipX[kAims] = { 0.59f, -3.53f, 8.06f };
-		constexpr float kTipY[kAims] = { 73.37f, 85.53f, 92.02f };
-		constexpr float kCueYawOf[kAims] = { -10.85f * 0.017453292f, -14.8f * 0.017453292f, -3.59f * 0.017453292f };
+		constexpr float kTipX[kAims] = { 0.59f, -3.46f, 8.06f };
+		constexpr float kTipY[kAims] = { 73.37f, 85.56f, 92.02f };
+		constexpr float kCueYawOf[kAims] = { -10.85f * 0.017453292f, -14.49f * 0.017453292f, -3.59f * 0.017453292f };
 		constexpr float kTipGap = 1.5f;  // between the tip and the ball at contact
 		// ...so, along the shot line, the ball is this far ahead of the root, and the root this far to the line's left
 		float StanceBackOf(int v) { return kTipX[v] * std::sin(kCueYawOf[v]) + kTipY[v] * std::cos(kCueYawOf[v]) + 3.51f + kTipGap; }
@@ -888,6 +888,40 @@ namespace fp
 		}
 	}
 
+	namespace
+	{
+		// The grip: a fixed point in the right hand (inside the fingers wrapped round the cue), from the hand's frame:
+		// the wrist, the line to the fingers' bases, and the line across them from the little finger to the index
+		bool RightGrip(RE::NiAVObject* a_root, RE::NiPoint3& a_out)
+		{
+			auto node = [&](const char* a_name) { return a_root->GetObjectByName(RE::BSFixedString{ a_name }); };
+			auto* rHand = node("RArm_Hand");
+			auto* rIndex = node("RArm_Finger21");
+			auto* rLittle = node("RArm_Finger51");
+			if (!rHand) {
+				return false;
+			}
+			a_out = rHand->world.translate;
+			RE::NiPoint3 bases{};
+			int          found = 0;
+			for (const char* n : { "RArm_Finger21", "RArm_Finger31", "RArm_Finger41", "RArm_Finger51" }) {
+				if (auto* j = node(n)) {
+					bases += j->world.translate;
+					++found;
+				}
+			}
+			if (found == 4 && rIndex && rLittle) {
+				bases = bases * 0.25f;
+				const RE::NiPoint3 e1 = util::Normalized(bases - rHand->world.translate);
+				const RE::NiPoint3 side = rIndex->world.translate - rLittle->world.translate;
+				const RE::NiPoint3 e2 = util::Normalized(side - e1 * side.Dot(e1));
+				const RE::NiPoint3 e3 = e1.Cross(e2);
+				a_out = rHand->world.translate + e1 * kGripAlong + e2 * kGripAcross + e3 * kGripOut;
+			}
+			return true;
+		}
+	}
+
 	bool Game::PlaceStickUpright(RE::Actor* a_actor)
 	{
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
@@ -899,19 +933,19 @@ namespace fp
 			_npcStickReady = true;
 			PrepareStick(stick.get());
 		}
-		auto* rHand = root->GetObjectByName(RE::BSFixedString{ "RArm_Hand" });
-		auto* rMid = root->GetObjectByName(RE::BSFixedString{ "RArm_Finger31" });
-		if (!rHand) {
+		// through the grip (the same point in the hand as when they shoot), from the butt on the floor: PoolWait holds
+		// the cue out in front, its grip at about (11.5, 24.5, 87.5) in the root's space, the butt below and a little
+		// further out, so the cue stands clear of the leg and chest; PoolWait2 holds it out to their right, its grip at
+		// about (33, 9.5, 78.6)
+		RE::NiPoint3 palm;
+		if (!RightGrip(root, palm)) {
 			return false;
 		}
-		const RE::NiPoint3 palm = rMid ? (rHand->world.translate + rMid->world.translate) * 0.5f : rHand->world.translate;
-		// PoolWait has the butt on the floor at (11, 7) in the root's space, by the right foot; PoolWait2 holds the cue
-		// out to their right, its hand at (27.9, 5.6): the butt below it, a little further out
 		const float        h = a_actor->data.angle.z;
 		const RE::NiPoint3 right{ std::cos(h), -std::sin(h), 0.0f };
 		const RE::NiPoint3 fwd{ std::sin(h), std::cos(h), 0.0f };
 		const bool         lean = _npcWaitVariant == 1;
-		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? 32.0f : 11.0f) + fwd * (lean ? 4.0f : 7.0f);
+		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? 36.0f : 14.5f) + fwd * (lean ? 13.0f : 30.5f);
 		butt.z = a_actor->data.location.z + 0.6f;
 		const RE::NiPoint3 dir = util::Normalized(palm - butt);
 		const auto&        s = Settings::Get();
@@ -1000,12 +1034,12 @@ namespace fp
 		log::info("{}: shot at ball {} into pocket {}{}, speed {:.0f}, dir ({:.3f}, {:.3f})", _opponentName, _npcShot.target, _npcShot.pocket,
 			_npcShot.checked ? " (checked)" : "", _npcShot.speed, _npcShot.dir.x, _npcShot.dir.y);
 
-		// which aim: any of them that reaches this shot, at random (PoolAim reaches least far, PoolAim3 furthest);
-		// if none does, the one that reaches furthest
+		// which aim: PoolAim2 or PoolAim3 (PoolAim, the first, isn't used any more), whichever reaches this shot, at
+		// random if both do; if neither does, the one that reaches furthest
 		{
 			int fits[kAims];
 			int n = 0;
-			for (int v = 0; v < kAims; ++v) {
+			for (int v = 1; v < kAims; ++v) {
 				pool::AiParams pv = p;
 				pv.stanceBack = StanceBackOf(v) / std::max(0.01f, a_frame.scale);
 				if (pool::Overreach(*_sim, _sim->Balls()[0].pos, _npcShot.dir, pv) <= pv.reachSlack) {
