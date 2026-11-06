@@ -638,6 +638,12 @@ namespace fp
 		pos.z = a_frame.origin.z;
 		// facing the middle of the table while they wait
 		_npcWaitHeading = std::atan2(a_frame.origin.x - pos.x, a_frame.origin.y - pos.y);
+		// one of the two waits, at random; PoolWait2's body is turned a quarter left of the root, so for it the root
+		// (and the marker they walk onto, whose heading they take when they get there) is turned a quarter right
+		_npcWaitVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);
+		if (_npcWaitVariant == 1) {
+			_npcWaitHeading += kWait2Turn;
+		}
 		_npcWaitMarker = Spawn(bound, table, pos);
 		if (auto marker = _npcWaitMarker.get()) {
 			marker->data.angle = { 0.0f, 0.0f, _npcWaitHeading };
@@ -705,12 +711,16 @@ namespace fp
 			_npcWaitWalk = 0.0f;
 			// there: face the table and stay put, so their sandbox package can't walk them off
 			_npcFacing = true;
-			// standing with the cue until their turn: one of the two waits, at random; PoolWait2's body is turned a
-			// quarter left of the root, so the root is turned a quarter right to have them face the table
-			_npcWaitVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);
-			a_actor->SetHeading(_npcWaitHeading + (_npcWaitVariant == 1 ? kWait2Turn : 0.0f));
+			// standing with the cue until their turn (the wait picked with the spot)
+			a_actor->SetHeading(_npcWaitHeading);
 			HoldOpponent(a_actor, true);
 			_npcWaitIdle = Anim::PlayWait(a_actor, _npcWaitVariant);
+		} else if (_npcWaitIdle) {
+			// and kept that way: the end of their walk, or the hold, can turn them back to the marker's old facing
+			float diff = std::remainder(a_actor->data.angle.z - _npcWaitHeading, 6.2831853f);
+			if (std::abs(diff) > 0.05f) {
+				a_actor->SetHeading(_npcWaitHeading);
+			}
 		}
 	}
 
