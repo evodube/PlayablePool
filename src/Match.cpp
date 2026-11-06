@@ -54,7 +54,9 @@ namespace fp
 		_log = {};
 		_banner = 0;
 		Say(mode == pool::Mode::kSolo ? "racked. Solo Play: all 14, then the 8" : std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
-		Audio::PlayUI(Audio::Bank::kStart, 0.8f);
+		if (!_quietStart) {
+			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
+		}
 	}
 
 	void Game::Say(const std::string& a_message)
@@ -122,18 +124,22 @@ namespace fp
 		ExitAim();
 		_rules.Forfeit(0);
 		_manualPocket = _autoPocket = -1;
+		// the table clears at once (no result screen): the outcome goes in a notice
 		if (solo || !_opponent) {
-			Banner(3, "GAME OVER", "YOU GAVE UP");
-			Say(std::format("you gave up. {} racks again", Settings::Key(Settings::Get().keyRack)));
 			log::info("game over: forfeit (Solo Play, no record)");
+			Clear();
+			Notify("Pool: you gave up");
 		} else {
-			std::string theyWin = _opponentName + " WINS";
-			std::ranges::transform(theyWin, theyWin.begin(), [](char c) { return static_cast<char>(std::toupper(static_cast<unsigned char>(c))); });
-			Banner(3, theyWin, "YOU FORFEIT");
 			CountResult(1);  // a loss for you, a win for them
-			log::info("game over: forfeit to {} (a loss for you, a win for them)", _opponentName);
-			EndChallenge(std::format("you forfeit. {} wins", _opponentName));
+			const auto  r = RecordOf(0x14);
+			const std::string them = _opponentName;
+			log::info("game over: forfeit to {} (a loss for you, a win for them)", them);
+			EndChallenge("");
+			Clear();
+			Notify(std::format("Pool: you forfeit. {} wins (you're {}-{})", them, r.wins, r.losses));
 		}
+		_watching = false;
+		UpdateHud();  // nothing racked: the HUD goes
 	}
 
 	void Game::TickPocketCall()

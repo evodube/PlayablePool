@@ -267,7 +267,9 @@ namespace fp
 			if (_opponent) {
 				EndChallenge(std::format("{} stops playing", _opponentName));
 			}
+			_quietStart = true;  // racked again below, once they're in: one start sound
 			Rack(a_table);
+			_quietStart = false;
 		}
 		if (!_sim) {
 			Notify(std::format("Pool: rack a table first ({}), then look at who you want to play and press {}", Settings::Key(s.keyRack),

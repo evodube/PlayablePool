@@ -373,7 +373,8 @@ namespace fp
 		bool                   _npcGame{ false };
 		bool                   _spectating{ false };  // F on their table: the HUD shows their game
 		bool                   _clearAfterTick{ false };
-		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack  // the NPC game ended mid-tick: the table clears once it's done
+		bool                   _rackingNpcGame{ false };  // StartNpcGame's own rack
+		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		std::chrono::steady_clock::time_point _lastNpcGame{};
 		void                   LoadSeat(int a_seat);
 		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with
