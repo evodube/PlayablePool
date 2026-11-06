@@ -41,6 +41,9 @@ namespace fp
 		RE::NiPoint3        _npcWalkFrom;             // where they were when the current walk was sent
 		float               _npcGlideSum{ 0.0f };     // GlideOntoLine: the tip's offset from the ball's line, summed over a few frames
 		int                 _npcGlideSamples{ 0 };
+		float               _npcGlideMin{ 0.0f };     // ...and the spread of those samples (still blending into the aim: wide)
+		float               _npcGlideMax{ 0.0f };
+		int                 _npcGlideTries{ 0 };
 		float               _npcGlideT{ -1.0f };      // seconds into the glide (-1: not started)
 		bool                _npcGlideDone{ false };
 		RE::NiPoint3        _npcGlideFrom;

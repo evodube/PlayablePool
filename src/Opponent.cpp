@@ -34,7 +34,7 @@ namespace fp
 		constexpr float kSettleSeconds = 0.4f;   // after being put on the spot, before the aim idle starts
 		constexpr float kThinkSeconds = 0.8f;    // after the balls stop, before they set off
 		constexpr float kArrivedDistance = 30.0f;
-		constexpr float kAlignAfter = 0.3f;      // into the aim pose before the cue is measured
+		constexpr float kAlignAfter = 1.0f;      // into the aim pose (fully blended in: earlier the hands are still moving) before the cue is measured
 		constexpr float kGlideSeconds = 0.6f;    // the ease sideways onto the ball's line
 		constexpr float kRailClear = 20.0f;      // the cue ball this far from the cushion behind it, or the cue goes through the rail
 		constexpr float kTableMargin = 22.0f;    // the rails and some room for the body, beyond the felt
@@ -863,14 +863,29 @@ namespace fp
 			return;
 		}
 		if (_npcGlideT < 0.0f) {
+			if (_npcGlideSamples == 0) {
+				_npcGlideMin = _npcGlideMax = side;
+			}
 			_npcGlideSum += side;
-			if (++_npcGlideSamples < 6) {
+			_npcGlideMin = std::min(_npcGlideMin, side);
+			_npcGlideMax = std::max(_npcGlideMax, side);
+			if (++_npcGlideSamples < 8) {
+				return;
+			}
+			if (_npcGlideMax - _npcGlideMin > 2.0f) {
+				// the hands are still moving (the aim still blending in, or the body settling): measure again
+				log::info("{}: the cue's still moving ({:.1f} .. {:.1f} off the line): measuring again", _opponentName, _npcGlideMin, _npcGlideMax);
+				_npcGlideSum = 0.0f;
+				_npcGlideSamples = 0;
+				if (++_npcGlideTries >= 4) {
+					_npcGlideDone = true;  // never settled: leave them where the stance put them
+				}
 				return;
 			}
 			const float avg = _npcGlideSum / _npcGlideSamples;
 			log::info("{}: the hands put the cue {:.1f} off the cue ball's line: easing over", _opponentName, avg);
-			if (std::abs(avg) < 0.6f || std::abs(avg) > 30.0f) {
-				_npcGlideDone = true;
+			if (std::abs(avg) < 0.6f || std::abs(avg) > 18.0f) {
+				_npcGlideDone = true;  // (more than that is a bad measurement, not a body that's a bit different)
 				return;
 			}
 			const RE::NiPoint3 shotW = util::Normalized(a_frame.rot.Transpose() * RE::NiPoint3{ static_cast<float>(_npcShot.dir.x), static_cast<float>(_npcShot.dir.y), 0.0f });
@@ -1097,6 +1112,7 @@ namespace fp
 			_npcGlideSamples = 0;
 			_npcGlideT = -1.0f;
 			_npcGlideDone = false;
+			_npcGlideTries = 0;
 			PathOpponent(actor, _npcApproach ? _npcApproach : _npcMarker, s.opponentRun ? 1.0f : 0.0f);
 			_npcStep = NpcStep::kWalking;
 		} else {
