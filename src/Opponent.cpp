@@ -1224,9 +1224,9 @@ namespace fp
 			return;
 		}
 		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-			const float near = Distance2D(player->data.location, a_frame.origin);
-			_watching = (!_npcGame || _spectating) && near < kWatchDistance;
-			if (_npcGame && near > kQuitDistance) {
+			const float fromTable = Distance2D(player->data.location, a_frame.origin);
+			_watching = (!_npcGame || _spectating) && fromTable < kWatchDistance;
+			if (_npcGame && fromTable > kQuitDistance) {
 				EndNpcGame("");  // you've gone: their game (and its balls) goes too
 				_clearAfterTick = true;
 				return;
