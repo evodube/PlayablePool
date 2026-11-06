@@ -106,11 +106,12 @@ namespace fp
 		float carryIn{ 1.2f };              // ...this far in from the finger joint, on the palm side
 		float carryOut{ 0.12f };            // ...tip leaning out to the side this much (keeps it off the body)
 		bool  npcGames{ true };             // two settlers hanging round a table now and then play each other
-		float npcGameEvery{ 120.0f };       // ...about this often (seconds)
+		float npcGameChance{ 75.0f };       // ...the chance (%) each minute that two are there that they start one
+		float npcGameEvery{ 60.0f };        // ...and at least this long (seconds) after the last NPC game
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
-		float wanderEvery{ 90.0f };         // about this often (seconds)
-		int   wanderMax{ 2 };               // at most this many at once
-		float wanderStay{ 120.0f };         // each hangs round about this long
+		float wanderEvery{ 45.0f };         // about this often (seconds)
+		int   wanderMax{ 3 };               // at most this many at once
+		float wanderStay{ 180.0f };         // each hangs round about this long
 		float wanderRange{ 2500.0f };       // from this far from the table
 		bool  opponentOwnPackage{ true };   // walk them with fo4pool.esl's own AI package (outranks settler sandboxes); off = PathToReference
 

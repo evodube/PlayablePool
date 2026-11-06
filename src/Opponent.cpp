@@ -1530,9 +1530,13 @@ namespace fp
 
 		// now and then two who've got to the table play each other: no game on (or only a finished one), you not
 		// at the shot camera
+		// (iNpcGameChance: the chance, each minute two are there, that they start one; fNpcGameEvery: the least time
+		// between two NPC games)
+		const float perMinute = std::clamp(s.npcGameChance / 100.0f, 0.0f, 1.0f);
+		const float thisTick = perMinute >= 1.0f ? 1.0f : 1.0f - std::pow(1.0f - perMinute, dt / 60.0f);
 		if (s.npcGames && table && !_npcGame && !_opponent && !_aiming && !_pick && (!_sim || _rules.Over()) &&
-			now - _lastNpcGame > std::chrono::duration<float>(s.npcGameEvery * 0.5f) &&
-			std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) < dt / std::max(5.0f, s.npcGameEvery)) {
+			now - _lastNpcGame > std::chrono::duration<float>(s.npcGameEvery) &&
+			std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) < thisTick) {
 			std::vector<RE::Actor*> there;
 			for (const auto& w : _watchers) {
 				auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
@@ -1576,7 +1580,7 @@ namespace fp
 			return;
 		}
 		auto* who = candidates[std::uniform_int_distribution<std::size_t>(0, candidates.size() - 1)(rng)];
-		const float stay = s.wanderStay * std::uniform_real_distribution<float>(0.6f, 1.4f)(rng);
+		const float stay = s.wanderStay * std::uniform_real_distribution<float>(0.8f, 1.3f)(rng);
 		auto spot = WatchSpot(table.get(), who->data.location);
 		auto spotRef = spot.get();
 		if (!spotRef) {
