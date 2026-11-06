@@ -955,7 +955,7 @@ namespace fp
 
 	bool Game::PlaceStickCarried(RE::Actor* a_actor)
 	{
-		// Walking about: the cue in the right hand like a walking stick carried at the side, tip forward and up, the
+		// Walking about: the cue held upright at the right side like a staff, tip a little forward and out (clear of the chest), the
 		// fingers closed round it: it crosses the palm through the curl of the middle finger (not along the fingers,
 		// which put it inside the hand), a little in on the palm side
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
