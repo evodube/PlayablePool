@@ -208,8 +208,6 @@ namespace fp
 			_dropTime[9] = 0.0f;
 		}
 		const bool nine = pool::IsNineBall(_rules.GameMode());
-		// the watchers round the table: a win or a ball down cheers (or claps), a foul boos
-		WatchersReact(r.end == pool::GameEnd::kWon ? 2 : r.end != pool::GameEnd::kNone || r.foul != pool::Foul::kNone ? -1 : r.ownPotted > 0 ? 1 : 0);
 
 		const bool        solo = _rules.GameMode() == pool::Mode::kSolo;
 		const std::string shooter = PlayerName(r.shooter);

@@ -111,7 +111,6 @@ namespace fp
 		float npcGameChance{ 100.0f };      // ...the chance (%) that two at a table start one (a miss: again a minute later)
 		float npcGameDelay{ 3.0f };         // ...this long (seconds) after the second gets there
 		float watchDistance{ 110.0f };      // watchers stand this far out from the felt's edge
-		bool  watcherIdles{ true };         // watchers smoke or drink coffee while they watch
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 45.0f };         // about this often (seconds)
 		int   wanderMax{ 3 };               // at most this many at once

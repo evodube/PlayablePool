@@ -1623,176 +1623,6 @@ namespace fp
 		});
 	}
 
-	namespace
-	{
-		// fo4pool.esl idles playing the game's own clips: [activity 0 smoke, 1 coffee][female][stage: start, loop,
-		// flavour, end]; and how long the one-shot ones run (seconds; the same for both, near enough)
-		constexpr std::uint32_t kWatchIdle[2][2][4] = {
-			{ { 0x81E, 0x81F, 0x820, 0x821 }, { 0x822, 0x823, 0x824, 0x825 } },
-			{ { 0x826, 0x827, 0x828, 0x829 }, { 0x82A, 0x82B, 0x82C, 0x82D } },
-		};
-		constexpr const char* kWatchIdleName[2][4] = {
-			{ "smoke: light up", "smoke", "smoke: a drag", "smoke: put it out" },
-			{ "coffee: lift the mug", "coffee", "coffee: a sip", "coffee: put it away" },
-		};
-		constexpr float kWatchIdleLength[2][4] = {
-			{ 9.33f, 0.0f, 8.57f, 3.9f },
-			{ 1.5f, 0.0f, 4.67f, 1.5f },
-		};
-		// reactions: cheering (male 1, 2, female 1, 2), booing (the same), clapping; and their lengths
-		constexpr std::uint32_t kCheer[2][2] = { { 0x82E, 0x82F }, { 0x830, 0x831 } };
-		constexpr std::uint32_t kBoo[2][2] = { { 0x832, 0x833 }, { 0x834, 0x835 } };
-		constexpr std::uint32_t kClap = 0x836;
-		constexpr float         kCheerLength[2] = { 4.33f, 6.47f };
-		constexpr float         kBooLength[2] = { 5.97f, 6.67f };
-		constexpr float         kClapLength = 3.0f;
-	}
-
-	void Game::WatchersReact(int a_how)
-	{
-		if (a_how == 0 || !Settings::Get().watcherIdles) {
-			return;
-		}
-		static std::mt19937 rng{ std::random_device{}() };
-		// not all of them, and not all at once: a big moment gets more of them
-		const float chance = a_how == 2 ? 0.8f : a_how > 0 ? 0.45f : 0.35f;
-		for (auto& w : _watchers) {
-			if (w.table != _table || w.leaving || std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > chance) {
-				continue;
-			}
-			w.react = a_how > 0 ? 1 : -1;
-			w.reactIn = std::uniform_real_distribution<float>(0.1f, 0.9f)(rng);
-		}
-	}
-
-	void Game::TickWatcherIdles()
-	{
-		// every frame (so each clip follows the last one on time): watchers at their spot light a cigarette or lift a
-		// mug of coffee, smoke or drink now and then, and put it away before they leave
-		const auto  now = std::chrono::steady_clock::now();
-		const float dt = _watchIdleTime == std::chrono::steady_clock::time_point{} ? 0.0f : std::min(1.0f, std::chrono::duration<float>(now - _watchIdleTime).count());
-		_watchIdleTime = now;
-		if (IsGamePaused() || dt <= 0.0f) {
-			return;
-		}
-		static std::mt19937          rng{ std::random_device{}() };
-		std::vector<RE::TESFormID>   done;
-		for (auto& w : _watchers) {
-			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
-			auto  spot = w.spot.get();
-			if (!actor || actor->IsDead(false) || actor->IsDisabled()) {
-				if (w.leaving) {
-					done.push_back(w.id);
-				}
-				continue;
-			}
-			const bool female = actor->GetSex() == RE::SEX::kFemale;
-			auto play = [&](int a_stage) {
-				Anim::PlayIdleID(actor, kWatchIdle[w.activity][female ? 1 : 0][a_stage], kWatchIdleName[w.activity][a_stage]);
-			};
-			const bool atSpot = spot && Distance2D(actor->data.location, spot->data.location) < 40.0f && !actor->IsInCombat() && !IsPlaying(actor);
-			// a reaction to the shot just played: from the smoking / coffee loop, or just standing (a cigarette or mug
-			// doesn't last through it; the loop brings it out again after)
-			if (w.react != 0) {
-				w.reactIn -= dt;
-				const bool free = w.stage == 0 || w.stage == 2 || w.stage == 5;
-				if (!atSpot || w.leaving || w.reactIn < -2.0f) {
-					w.react = 0;  // the moment's gone
-				} else if (w.reactIn <= 0.0f && free) {
-					const int  pick = std::uniform_int_distribution<int>(0, 1)(rng);
-					const int  sex = female ? 1 : 0;
-					std::uint32_t id;
-					float      length;
-					const char* name;
-					if (w.react > 0 && !female && pick == 1 && std::uniform_int_distribution<int>(0, 2)(rng) == 0) {
-						id = kClap, length = kClapLength, name = "clap";
-					} else if (w.react > 0) {
-						id = kCheer[sex][pick], length = kCheerLength[pick], name = "cheer";
-					} else {
-						id = kBoo[sex][pick], length = kBooLength[pick], name = "boo";
-					}
-					Anim::PlayIdleID(actor, id, name);
-					w.resume = w.stage;
-					w.stage = 6;
-					w.stageLeft = length;
-					w.react = 0;
-					continue;
-				}
-			}
-			switch (w.stage) {
-			case 0:  // not started
-				if (w.leaving) {
-					done.push_back(w.id);
-				} else if (atSpot && Settings::Get().watcherIdles) {
-					if (w.activity < 0) {
-						w.activity = std::uniform_int_distribution<int>(0, 1)(rng);
-					}
-					play(0);
-					w.stage = 1;
-					w.stageLeft = kWatchIdleLength[w.activity][0];
-				}
-				break;
-			case 1:  // lighting up / lifting the mug
-			case 3:  // a drag / a sip
-				w.stageLeft -= dt;
-				if (w.stageLeft <= 0.0f) {
-					if (w.leaving || !atSpot) {
-						play(3);
-						w.stage = 4;
-						w.stageLeft = kWatchIdleLength[w.activity][3];
-					} else {
-						play(1);
-						w.stage = 2;
-						w.flavorIn = std::uniform_real_distribution<float>(6.0f, 14.0f)(rng);
-					}
-				}
-				break;
-			case 2:  // smoking / holding the mug
-				if (w.leaving || !atSpot) {
-					play(3);
-					w.stage = 4;
-					w.stageLeft = kWatchIdleLength[w.activity][3];
-				} else if ((w.flavorIn -= dt) <= 0.0f) {
-					play(2);
-					w.stage = 3;
-					w.stageLeft = kWatchIdleLength[w.activity][2];
-				}
-				break;
-			case 6:  // reacting to a shot
-				w.stageLeft -= dt;
-				if (w.stageLeft <= 0.0f) {
-					if (w.leaving) {
-						done.push_back(w.id);  // (the reaction already took the cigarette or mug away)
-					} else if (w.resume == 2 && atSpot) {
-						play(1);  // back to smoking / drinking: the loop brings it out again
-						w.stage = 2;
-						w.flavorIn = std::uniform_real_distribution<float>(6.0f, 14.0f)(rng);
-					} else {
-						w.stage = w.resume == 2 ? 5 : w.resume;
-					}
-				}
-				break;
-			case 4:  // putting it away
-				w.stageLeft -= dt;
-				if (w.stageLeft <= 0.0f) {
-					w.stage = 5;
-					if (w.leaving) {
-						done.push_back(w.id);
-					}
-				}
-				break;
-			default:  // done: they just watch now
-				if (w.leaving) {
-					done.push_back(w.id);
-				}
-				break;
-			}
-		}
-		for (const auto id : done) {
-			DropWatcher(id);
-		}
-	}
-
 	void Game::TickWatchers()
 	{
 		// once a second: watchers whose time is up (or who left, died, or are playing you) go back to their own
@@ -1850,24 +1680,14 @@ namespace fp
 			w.left -= dt;
 			const bool gone = !actor || actor->IsDead(false) || actor->IsDisabled() || !table || !nearYou(w.table) ||
 			                  (actor->data.location - table->data.location).Length() > s.wanderRange + 1000.0f;
-			const bool propOut = w.stage >= 1 && w.stage <= 4;  // a cigarette or mug in hand: away with it first
 			if (actor && IsPlaying(actor)) {
 				log::info("{}: playing now, not just watching", actor->GetDisplayFullName());
-				if (propOut && w.stage != 4) {
-					Anim::PlayIdleID(actor, kWatchIdle[w.activity][actor->GetSex() == RE::SEX::kFemale ? 1 : 0][3], kWatchIdleName[w.activity][3]);
-				}
 				DropWatcher(w.id);  // their walks are the Players collection's now
-			} else if (w.leaving) {
-				// (TickWatcherIdles drops them once it's put away)
 			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
 				if (actor) {
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
 				}
-				if (propOut && actor && !gone && !actor->IsInCombat()) {
-					w.leaving = true;  // put it away, then go
-				} else {
-					DropWatcher(w.id);
-				}
+				DropWatcher(w.id);
 			}
 		}
 		// those standing at their spot: turned to the table (their package faces the spot's marker, which faces it;
@@ -1889,7 +1709,7 @@ namespace fp
 		auto arrived = [&](const Watcher& w) {
 			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
 			auto  spot = w.spot.get();
-			return actor && spot && !w.leaving && !actor->IsInCombat() && Distance2D(actor->data.location, spot->data.location) < 120.0f;
+			return actor && spot && !actor->IsInCombat() && Distance2D(actor->data.location, spot->data.location) < 120.0f;
 		};
 
 		// now and then one who's got to a table with no game on asks you for a game: F at that table plays them
