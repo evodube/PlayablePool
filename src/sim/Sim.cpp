@@ -215,6 +215,33 @@ namespace pool
 		Place(0, HeadSpot());
 	}
 
+	void Sim::RackNine(std::uint32_t a_seed)
+	{
+		Clear();
+		Rng              rng{ a_seed ? a_seed : 0x9E3779B9u };
+		std::vector<int> rest{ 2, 3, 4, 5, 6, 7, 8 };
+		auto             take = [&]() {
+            const auto i = rng.Next() % rest.size();
+            const int  n = rest[i];
+            rest.erase(rest.begin() + static_cast<std::ptrdiff_t>(i));
+            return n;
+		};
+		const double r = _spec.ballRadius;
+		const double d = 2.0 * r + kRackGap;
+		const double rowStep = d * std::sqrt(3.0) * 0.5;
+		const Vec2   apex = FootSpot();
+		// a diamond: rows of 1, 2, 3, 2, 1
+		constexpr std::array<int, 5> widths{ 1, 2, 3, 2, 1 };
+		for (int row = 0; row < 5; ++row) {
+			for (int j = 0; j < widths[row]; ++j) {
+				const int  number = row == 0 ? 1 : (row == 2 && j == 1) ? 9 : take();
+				const Vec2 jitter{ (rng.Unit() - 0.5) * kRackJitter, (rng.Unit() - 0.5) * kRackJitter };
+				Place(number, Vec2{ apex.x + row * rowStep, (j - (widths[row] - 1) * 0.5) * d } + jitter);
+			}
+		}
+		Place(0, HeadSpot());
+	}
+
 	bool Sim::SpotFree(Vec2 a_pos, int a_ignore) const
 	{
 		const double min = 2.0 * _spec.ballRadius + 0.05;

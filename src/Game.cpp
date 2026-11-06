@@ -118,13 +118,20 @@ namespace fp
 			}
 			_keyWasDown[i] = down;
 		}
-		// up/down through the who-to-play list while it's up
-		const std::array<int, 2> arrows{ VK_UP, VK_DOWN };
+		// up/down through the who-to-play list while it's up; left/right: 8-ball or 9-ball (at a free table, or the list)
+		const std::array<int, 4> arrows{ VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT };
 		for (std::size_t i = 0; i < arrows.size(); ++i) {
 			const bool down = (::GetAsyncKeyState(arrows[i]) & 0x8000) != 0;
-			if (down && !_arrowWasDown[i] && _picking.load()) {
+			const bool live = i < 2 ? _picking.load() : (_picking.load() || _canSwitchType.load());
+			if (down && !_arrowWasDown[i] && live) {
 				if (auto* tasks = F4SE::GetTaskInterface()) {
-					tasks->AddTask([this, i]() { MovePick(i == 0 ? -1 : 1); });
+					tasks->AddTask([this, i]() {
+						if (i < 2) {
+							MovePick(i == 0 ? -1 : 1);
+						} else {
+							SwitchType();
+						}
+					});
 				}
 			}
 			_arrowWasDown[i] = down;
@@ -197,6 +204,7 @@ namespace fp
 		}
 		std::string prompt;
 		_lookTable = {};
+		bool        canSwitch = false;
 		const auto& s = Settings::Get();
 		auto*       player = RE::PlayerCharacter::GetSingleton();
 		auto*       camera = RE::PlayerCamera::GetSingleton();
@@ -227,10 +235,11 @@ namespace fp
 						if (auto* asking = Offerer(table)) {
 							std::string name = asking->GetDisplayFullName();
 							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-							prompt = std::format("{}) PLAY {}", key, name);
+							prompt = std::format("{}) PLAY {} · {}", key, name, WantType() == 1 ? "9-BALL" : "8-BALL");
 						} else {
-							prompt = std::format("{}) PLAY SOLO  ·  HOLD {}) 2 PLAYER", key, key);
+							prompt = std::format("< {} >  {}) SOLO  ·  HOLD {}) 2 PLAYER", WantType() == 1 ? "9-BALL" : "8-BALL", key, key);
 						}
+						canSwitch = true;  // left/right: the other game
 					} else if (_opponent && OpponentsTurn()) {
 						prompt.clear();  // their shot: nothing to do
 					} else {
@@ -271,6 +280,7 @@ namespace fp
 				prompt.clear();
 			}
 		}
+		_canSwitchType = canSwitch;
 		std::scoped_lock lock(_hudMutex);
 		_hud.prompt = std::move(prompt);
 		_hud.pick = std::move(pick);
@@ -279,7 +289,9 @@ namespace fp
 			_hud.pickHint.clear();
 		} else {
 			const auto mine = RecordOf(0x14);
-			_hud.pickHint = std::format("UP/DOWN PICK · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins, mine.losses);
+			_hud.pickHint = std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
+				mine.losses);
+			_hud.pickTitle = WantType() == 1 ? "WHO PLAYS? · 9-BALL" : "WHO PLAYS? · 8-BALL";
 		}
 	}
 
@@ -375,6 +387,19 @@ namespace fp
 			ToggleAim();
 		}
 		_lookTime = {};  // the prompt follows straight away
+	}
+
+	int Game::WantType() const
+	{
+		const int t = _wantType.load();
+		return t < 0 ? Settings::Get().gameType : t;
+	}
+
+	void Game::SwitchType()
+	{
+		_wantType = WantType() == 1 ? 0 : 1;
+		log::info("game switched to {}", _wantType.load() == 1 ? "9-ball" : "8-ball");
+		_lookTime = {};  // the prompt shows it straight away
 	}
 
 	void Game::MovePick(int a_by)
@@ -1089,12 +1114,18 @@ namespace fp
 			return false;
 		}
 		_sim = std::make_unique<pool::Sim>(s.spec);
-		_sim->Rack(static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
+		_gameType = RackType();
+		const auto seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+		if (_gameType == 1) {
+			_sim->RackNine(seed);
+		} else {
+			_sim->Rack(seed);
+		}
 		_dropTime.fill(0.0f);
 		_scratch = false;
 		_haveLast = false;
 		_modelRadius = 0.0f;
-		log::info("re-racked on the same table");
+		log::info("re-racked on the same table ({})", _gameType == 1 ? "9-ball" : "8-ball");
 		StartGame();
 		return true;
 	}
@@ -1147,7 +1178,12 @@ namespace fp
 
 		LogTable(table, frame);
 		_sim = std::make_unique<pool::Sim>(s.spec);
-		_sim->Rack(static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
+		_gameType = RackType();
+		if (const auto seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()); _gameType == 1) {
+			_sim->RackNine(seed);
+		} else {
+			_sim->Rack(seed);
+		}
 		_dropTime.fill(0.0f);
 		_scratch = false;
 		_haveLast = false;
@@ -1613,7 +1649,7 @@ namespace fp
 	{
 		const auto& s = Settings::Get();
 		// whose balls: yours against an NPC, the shooter's in hotseat; none in Solo Play or before groups are set
-		const bool solo = _rules.GameMode() == pool::Mode::kSolo;
+		const bool solo = pool::IsSolo(_rules.GameMode());
 		const int  who = _opponent && !_npcGame ? 0 : _rules.Shooter();
 		const auto group = _rules.GroupOf(who);
 		const bool onEight = !solo && _rules.OnEight(who, *_sim);

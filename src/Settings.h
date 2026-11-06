@@ -35,6 +35,7 @@ namespace fp
 		int keyStopAll{ 0x60 };    // Numpad 0: every game at every table stops (no results), watchers go home
 
 		// [Rules] 8-ball
+		int   gameType{ 0 };        // 0 = 8-ball, 1 = 9-ball (what F starts; left/right at a table changes it)
 		int   gameMode{ 1 };        // 0 = 8-Ball (two players), 1 = Solo Play (the default; a challenged NPC always plays 8-ball)
 		bool  callEight{ true };    // the 8 must go in the called pocket (the one marked on the table)
 		float placeSpeed{ 0.06f };  // ball in hand: how far the cue ball moves per mouse count

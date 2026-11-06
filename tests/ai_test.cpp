@@ -44,6 +44,9 @@ namespace
 		if (r.respotEight) {
 			a_sim.RespotOnFoot(8);
 		}
+		if (r.respotNine) {
+			a_sim.RespotOnFoot(9);
+		}
 		if (a_sim.Balls()[0].state != BallState::kOnTable && !r.ballInHand) {
 			a_sim.RespotCue();
 		}
@@ -82,9 +85,9 @@ namespace
 	}
 
 	// whole games, the computer against itself
-	void Games(double a_skill, int a_games)
+	void Games(double a_skill, int a_games, Mode a_mode = Mode::kEightBall)
 	{
-		std::printf("games at skill %.1f\n", a_skill);
+		std::printf("%s games at skill %.1f\n", a_mode == Mode::kNineBall ? "9-ball" : "8-ball", a_skill);
 		int totalShots = 0;
 		int totalPots = 0;
 		int fouls = 0;
@@ -94,8 +97,12 @@ namespace
 		for (int g = 0; g < a_games; ++g) {
 			Sim   sim(kSpec);
 			Rules rules;
-			sim.Rack(100 + g);
-			rules.NewGame(g % 2);
+			if (a_mode == Mode::kNineBall) {
+				sim.RackNine(100 + g);
+			} else {
+				sim.Rack(100 + g);
+			}
+			rules.NewGame(g % 2, a_mode);
 			std::mt19937 rng(7 + g);
 			AiParams     p;
 			p.skill = a_skill;
@@ -172,6 +179,8 @@ int main()
 	Games(1.0, 20);
 	Games(0.6, 20);
 	Games(0.2, 10);
+	Games(0.6, 20, Mode::kNineBall);
+	Games(0.2, 10, Mode::kNineBall);
 	std::printf("%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed ? 1 : 0;
 }

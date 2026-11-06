@@ -355,8 +355,57 @@ namespace
 	}
 }
 
+namespace
+{
+	void NineBall()
+	{
+		std::puts("9-ball");
+		auto table = [](Mode a_mode) {
+			Table t;
+			t.sim.RackNine(1);
+			t.rules.NewGame(0, a_mode);
+			return t;
+		};
+		{
+			Table t = table(Mode::kNineBall);
+			Check(t.sim.Balls()[10].state == BallState::kOff && t.sim.Balls()[9].state == BallState::kOnTable, "the rack is 1-9 only");
+			Check(t.rules.LowestBall(t.sim) == 1 && t.rules.Remaining(0, t.sim) == 9, "the 1 first, 9 left");
+			auto r = t.Shoot(1, true, { { 4, 0 } });
+			Check(r.foul == Foul::kNone && r.turnContinues && t.rules.Shooter() == 0, "a ball on the break keeps the breaker on");
+			r = t.Shoot(2, true, {});
+			Check(r.foul == Foul::kWrongBallFirst && r.ballInHand && t.rules.Shooter() == 1, "the 2 first while the 1's on: foul");
+		}
+		{
+			Table t = table(Mode::kNineBall);
+			auto  r = t.Shoot(1, true, { { 9, 2 } });
+			Check(r.end == GameEnd::kWon && r.winner == 0, "the 9 on the break wins");
+		}
+		{
+			Table t = table(Mode::kNineBall);
+			t.Shoot(1, true, {});  // player 1 up
+			auto r = t.Shoot(3, true, { { 9, 2 } });
+			Check(r.end == GameEnd::kNone && r.respotNine && r.foul == Foul::kWrongBallFirst, "the 9 on a foul is spotted, no win");
+			Check(t.rules.Shooter() == 0 && r.ballInHand, "and the other player has ball in hand");
+		}
+		{
+			Table t = table(Mode::kNineBall);
+			t.Shoot(1, true, {});
+			auto r = t.Shoot(1, true, { { 9, 4 } });
+			Check(r.end == GameEnd::kWon && r.winner == 1, "a combination on the 9 wins");
+		}
+		{
+			Table t = table(Mode::kSoloNine);
+			auto  r = t.Shoot(2, true, {});
+			Check(r.foul == Foul::kWrongBallFirst && r.turnContinues && r.ballInHand && t.rules.Shooter() == 0, "solo: a foul is ball in hand, still you");
+			r = t.Shoot(1, true, { { 9, 1 } });
+			Check(r.end == GameEnd::kWon, "solo: the 9 on a legal shot wins");
+		}
+	}
+}
+
 int main()
 {
+	NineBall();
 	Break();
 	OpenTable();
 	Fouls();

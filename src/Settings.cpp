@@ -79,6 +79,7 @@ namespace fp
 		keyForfeit = static_cast<int>(ReadInt(L"Keys", L"iForfeit", keyForfeit));
 		keyStopAll = static_cast<int>(ReadInt(L"Keys", L"iStopAll", keyStopAll));
 		gameMode = ReadInt(L"Rules", L"iGameMode", gameMode) == 1 ? 1 : 0;
+		gameType = ReadInt(L"Rules", L"iGameType", gameType) == 1 ? 1 : 0;
 		callEight = ReadBool(L"Rules", L"bCallEight", callEight);
 		placeSpeed = std::clamp(ReadFloat(L"Rules", L"fPlaceSpeed", placeSpeed), 0.005f, 1.0f);
 

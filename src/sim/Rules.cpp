@@ -8,11 +8,28 @@ namespace pool
 	{
 		*this = Rules{};
 		_mode = a_mode;
-		_shooter = a_mode == Mode::kSolo ? 0 : a_breaker % kPlayers;
+		_shooter = IsSolo(a_mode) ? 0 : a_breaker % kPlayers;
+	}
+
+	int Rules::LowestBall(const Sim& a_sim) const
+	{
+		for (int i = 1; i <= 9; ++i) {
+			if (a_sim.Balls()[i].state == BallState::kOnTable) {
+				return i;
+			}
+		}
+		return 0;
 	}
 
 	int Rules::Remaining(int a_player, const Sim& a_sim) const
 	{
+		if (IsNineBall(_mode)) {  // the 1-9 left, for everyone
+			int n = 0;
+			for (int i = 1; i <= 9; ++i) {
+				n += a_sim.Balls()[i].state == BallState::kOnTable;
+			}
+			return n;
+		}
 		if (_mode == Mode::kSolo) {  // every ball but the 8
 			int n = 0;
 			for (const auto& b : a_sim.Balls()) {
@@ -33,6 +50,9 @@ namespace pool
 
 	bool Rules::OnEight(int a_player, const Sim& a_sim) const
 	{
+		if (IsNineBall(_mode)) {
+			return false;
+		}
 		if (_mode == Mode::kSolo) {
 			return Remaining(a_player, a_sim) == 0;
 		}
@@ -49,6 +69,7 @@ namespace pool
 		_cueIn = false;
 		_potted.clear();
 		_eightPocket = -1;
+		_lowestAtStart = LowestBall(a_sim);
 	}
 
 	void Rules::OnEvents(const std::vector<Event>& a_events)
@@ -94,6 +115,9 @@ namespace pool
 		_inShot = false;
 		if (_mode == Mode::kSolo) {
 			return EndSoloShot(a_sim, r);
+		}
+		if (IsNineBall(_mode)) {
+			return EndNineShot(a_sim, r);
 		}
 
 		const int   opponent = (_shooter + 1) % kPlayers;
@@ -161,6 +185,46 @@ namespace pool
 			}
 		}
 		r.turnContinues = r.foul == Foul::kNone && r.ownPotted > 0;
+		if (!r.turnContinues) {
+			_shooter = opponent;
+		}
+		r.ballInHand = r.foul != Foul::kNone;
+		_ballInHand = r.ballInHand;
+		_break = false;
+		(void)a_sim;
+		return r;
+	}
+
+	ShotResult Rules::EndNineShot(const Sim& a_sim, ShotResult r)
+	{
+		const bool solo = _mode == Mode::kSoloNine;
+		const int  opponent = solo ? _shooter : (_shooter + 1) % kPlayers;
+		const bool nineIn = std::ranges::find(_potted, 9) != _potted.end();
+
+		if (_cueIn) {
+			r.foul = Foul::kScratch;
+		} else if (_firstContact < 0) {
+			r.foul = Foul::kNoContact;
+		} else if (_firstContact != _lowestAtStart) {
+			r.foul = Foul::kWrongBallFirst;
+		} else if (!_break && _potted.empty() && !_railAfterContact) {
+			r.foul = Foul::kNoRail;
+		}
+
+		if (nineIn) {
+			if (r.foul == Foul::kNone) {
+				r.end = GameEnd::kWon;
+				_over = true;
+				_winner = _shooter;
+				r.winner = _winner;
+				return r;
+			}
+			r.respotNine = true;  // on a foul: back on the foot spot
+		}
+		for (int n : _potted) {
+			r.ownPotted += n != 9 || r.foul == Foul::kNone;
+		}
+		r.turnContinues = solo || (r.foul == Foul::kNone && !_potted.empty());
 		if (!r.turnContinues) {
 			_shooter = opponent;
 		}

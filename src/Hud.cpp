@@ -259,10 +259,69 @@ namespace fp::Hud
 			return n;
 		}
 
+		// 9-ball: the players (or SOLO 9-BALL) above and below one row of the nine balls, the one to hit first marked
+		void NineBoard(const View& a_v, const Game::HudState& a_st, float x0, float y0)
+		{
+			const float cx = x0 + 29.0f;
+			const float rightX = x0 + 380 - 29;
+			auto nameRow = [&](int p, float row) {
+				const bool  up = !a_st.over && a_st.shooter == p;
+				std::string name = a_st.names[p].empty() ? std::format("PLAYER {}", p + 1) : a_st.names[p];
+				const std::string right = a_st.stats[p];
+				const float room = rightX - (right.empty() ? 0.0f : TextWidth(Mono(), right, 13, 0.0f) + 14.0f) - (cx + 18);
+				float       size = 19.0f;
+				if (const float w = TextWidth(Title(), name, 19.0f, 1.5f); w > room && room > 0.0f) {
+					size = std::max(10.0f, 19.0f * room / w);
+				}
+				if (up) {
+					DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row + 6), a_v.P(cx + 10, row + 12), a_v.P(cx, row + 18), kGreen.text);
+				}
+				Print(a_v, Title(), name, cx + 18, row - 2 + (19.0f - size) * 0.5f, size, up ? kGreen.text : kGreen.off, up ? kGreen.glow : 0,
+					1.5f * size / 19.0f);
+				if (!right.empty()) {
+					Print(a_v, Mono(), right, rightX, row + 1, 13, kGreen.dim, 0, 0.0f, Align::kRight);
+				}
+			};
+			const float row0 = y0 + 25.0f;
+			const float row1 = y0 + 25.0f + 92.0f;
+			int         left = 0;
+			for (int n = 1; n <= 9; ++n) {
+				left += a_st.onTable[n];
+			}
+			if (a_st.solo) {
+				DL::AddTriangleFilled(a_v.dl, a_v.P(cx, row0 + 6), a_v.P(cx + 10, row0 + 12), a_v.P(cx, row0 + 18), kGreen.text);
+				Print(a_v, Title(), "SOLO 9-BALL", cx + 18, row0 - 2, 19, kGreen.text, kGreen.glow, 1.5f);
+				Print(a_v, Mono(), std::format("{} LEFT", left), rightX, row0 + 1, 13, kGreen.dim, 0, 0.0f, Align::kRight);
+			} else {
+				nameRow(0, row0);
+			}
+			// the nine, smaller to fit; a mark under the one to hit first
+			for (int i = 0; i < 9; ++i) {
+				const int   n = i + 1;
+				const float bx = cx + 18 + i * 34.0f;
+				Ball(a_v, n, bx, row0 + 34, 30, !a_st.onTable[n]);
+				if (n == a_st.lowest && !a_st.over) {
+					DL::AddTriangleFilled(a_v.dl, a_v.P(bx + 15, row0 + 67), a_v.P(bx + 9, row0 + 75), a_v.P(bx + 21, row0 + 75), kGreen.text);
+				}
+			}
+			if (a_st.solo) {
+				Print(a_v, Mono(), a_st.lowest > 0 ? std::format("HIT THE {} FIRST · THE 9 WINS", a_st.lowest) : std::string("THE 9 WINS"), cx + 18, row1 + 4,
+					13, kGreen.dim, 0, 1.0f);
+			} else {
+				nameRow(1, row1);
+				Print(a_v, Mono(), a_st.lowest > 0 ? std::format("THE {} FIRST · THE 9 WINS", a_st.lowest) : std::string("THE 9 WINS"), cx + 18, row1 + 34,
+					13, kGreen.dim, 0, 1.0f);
+			}
+		}
+
 		void Scoreboard(const View& a_v, const Game::HudState& a_st)
 		{
 			constexpr float x0 = 28.0f, y0 = 28.0f;
 			Panel(a_v, HudAtlas::k_score, x0, y0);
+			if (a_st.nine) {
+				NineBoard(a_v, a_st, x0, y0);
+				return;
+			}
 			const float cx = x0 + 29.0f;
 			if (a_st.solo) {
 				// Solo Play: the 14, solids on top, stripes below, and the 8 waiting at the end
@@ -578,7 +637,7 @@ namespace fp::Hud
 			v.h = a_viewport->Size.y / v.s;
 			const float x = v.w * 0.5f + 40.0f;
 			float       y = v.h * 0.5f + 10.0f;
-			Print(v, Mono(), "WHO PLAYS?", x, y, 13, kGreen.dim, 0, 2.0f);
+			Print(v, Mono(), a_st.pickTitle.empty() ? std::string("WHO PLAYS?") : a_st.pickTitle, x, y, 13, kGreen.dim, 0, 2.0f);
 			y += 22.0f;
 			for (std::size_t i = 0; i < a_st.pick.size(); ++i) {
 				const bool on = static_cast<int>(i) == a_st.pickSel;

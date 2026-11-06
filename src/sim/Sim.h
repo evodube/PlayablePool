@@ -129,6 +129,8 @@ namespace pool
 		void Clear();
 		// Cue ball on the head spot, the 15 object balls racked for 8-ball at the foot spot.
 		void Rack(std::uint32_t a_seed);
+		// 9-ball: the 1 at the apex, the 9 in the middle of a diamond of 1-9, the rest shuffled; 10-15 not in play.
+		void RackNine(std::uint32_t a_seed);
 		// Puts one ball on the table at rest.
 		void Place(int a_index, Vec2 a_pos);
 		// Whether a ball could be put at a_pos: on the felt and not touching another (a_ignore aside).

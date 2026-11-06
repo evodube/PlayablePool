@@ -27,8 +27,10 @@ namespace fp
 	void Game::StartGame()
 	{
 		const auto& s = Settings::Get();
-		// against an NPC it's always 8-ball
-		const auto mode = s.gameMode == 1 && !_opponent ? pool::Mode::kSolo : pool::Mode::kEightBall;
+		// Solo Play (iGameMode=1) unless someone's playing you; 8-ball or 9-ball as racked
+		const bool solo = s.gameMode == 1 && !_opponent;
+		const bool nine = _gameType == 1;
+		const auto mode = solo ? (nine ? pool::Mode::kSoloNine : pool::Mode::kSolo) : (nine ? pool::Mode::kNineBall : pool::Mode::kEightBall);
 		if (_opponent) {
 			_autoAim = !_npcGame && _nextBreaker == 0;  // your break: straight into the shot camera
 			ForBothSeats([&]() {
@@ -44,7 +46,7 @@ namespace fp
 			});
 		}
 		_rules.NewGame(_nextBreaker, mode);
-		if (mode == pool::Mode::kEightBall) {
+		if (!solo) {
 			_nextBreaker = (_nextBreaker + 1) % pool::Rules::kPlayers;
 		}
 		_shotLive = false;
@@ -55,7 +57,10 @@ namespace fp
 		}
 		_log = {};
 		_banner = 0;
-		Say(mode == pool::Mode::kSolo ? "racked. Solo Play: all 14, then the 8" : std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
+		Say(mode == pool::Mode::kSolo     ? std::string("racked. Solo Play: all 14, then the 8") :
+			mode == pool::Mode::kSoloNine ? std::string("racked. Solo 9-ball: always the lowest ball first; the 9 wins") :
+			nine                          ? std::format("racked for 9-ball. {} breaks", PlayerName(_rules.Shooter())) :
+			                                std::format("racked. {} breaks", PlayerName(_rules.Shooter())));
 		if (!_quietStart && !_bgTick && WithinEarshot()) {
 			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 		}
@@ -133,7 +138,7 @@ namespace fp
 			return;
 		}
 		_forfeitAsked = {};
-		const bool solo = _rules.GameMode() == pool::Mode::kSolo;
+		const bool solo = pool::IsSolo(_rules.GameMode());
 		ExitAim();
 		_rules.Forfeit(0);
 		_manualPocket = _autoPocket = -1;
@@ -198,6 +203,11 @@ namespace fp
 			_sim->RespotOnFoot(8);
 			_dropTime[8] = 0.0f;
 		}
+		if (r.respotNine) {
+			_sim->RespotOnFoot(9);
+			_dropTime[9] = 0.0f;
+		}
+		const bool nine = pool::IsNineBall(_rules.GameMode());
 
 		const bool        solo = _rules.GameMode() == pool::Mode::kSolo;
 		const std::string shooter = PlayerName(r.shooter);
@@ -207,6 +217,11 @@ namespace fp
 		const char*       why = "";
 		switch (r.end) {
 		case pool::GameEnd::kWon:
+			if (nine) {
+				why = r.breakShot ? "THE 9 ON THE BREAK" : "9 BALL DOWN";
+				line = solo ? "you sink the 9. You win!" : std::format("{} sinks the 9 and wins!", shooter);
+				break;
+			}
 			why = Settings::Get().callEight ? "8 BALL IN THE CALLED POCKET" : "8 BALL DOWN";
 			line = solo ? "you sink the 8. You win!" : std::format("{} sinks the 8 and wins!", shooter);
 			break;
@@ -268,6 +283,9 @@ namespace fp
 			if (r.foul == pool::Foul::kScratch) {
 				Banner(1, "SCRATCH", "BALL IN HAND · CARRY ON");
 				line = "scratch: ball in hand";
+			} else if (!foul.empty()) {
+				Banner(1, "FOUL", "BALL IN HAND · CARRY ON");
+				line = std::format("foul: {}. Ball in hand", foul);
 			} else if (r.ownPotted > 0) {
 				line = std::format("{} to go", _rules.Remaining(0, *_sim));
 			} else {
@@ -285,6 +303,12 @@ namespace fp
 			line = std::format("{} again", shooter);
 		} else {
 			line = std::format("{}'s shot", PlayerName(_rules.Shooter()));
+		}
+		if (r.respotNine) {
+			line = "the 9 went in on a foul and is spotted. " + line;
+		}
+		if (nine && !_rules.Over() && _rules.LowestBall(*_sim) > 0) {
+			line += std::format(". The {} first", _rules.LowestBall(*_sim));
 		}
 		if (r.respotEight) {
 			line = "the 8 on the break is spotted. " + line;
@@ -401,7 +425,9 @@ namespace fp
 		}
 		if (_sim) {
 			h.game = true;
-			h.solo = _rules.GameMode() == pool::Mode::kSolo;
+			h.solo = pool::IsSolo(_rules.GameMode());
+			h.nine = pool::IsNineBall(_rules.GameMode());
+			h.lowest = h.nine ? _rules.LowestBall(*_sim) : 0;
 			h.opponent = _opponent ? _opponentName : std::string();
 			h.shooter = _rules.Shooter();
 			for (int p = 0; p < 2; ++p) {
@@ -433,6 +459,7 @@ namespace fp
 		h.pick = std::move(_hud.pick);
 		h.pickSel = _hud.pickSel;
 		h.pickHint = std::move(_hud.pickHint);
+		h.pickTitle = std::move(_hud.pickTitle);
 		_hud = std::move(h);
 	}
 }

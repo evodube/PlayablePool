@@ -47,6 +47,12 @@ namespace pool
 		std::vector<int> Targets(const Sim& a_sim, const Rules& a_rules, int a_player)
 		{
 			std::vector<int> out;
+			if (IsNineBall(a_rules.GameMode())) {
+				if (const int lowest = a_rules.LowestBall(a_sim); lowest > 0) {
+					out.push_back(lowest);  // 9-ball: always the lowest first
+				}
+				return out;
+			}
 			if (a_rules.OnEight(a_player, a_sim)) {
 				if (OnTable(a_sim, 8)) {
 					out.push_back(8);

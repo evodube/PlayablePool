@@ -87,6 +87,7 @@ namespace fp
 		std::vector<RE::NiAVObject*>                        _frozen;  // ball 3D roots whose Havok we already switched off
 		pool::Rules                                         _rules;
 		int                                                 _nextBreaker{ 0 };
+		int                                                 _gameType{ 0 };   // this table's game: 0 8-ball, 1 9-ball
 		bool                                                _shotLive{ false };  // a shot is rolling and will be judged
 		float                                               _overTime{ 0.0f };   // seconds since the game ended
 		int                                                 _manualPocket{ -1 }; // pocket picked with the call key
@@ -193,9 +194,12 @@ namespace fp
 			std::array<std::string, 2> names;         // the players, capitals: you (your character's name) or an NPC
 			std::array<std::string, 2> stats;         // "3-1 · PRO" (NPCs), "5-2" (you); empty: no record kept
 			bool                    npcGame{ false };  // two NPCs playing each other (you're watching)
+			bool                    nine{ false };     // 9-ball
+			int                     lowest{ 0 };       // 9-ball: the ball to hit first
 			std::vector<std::string> pick;            // F on a table with people by it: who to play (held F: their names)
 			int                     pickSel{ 0 };
 			std::string             pickHint;         // "UP/DOWN PICK   F PLAY"
+			std::string             pickTitle;        // "WHO PLAYS? · 8-BALL"
 			int                     activateVk{ 'F' };
 		};
 		HudState Hud() const;
@@ -426,7 +430,13 @@ namespace fp
 		bool                   _haveLastPlayerPos{ false };
 		void                   EndGamesAway(bool a_travelled);  // games you've travelled from or gone 125 m from end (NPC games: a random winner)
 		void                   EndThisGameAway(const char* a_why);
-		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
+		bool                   _quietStart{ false };
+		std::atomic<int>       _wantType{ -1 };          // the game you'll rack (-1: [Rules] iGameType); left/right arrows
+		std::atomic<bool>      _canSwitchType{ false };  // looking at a free table, or the list is up: the arrows switch it
+		int                    _npcRackType{ 0 };        // StartNpcGame's pick
+		int                    WantType() const;
+		int                    RackType() const { return _rackingNpcGame ? _npcRackType : WantType(); }
+		void                   SwitchType();      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);
 		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with
 		void                   EndSeat(const std::string& a_why);
@@ -485,7 +495,7 @@ namespace fp
 			std::chrono::steady_clock::time_point touched{};
 		};
 		std::optional<Pick>        _pick;
-		std::array<bool, 2>        _arrowWasDown{};
+		std::array<bool, 4>        _arrowWasDown{};
 		std::vector<RE::Actor*>    PlayersNear(RE::TESObjectREFR* a_table) const;  // who you could play at it
 		void                       MovePick(int a_by);
 		void                       ClosePick();

@@ -15,6 +15,14 @@
 //  - Potting the 8 wins only once the shooter's group was already cleared before the shot, on a legal shot, and (if
 //    calling is on) into the called pocket. Otherwise potting the 8 loses.
 //
+// 9-ball (two players): balls 1-9 only. Every shot must hit the lowest-numbered ball on the table first; then
+// something goes in or a ball touches a cushion (not asked of the break). Any ball potted on a legal shot keeps the
+// shooter at the table; the 9 potted on a legal shot (combinations and the break included) wins. Fouls give ball in
+// hand; the 9 potted on a foul is spotted again. No calling, no push-out, no three-foul rule.
+//
+// Solo 9-ball: the same, alone: always the lowest ball first; a foul gives ball in hand (the 9 on a foul is
+// spotted); the 9 on a legal shot wins.
+//
 // Solo Play: one player, no turns and no scoring. Pot all 14 (any order, misses don't matter), then the 8 into the
 // called pocket to win. Lost: the 8 on the break, the 8 before the 14, the 8 in another pocket, or a scratch while
 // shooting the 8. Any other scratch just gives ball in hand.
@@ -46,7 +54,12 @@ namespace pool
 	{
 		kEightBall,  // two players, the rules above
 		kSolo,       // Solo Play: one player pots all 14, then the 8 into the called pocket (see Rules::EndShot)
+		kNineBall,   // two players, 9-ball
+		kSoloNine,   // one player, 9-ball
 	};
+
+	inline bool IsNineBall(Mode a_mode) { return a_mode == Mode::kNineBall || a_mode == Mode::kSoloNine; }
+	inline bool IsSolo(Mode a_mode) { return a_mode == Mode::kSolo || a_mode == Mode::kSoloNine; }
 
 	enum class GameEnd : std::uint8_t
 	{
@@ -67,6 +80,7 @@ namespace pool
 		bool             turnContinues{ false };
 		bool             groupsSet{ false };     // groups were decided on this shot
 		bool             respotEight{ false };   // the 8 went in on the break: put it back on the foot spot
+		bool             respotNine{ false };    // 9-ball: the 9 went in on a foul: put it back on the foot spot
 		bool             ballInHand{ false };    // the next shooter places the cue ball
 		GameEnd          end{ GameEnd::kNone };
 		int              winner{ -1 };
@@ -98,14 +112,16 @@ namespace pool
 
 		// Balls of a_player's group still on the table (7 while the table is open).
 		int  Remaining(int a_player, const Sim& a_sim) const;
-		// a_player's group is cleared, so they're shooting at the 8.
+		// a_player's group is cleared, so they're shooting at the 8. (Never in 9-ball.)
 		bool OnEight(int a_player, const Sim& a_sim) const;
+		// 9-ball: the ball to hit first (the lowest on the table, 1-9); 0 if none
+		int  LowestBall(const Sim& a_sim) const;
 
 		// a_player gives up: the game's over and the other one wins (Solo: just over).
 		void Forfeit(int a_player)
 		{
 			_over = true;
-			_winner = _mode == Mode::kSolo ? -1 : 1 - a_player;
+			_winner = IsSolo(_mode) ? -1 : 1 - a_player;
 			_inShot = false;
 		}
 
@@ -121,6 +137,7 @@ namespace pool
 
 	private:
 		ShotResult EndSoloShot(const Sim& a_sim, ShotResult a_result);
+		ShotResult EndNineShot(const Sim& a_sim, ShotResult a_result);
 
 	public:
 
@@ -144,5 +161,6 @@ namespace pool
 		bool             _cueIn{ false };
 		std::vector<int> _potted;
 		int              _eightPocket{ -1 };
+		int              _lowestAtStart{ 0 };
 	};
 }

@@ -122,7 +122,7 @@ namespace fp
 	bool Game::OpponentsTurn() const
 	{
 		// the NPC being worked on (seat 1 against you; either seat in an NPC game) is up
-		return _sim && _opponent && _rules.GameMode() == pool::Mode::kEightBall && _rules.Shooter() == _seatIdx && !_rules.Over();
+		return _sim && _opponent && !pool::IsSolo(_rules.GameMode()) && _rules.Shooter() == _seatIdx && !_rules.Over();
 	}
 
 	void Game::LoadSeat(int a_seat)
@@ -209,6 +209,7 @@ namespace fp
 		_nextBreaker = std::uniform_int_distribution<int>(0, 1)(_npcRng);
 		log::info("npc game: {} ({:08X}) and {} ({:08X}) at table {:08X}", PlayerName(0), a_first->GetFormID(), PlayerName(1),
 			a_second->GetFormID(), a_table->GetFormID());
+		_npcRackType = std::uniform_int_distribution<int>(0, 1)(_npcRng);  // 8-ball or 9-ball
 		_rackingNpcGame = true;
 		Rack(a_table);
 		_rackingNpcGame = false;
