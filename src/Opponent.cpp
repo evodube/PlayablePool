@@ -1706,6 +1706,19 @@ namespace fp
 				DropWatcher(w.id);
 			}
 		}
+		// anyone hanging round a table who's got into it (a table set up from a kit has no navmesh cut out for it, so
+		// walks can go straight through it): put just outside it, on the nearest side
+		for (const auto& w : _watchers) {
+			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
+			auto  table = w.table.get();
+			Frame frame;
+			if (!actor || !table || IsPlaying(actor) || !FrameOf(table.get(), frame) || !InTable(frame, actor->data.location, kInTable)) {
+				continue;
+			}
+			const RE::NiPoint3 out = OutOfTable(frame, actor->data.location, kWaitClear);
+			log::info("{}: in the table: put just outside it", actor->GetDisplayFullName());
+			Anim::SetPosition(actor, out);
+		}
 		// those standing at their spot: turned to the table (their package faces the spot's marker, which faces it;
 		// this catches anything that turned them since)
 		for (const auto& w : _watchers) {
