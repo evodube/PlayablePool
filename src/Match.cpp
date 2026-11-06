@@ -63,8 +63,8 @@ namespace fp
 		_banner = 0;
 		Say(mode == pool::Mode::kSolo     ? std::string("racked. Solo Play: all 14, then the 8") :
 			mode == pool::Mode::kSoloNine ? std::string("racked. Solo 9-ball: always the lowest ball first; the 9 wins") :
-			nine                          ? std::format("racked for 9-ball. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} caps on it", _bet) : "") :
-			                                std::format("racked. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} caps on it", _bet) : ""));
+			nine                          ? std::format("racked for 9-ball. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} cap bet", _bet) : "") :
+			                                std::format("racked. {} breaks{}", PlayerName(_rules.Shooter()), _bet > 0 ? std::format(". {} cap bet", _bet) : ""));
 		if (!_quietStart && !_bgTick && WithinEarshot()) {
 			Audio::PlayUI(Audio::Bank::kStart, 0.8f);
 		}
@@ -422,7 +422,7 @@ namespace fp
 				if (id) {
 					const auto r = RecordOf(id);
 					h.stats[p] = actor ? std::format("{}-{} · {} · {}", r.wins, r.losses, SkillName(SkillOf(id)), StyleName(StyleOf(id))) :
-					             _bet > 0       ? std::format("{}-{} · {} CAPS ON IT", r.wins, r.losses, _bet) :
+					             _bet > 0       ? std::format("{}-{} · {} CAP BET", r.wins, r.losses, _bet) :
 					                              std::format("{}-{}", r.wins, r.losses);
 				}
 			}

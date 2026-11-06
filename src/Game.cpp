@@ -106,9 +106,7 @@ namespace fp
 						case 7:
 							if (_kitPlacing) {
 								CancelKit(true);  // setting a kit table up: X puts it away again
-							} else if (_picking) {
-								ToggleForFun();   // the who-to-play list: for caps or for fun
-							} else {
+							} else if (!_picking) {
 								Forfeit();
 							}
 							break;
@@ -305,14 +303,9 @@ namespace fp
 			_hud.pickHint.clear();
 		} else {
 			const auto mine = RecordOf(0x14);
-			const auto& set = Settings::Get();
-			_hud.pickHint = set.bets && set.keyForfeit > 0 ?
-			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {}) {} · {} PLAY · YOU {}-{}", Settings::Key(set.keyForfeit),
-									_forFun ? "SWITCH TO FOR CAPS" : "SWITCH TO FOR FUN", Settings::Key(_activateVk.load()), mine.wins, mine.losses) :
-			                    std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
-									mine.losses);
-			_hud.pickTitle = std::format("WHO PLAYS? · {}{}", WantType() == 1 ? "9-BALL" : "8-BALL",
-				!set.bets ? "" : _forFun ? " · FOR FUN" : " · FOR CAPS");
+			_hud.pickHint = std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
+				mine.losses);
+			_hud.pickTitle = WantType() == 1 ? "WHO PLAYS? · 9-BALL" : "WHO PLAYS? · 8-BALL";
 		}
 	}
 
@@ -416,7 +409,6 @@ namespace fp
 			if (people.empty() && !kit) {
 				Notify(std::format("Pool: nobody's by the table to play. {} plays Solo", Settings::Key(_activateVk.load())));
 			} else {
-				_forFun = false;  // every list starts on playing for caps; X switches it for this game only
 				Pick pick;
 				pick.table = table->GetHandle();
 				for (auto* a : people) {
@@ -623,8 +615,8 @@ namespace fp
 
 	int Game::StakeOf(RE::Actor* a_actor) const
 	{
-		// caps on a game against them: none if betting's off, you've chosen to play for fun, or they never bet
-		if (!a_actor || !Settings::Get().bets || _forFun || !BetsWithYou(a_actor->GetFormID())) {
+		// caps on a game against them: none if betting's off or they only play for fun
+		if (!a_actor || !Settings::Get().bets || !BetsWithYou(a_actor->GetFormID())) {
 			return 0;
 		}
 		return StakeFor(SkillOf(a_actor->GetFormID()));
@@ -641,24 +633,7 @@ namespace fp
 		const float skill = SkillOf(a_actor->GetFormID());
 		const int   stake = StakeOf(a_actor);
 		return std::format("{}   {}-{} · {} · {} · {}", name, r.wins, r.losses, SkillName(skill), StyleName(StyleOf(a_actor->GetFormID())),
-			stake > 0 ? std::format("{} CAPS", stake) : std::string("FOR FUN"));
-	}
-
-	void Game::ToggleForFun()
-	{
-		_forFun = !_forFun;
-		if (_pick) {
-			for (std::size_t i = 0; i < _pick->who.size(); ++i) {
-				auto  ref = _pick->who[i].get();
-				auto* actor = ref ? ref->As<RE::Actor>() : nullptr;
-				if (actor) {
-					_pick->names[i] = PickLine(actor);
-				}
-			}
-			_pick->touched = std::chrono::steady_clock::now();
-		}
-		_lookTime = {};
-		log::info("playing {}", _forFun ? "for fun (no bets)" : "for caps");
+			stake > 0 ? std::format("{} CAP BET", stake) : std::string("FOR FUN"));
 	}
 
 	int Game::PlayerCaps()
@@ -672,7 +647,6 @@ namespace fp
 	{
 		const int bet = _bet;
 		_bet = 0;
-		_forFun = false;  // a game played for fun doesn't make the next one for fun too
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* caps = RE::TESForm::GetFormByID(0x0000000F);
 		if (bet <= 0 || _npcGame || !_opponent || !player || !caps || !caps->IsBoundObject() || a_winner < 0) {
