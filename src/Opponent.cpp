@@ -84,6 +84,7 @@ namespace fp
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
+				Game::Bury(ref.get());
 			}
 			a_handle = {};
 		}
@@ -1290,11 +1291,7 @@ namespace fp
 			if (!_bgTick) {
 				_watching = (!_npcGame || _spectating) && fromTable < kWatchDistance;
 			}
-			if (_npcGame && fromTable > kQuitDistance) {
-				EndNpcGame("");  // you've gone: their game (and its balls) goes too
-				_clearAfterTick = true;
-				return;
-			}
+			// (you going 250 m away, or travelling, ends it: Game::EndGamesAway)
 		}
 		if (a_dt <= 0.0f) {
 			return;  // paused

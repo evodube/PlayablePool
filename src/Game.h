@@ -136,6 +136,10 @@ namespace fp
 		Record      RecordOf(RE::TESFormID a_id) const;
 		void        CountResult(int a_winner);  // the game in play just ended: a win and a loss on the record
 
+		// Refs we spawned and took away (balls, cues, markers): disabled again if they come back (a cell that was
+		// unloaded when they were removed brings them back with it, e.g. after fast travel)
+		static void Bury(RE::TESObjectREFR* a_ref);
+
 		static Game& Get()
 		{
 			static Game instance;
@@ -415,6 +419,12 @@ namespace fp
 		std::atomic<bool>      _building{ false };        // the workshop menu is open: nothing of ours runs (no keys either)
 		std::chrono::steady_clock::time_point _lastNpcGame{};
 		bool                   _inWorkshop{ false };  // build mode is open: everything holds still
+		RE::NiPoint3           _lastPlayerPos;
+		bool                   _haveLastPlayerPos{ false };
+		float                  _graveTimer{ 0.0f };
+		void                   TickGraveyard();
+		void                   EndGamesAway(bool a_travelled);  // games you've travelled from or gone 250 m from end (NPC games: a random winner)
+		void                   EndThisGameAway(const char* a_why);
 		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);
 		int                    OwnSlot() const { return _npcGame ? _seatIdx : 0; }  // the quest alias this NPC walks with

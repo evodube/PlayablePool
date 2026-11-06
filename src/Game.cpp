@@ -580,6 +580,101 @@ namespace fp
 		g_records.clear();
 	}
 
+	// ---------------------------------------------------------------- refs we removed
+
+	namespace
+	{
+		std::mutex                       g_graveMutex;
+		std::vector<RE::ObjectRefHandle> g_graveyard;
+	}
+
+	void Game::Bury(RE::TESObjectREFR* a_ref)
+	{
+		if (!a_ref) {
+			return;
+		}
+		std::scoped_lock lock(g_graveMutex);
+		if (g_graveyard.size() > 4000) {
+			g_graveyard.erase(g_graveyard.begin(), g_graveyard.begin() + 1000);
+		}
+		g_graveyard.push_back(a_ref->GetHandle());
+	}
+
+	void Game::TickGraveyard()
+	{
+		std::scoped_lock lock(g_graveMutex);
+		std::erase_if(g_graveyard, [](const RE::ObjectRefHandle& a_handle) {
+			auto ref = a_handle.get();
+			if (!ref) {
+				return true;  // gone for good
+			}
+			if (!ref->IsDisabled()) {
+				log::info("{:08X}: a removed pool object came back with its cell; removed again", ref->GetFormID());
+				ref->Disable();
+				ref->SetWantsDelete(true);
+			}
+			return false;
+		});
+	}
+
+	void Game::EndThisGameAway(const char* a_why)
+	{
+		// the loaded table's game, because you're not there for it. Two NPCs: one of them wins (it counts)
+		if (_npcGame && _sim && !_rules.Over()) {
+			const int winner = std::uniform_int_distribution<int>(0, 1)(_npcRng);
+			log::info("{}: {} and {}'s game ends; {} wins", a_why, PlayerName(0), PlayerName(1), PlayerName(winner));
+			CountResult(winner);
+		} else if (_sim || _opponent) {
+			log::info("{}: the game at {:08X} ends", a_why, _table ? _table.get()->GetFormID() : 0u);
+		}
+		if (_opponent || _npcGame) {
+			EndChallenge("");
+		}
+		Clear();
+	}
+
+	void Game::EndGamesAway(bool a_travelled)
+	{
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			return;
+		}
+		constexpr float kAwayDistance = 17500.0f;  // 250 m
+		auto away = [&]() {
+			auto table = _table.get();
+			if (!table) {
+				return false;
+			}
+			auto* tableCell = table->GetParentCell();
+			auto* playerCell = player->GetParentCell();
+			const bool otherWorld = tableCell && playerCell && !tableCell->IsInterior() && !playerCell->IsInterior() &&
+			                        tableCell->worldSpace != playerCell->worldSpace;
+			if (a_travelled || otherWorld || (tableCell && playerCell && tableCell->IsInterior() != playerCell->IsInterior()) ||
+				(table->GetParentCell() && table->GetParentCell()->IsInterior() && table->GetParentCell() != player->GetParentCell())) {
+				return true;
+			}
+			return Distance(table->data.location, player->data.location) > kAwayDistance;
+		};
+		const char* why = a_travelled ? "you travelled" : "you're 250 m away";
+		if ((_sim || _opponent) && away()) {
+			ExitAim();
+			EndThisGameAway(why);
+			_watching = false;
+			UpdateHud();
+		}
+		std::scoped_lock lock(_tableMutex);
+		_bgTick = true;
+		for (std::size_t i = 0; i < _others.size(); ++i) {
+			SwapWith(i);
+			if ((_sim || _opponent) && away()) {
+				EndThisGameAway(why);
+			}
+			SwapWith(i);
+		}
+		_bgTick = false;
+		std::erase_if(_others, [&](const TableSlot& a_slot) { return !Busy(a_slot); });
+	}
+
 	void Game::Forget()
 	{
 		{
@@ -1040,16 +1135,19 @@ namespace fp
 			if (auto marker = _npcMarker.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
+				Game::Bury(marker.get());
 			}
 			_npcMarker = {};
 			if (auto marker = _npcApproach.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
+				Game::Bury(marker.get());
 			}
 			_npcApproach = {};
 			if (auto marker = _npcWaitMarker.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
+				Game::Bury(marker.get());
 			}
 			_npcWaitMarker = {};
 		});
@@ -1060,6 +1158,7 @@ namespace fp
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
+				Game::Bury(ref.get());
 			}
 			a_handle = {};
 		};
@@ -1090,6 +1189,7 @@ namespace fp
 			if (auto ref = m.ref.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
+				Game::Bury(ref.get());
 			}
 		}
 		_markers.clear();
@@ -1174,6 +1274,27 @@ namespace fp
 			_haveLast = false;  // no catching up on the time spent building
 			_watchScan = 0.0f;  // and the tables are looked for again (some may have been placed or moved)
 			log::info("build mode closed: pool carries on");
+		}
+		// fast travel (or any jump across the map): every game ends; and those you've walked 250 m from
+		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+			const bool jumped = _haveLastPlayerPos && Distance(player->data.location, _lastPlayerPos) > 3000.0f;
+			_lastPlayerPos = player->data.location;
+			_haveLastPlayerPos = true;
+			EndGamesAway(jumped);
+			// watching: stopped once you're 10 m from their table
+			if (_spectating) {
+				auto table = _table.get();
+				if (!table || Distance(table->data.location, player->data.location) > 700.0f) {
+					_spectating = false;
+					_watching = false;
+					Tell("Pool: stopped watching");
+				}
+			}
+		}
+		_graveTimer += 1.0f / 60.0f;
+		if (_graveTimer >= 1.0f) {
+			_graveTimer = 0.0f;
+			TickGraveyard();
 		}
 		TickWatchers();
 		TickTable();
@@ -1276,20 +1397,9 @@ namespace fp
 		}
 		std::scoped_lock lock(_tableMutex);
 		_bgTick = true;
-		auto* player = RE::PlayerCharacter::GetSingleton();
 		for (std::size_t i = 0; i < _others.size(); ++i) {
 			SwapWith(i);
-			// a game of yours you've walked far away from ends (an NPC game ends itself the same way)
-			auto table = _table.get();
-			if (!_npcGame && player && table && Distance(table->data.location, player->data.location) > 4000.0f) {
-				log::info("you've gone far from a table you were playing at: that game's over");
-				if (_opponent) {
-					EndChallenge("");
-				}
-				Clear();
-			} else {
-				TickTable();
-			}
+			TickTable();
 			SwapWith(i);
 		}
 		_bgTick = false;
