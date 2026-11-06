@@ -64,7 +64,7 @@ namespace fp
 		constexpr float kStepAside = 90.0f;  // a watcher (or the NPC waiting their turn) this close to where a shot's taken from moves
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
 		constexpr float kStrayed = 400.0f;       // this much further than their best: their own package has them, send the walk again
-		constexpr int   kWalkTries = 12;         // a walk that fails is sent again this many times before giving up
+		constexpr int   kWalkTries = 3;          // a walk that fails is sent again this many times before giving up (then they're put there: tight spaces round a table can't be walked)
 		constexpr float kUnholdSeconds = 0.3f;   // after SetRestrained comes off, before the walk is sent (a restrained actor can't walk)
 		constexpr float kAlreadyThere = 120.0f;  // at the start, this close to that spot already: they wait where they are
 
@@ -1706,18 +1706,27 @@ namespace fp
 				DropWatcher(w.id);
 			}
 		}
-		// anyone hanging round a table who's got into it (a table set up from a kit has no navmesh cut out for it, so
-		// walks can go straight through it): put just outside it, on the nearest side
-		for (const auto& w : _watchers) {
-			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(w.id);
-			auto  table = w.table.get();
+		// anyone who's got into one of the tables near you (a table set up from a kit has no navmesh cut out for it, so
+		// walks can go straight across it; and settlers sandbox round tables too): put just outside it, on the nearest
+		// side. Not those playing at it: the one shooting stands at the rail on purpose, the other has TickWaiting
+		for (const auto& handle : _watchTables) {
+			auto  table = handle.get();
 			Frame frame;
-			if (!actor || !table || IsPlaying(actor) || !FrameOf(table.get(), frame) || !InTable(frame, actor->data.location, kInTable)) {
+			if (!table || !FrameOf(table.get(), frame)) {
 				continue;
 			}
-			const RE::NiPoint3 out = OutOfTable(frame, actor->data.location, kWaitClear);
-			log::info("{}: in the table: put just outside it", actor->GetDisplayFullName());
-			Anim::SetPosition(actor, out);
+			util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+				a_cell->ForEachReferenceInRange(frame.origin, 250.0f, [&](RE::TESObjectREFR* a_ref) {
+					auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
+					if (!actor || actor == player || actor->IsDead(false) || actor->IsDisabled() || IsPlaying(actor) ||
+						!InTable(frame, actor->data.location, kInTable)) {
+						return RE::BSContainer::ForEachResult::kContinue;
+					}
+					log::info("{}: in the table: put just outside it", actor->GetDisplayFullName());
+					Anim::SetPosition(actor, OutOfTable(frame, actor->data.location, kWaitClear));
+					return RE::BSContainer::ForEachResult::kContinue;
+				});
+			});
 		}
 		// those standing at their spot: turned to the table (their package faces the spot's marker, which faces it;
 		// this catches anything that turned them since)
