@@ -273,9 +273,9 @@ def build(with_stick: bool) -> bytes:
     ]
     # 0x81E.. : SmokeStartM, SmokeLoopM, SmokeDragM, SmokeEndM, the same F, CoffeeStartM .. CoffeeEndM, the same F
     n = 30
-    for group in (watch_idles[:4], watch_idles[4:]):
+    for set_ in (watch_idles[:4], watch_idles[4:]):
         for sex, folder in (("M", ""), ("F", "Female\\")):
-            for name, path, event in group:
+            for name, path, event in set_:
                 idles.append(idle(own | (FIRST_ID + n), f"fo4pool{name}{sex}", path.format(folder), event))
                 n += 1
 
