@@ -108,3 +108,12 @@ Animations.ba2`, male and female: `MT\Neutral\[Female\]To_Smoking`, `Smoking\Pos
 `PoseA_Idle1` (loop), `PoseA_IdleFlavor1` (a sip), `ExitToStand`. The start clips load and draw the cigarette / mug
 (AnimObjLoad / AnimObjDraw annotations) and the end clips put it away (AnimObjUnequip). Lengths at 30 fps: To_Smoking
 9.33 s, a drag 8.57, To_Normal 3.9; the mug 1.5 in and out, a sip 4.0-4.67.
+
+A prop doesn't last from one idle to the next, so the loop / flavour clips that don't bring the cigarette or mug out
+themselves are re-exported copies with `AnimObjLoad.<object>` and `AnimObjDraw.<object>` pose markers added at frame 1
+(`tools/anim/watch/`, shipped in `fo4pool\Watch\`): WatchSmokeLoopM, WatchSmokeDragM, WatchSmokeDragF,
+WatchCoffeeLoopM/F, WatchCoffeeSipM/F. Everything else plays the game's files directly.
+
+Reactions (0x82E-0x836, the game's own): `Quest\Cheering\Stand\[Female\]Cheering1/2` (4.33 / 6.47 s), `Booing1/2`
+(5.97 / 6.67 s), `Furniture\Clap\clap_standing` (3.0 s). A ball down cheers (45% of them), a win (80%), a foul boos
+(35%); from the smoking / coffee loop, which starts again after.

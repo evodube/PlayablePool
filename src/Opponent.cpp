@@ -955,7 +955,7 @@ namespace fp
 
 	bool Game::PlaceStickCarried(RE::Actor* a_actor)
 	{
-		// Walking about: the cue held upright at the right side like a staff, tip a little forward and out (clear of the chest), the
+		// Walking about: the cue in the right hand like a walking stick carried at the side, tip forward and up, the
 		// fingers closed round it: it crosses the palm through the curl of the middle finger (not along the fingers,
 		// which put it inside the hand), a little in on the palm side
 		auto* root = a_actor ? a_actor->Get3D() : nullptr;
@@ -1639,6 +1639,30 @@ namespace fp
 			{ 9.33f, 0.0f, 8.57f, 3.9f },
 			{ 1.5f, 0.0f, 4.67f, 1.5f },
 		};
+		// reactions: cheering (male 1, 2, female 1, 2), booing (the same), clapping; and their lengths
+		constexpr std::uint32_t kCheer[2][2] = { { 0x82E, 0x82F }, { 0x830, 0x831 } };
+		constexpr std::uint32_t kBoo[2][2] = { { 0x832, 0x833 }, { 0x834, 0x835 } };
+		constexpr std::uint32_t kClap = 0x836;
+		constexpr float         kCheerLength[2] = { 4.33f, 6.47f };
+		constexpr float         kBooLength[2] = { 5.97f, 6.67f };
+		constexpr float         kClapLength = 3.0f;
+	}
+
+	void Game::WatchersReact(int a_how)
+	{
+		if (a_how == 0 || !Settings::Get().watcherIdles) {
+			return;
+		}
+		static std::mt19937 rng{ std::random_device{}() };
+		// not all of them, and not all at once: a big moment gets more of them
+		const float chance = a_how == 2 ? 0.8f : a_how > 0 ? 0.45f : 0.35f;
+		for (auto& w : _watchers) {
+			if (w.table != _table || w.leaving || std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > chance) {
+				continue;
+			}
+			w.react = a_how > 0 ? 1 : -1;
+			w.reactIn = std::uniform_real_distribution<float>(0.1f, 0.9f)(rng);
+		}
 	}
 
 	void Game::TickWatcherIdles()
@@ -1667,6 +1691,34 @@ namespace fp
 				Anim::PlayIdleID(actor, kWatchIdle[w.activity][female ? 1 : 0][a_stage], kWatchIdleName[w.activity][a_stage]);
 			};
 			const bool atSpot = spot && Distance2D(actor->data.location, spot->data.location) < 40.0f && !actor->IsInCombat() && !IsPlaying(actor);
+			// a reaction to the shot just played: from the smoking / coffee loop, or just standing (a cigarette or mug
+			// doesn't last through it; the loop brings it out again after)
+			if (w.react != 0) {
+				w.reactIn -= dt;
+				const bool free = w.stage == 0 || w.stage == 2 || w.stage == 5;
+				if (!atSpot || w.leaving || w.reactIn < -2.0f) {
+					w.react = 0;  // the moment's gone
+				} else if (w.reactIn <= 0.0f && free) {
+					const int  pick = std::uniform_int_distribution<int>(0, 1)(rng);
+					const int  sex = female ? 1 : 0;
+					std::uint32_t id;
+					float      length;
+					const char* name;
+					if (w.react > 0 && !female && pick == 1 && std::uniform_int_distribution<int>(0, 2)(rng) == 0) {
+						id = kClap, length = kClapLength, name = "clap";
+					} else if (w.react > 0) {
+						id = kCheer[sex][pick], length = kCheerLength[pick], name = "cheer";
+					} else {
+						id = kBoo[sex][pick], length = kBooLength[pick], name = "boo";
+					}
+					Anim::PlayIdleID(actor, id, name);
+					w.resume = w.stage;
+					w.stage = 6;
+					w.stageLeft = length;
+					w.react = 0;
+					continue;
+				}
+			}
 			switch (w.stage) {
 			case 0:  // not started
 				if (w.leaving) {
@@ -1704,6 +1756,20 @@ namespace fp
 					play(2);
 					w.stage = 3;
 					w.stageLeft = kWatchIdleLength[w.activity][2];
+				}
+				break;
+			case 6:  // reacting to a shot
+				w.stageLeft -= dt;
+				if (w.stageLeft <= 0.0f) {
+					if (w.leaving) {
+						done.push_back(w.id);  // (the reaction already took the cigarette or mug away)
+					} else if (w.resume == 2 && atSpot) {
+						play(1);  // back to smoking / drinking: the loop brings it out again
+						w.stage = 2;
+						w.flavorIn = std::uniform_real_distribution<float>(6.0f, 14.0f)(rng);
+					} else {
+						w.stage = w.resume == 2 ? 5 : w.resume;
+					}
 				}
 				break;
 			case 4:  // putting it away

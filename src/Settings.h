@@ -103,10 +103,10 @@ namespace fp
 		bool  offers{ true };               // a settler hanging round the table asks you for a game now and then
 		float offerEvery{ 180.0f };         // ...at most this often (seconds)
 		float offerWait{ 30.0f };           // ...and waits this long for you to press F at the table
-		float carryTilt{ 72.0f };           // the cue they carry while walking: degrees up from level, tip forward (upright at the side, like a staff)
+		float carryTilt{ 50.0f };           // the cue they carry while walking: degrees up from level, tip forward
 		float carryGrip{ 0.3f };            // ...held this far up from the butt (0..1)
 		float carryIn{ 1.2f };              // ...this far in from the finger joint, on the palm side
-		float carryOut{ 0.35f };            // ...tip leaning out to the side this much (keeps it off the body and chest)
+		float carryOut{ 0.12f };            // ...tip leaning out to the side this much (keeps it off the body)
 		bool  npcGames{ true };             // two settlers hanging round a table now and then play each other
 		float npcGameChance{ 100.0f };      // ...the chance (%) that two at a table start one (a miss: again a minute later)
 		float npcGameDelay{ 3.0f };         // ...this long (seconds) after the second gets there

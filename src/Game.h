@@ -499,7 +499,11 @@ namespace fp
 			float stageLeft{ 0.0f };
 			float flavorIn{ 0.0f };
 			bool  leaving{ false };  // done watching: put the cigarette or mug away first, then go
+			int   react{ 0 };        // a reaction to the last shot waiting to play (1 cheer or clap, -1 boo), in reactIn s
+			float reactIn{ 0.0f };
+			int   resume{ 0 };       // the stage to go back to after it (stage 6: reacting)
 		};
+		void WatchersReact(int a_how);  // the watchers round this table react to a shot: 1 cheer, 2 a win, -1 boo
 		void TickWatcherIdles();
 		std::chrono::steady_clock::time_point _watchIdleTime{};
 		// Someone hanging round the table asking you for a game ([Opponent] bOffers): F at that table plays them

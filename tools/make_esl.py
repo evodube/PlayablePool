@@ -257,27 +257,35 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 28), "fo4poolAim3", ANIM_DIR + "PoolAim3.hkx"),
         idle(own | (FIRST_ID + 29), "fo4poolStrike3", ANIM_DIR + "PoolStrike3.hkx"),
     ]
-    # watchers: the game's own smoking and coffee clips (Fallout4 - Animations.ba2, nothing shipped), male then
-    # female, each start / loop / flavour / end; the clips load and put away the cigarette or mug themselves
+    # watchers: the game's own smoking and coffee clips (Fallout4 - Animations.ba2), male then female, each start /
+    # loop / flavour / end. The start clips bring out the cigarette or mug; a prop doesn't last from one idle to the
+    # next, so the loops and flavours that don't bring it out themselves are copies with AnimObjLoad / AnimObjDraw
+    # added at the start (fo4pool\Watch\, tools/anim/watch); the end clips put it away
     smoke = "Actors\\Character\\Animations\\MT\\Neutral\\"
     coffee = "Actors\\Character\\Animations\\Furniture\\CoffeeDrinkStanding\\"
-    watch_idles = [
-        ("SmokeStart", smoke + "{}To_Smoking.hkx", "dyn_Activation"),
-        ("SmokeLoop", smoke + "{}Smoking\\PoseA_Idle1.hkx", "dyn_ActivationLoop"),
-        ("SmokeDrag", smoke + "{}Smoking\\PoseA_IdleFlavor1.hkx", "dyn_Activation"),
-        ("SmokeEnd", smoke + "{}Smoking\\To_Normal.hkx", "dyn_Activation"),
-        ("CoffeeStart", coffee + "{}EnterFromStand.hkx", "dyn_Activation"),
-        ("CoffeeLoop", coffee + "{}PoseA_Idle1.hkx", "dyn_ActivationLoop"),
-        ("CoffeeSip", coffee + "{}PoseA_IdleFlavor1.hkx", "dyn_Activation"),
-        ("CoffeeEnd", coffee + "{}ExitToStand.hkx", "dyn_Activation"),
+    watch = ANIM_DIR + "Watch\\"
+    a, l = "dyn_Activation", "dyn_ActivationLoop"
+    watch_idles = [  # 0x81E..0x82D
+        ("SmokeStartM", smoke + "To_Smoking.hkx", a), ("SmokeLoopM", watch + "WatchSmokeLoopM.hkx", l),
+        ("SmokeDragM", watch + "WatchSmokeDragM.hkx", a), ("SmokeEndM", smoke + "Smoking\\To_Normal.hkx", a),
+        ("SmokeStartF", smoke + "Female\\To_Smoking.hkx", a), ("SmokeLoopF", smoke + "Female\\Smoking\\PoseA_Idle1.hkx", l),
+        ("SmokeDragF", watch + "WatchSmokeDragF.hkx", a), ("SmokeEndF", smoke + "Female\\Smoking\\To_Normal.hkx", a),
+        ("CoffeeStartM", coffee + "EnterFromStand.hkx", a), ("CoffeeLoopM", watch + "WatchCoffeeLoopM.hkx", l),
+        ("CoffeeSipM", watch + "WatchCoffeeSipM.hkx", a), ("CoffeeEndM", coffee + "ExitToStand.hkx", a),
+        ("CoffeeStartF", coffee + "Female\\EnterFromStand.hkx", a), ("CoffeeLoopF", watch + "WatchCoffeeLoopF.hkx", l),
+        ("CoffeeSipF", watch + "WatchCoffeeSipF.hkx", a), ("CoffeeEndF", coffee + "Female\\ExitToStand.hkx", a),
     ]
-    # 0x81E.. : SmokeStartM, SmokeLoopM, SmokeDragM, SmokeEndM, the same F, CoffeeStartM .. CoffeeEndM, the same F
-    n = 30
-    for set_ in (watch_idles[:4], watch_idles[4:]):
-        for sex, folder in (("M", ""), ("F", "Female\\")):
-            for name, path, event in set_:
-                idles.append(idle(own | (FIRST_ID + n), f"fo4pool{name}{sex}", path.format(folder), event))
-                n += 1
+    # their reactions to a shot (0x82E..0x836): cheering, booing, clapping (the game's own, unchanged)
+    cheer = "Actors\\Character\\Animations\\Quest\\Cheering\\Stand\\"
+    watch_idles += [
+        ("CheerM1", cheer + "Cheering1.hkx", a), ("CheerM2", cheer + "Cheering2.hkx", a),
+        ("CheerF1", cheer + "Female\\Cheering1.hkx", a), ("CheerF2", cheer + "Female\\Cheering2.hkx", a),
+        ("BooM1", cheer + "Booing1.hkx", a), ("BooM2", cheer + "Booing2.hkx", a),
+        ("BooF1", cheer + "Female\\Booing1.hkx", a), ("BooF2", cheer + "Female\\Booing2.hkx", a),
+        ("Clap", "Actors\\Character\\Animations\\Furniture\\Clap\\clap_standing.hkx", a),
+    ]
+    for n, (name, path, event) in enumerate(watch_idles, start=30):
+        idles.append(idle(own | (FIRST_ID + n), f"fo4pool{name}", path, event))
 
     link = own | (FIRST_ID + 20)
     walk = own | (FIRST_ID + 21)
@@ -292,7 +300,7 @@ def build(with_stick: bool) -> bytes:
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 46))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 55))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))
