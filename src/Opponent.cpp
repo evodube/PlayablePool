@@ -61,7 +61,6 @@ namespace fp
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
 		constexpr float kPartnerAfter = 10.0f;  // one waiting at a free table this long: someone comes over to play them
-		constexpr float kWatchOut = 100.0f;   // watchers stand this far out from the felt's edge (and step aside from a shot)
 		constexpr float kStepAside = 90.0f;  // a watcher (or the NPC waiting their turn) this close to where a shot's taken from moves
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
 		constexpr float kStrayed = 400.0f;       // this much further than their best: their own package has them, send the walk again
@@ -1227,9 +1226,9 @@ namespace fp
 			_watchNavmeshes = NavmeshesFor(a_table, frame.origin);
 		}
 		const auto& s = Settings::Get();
-		// round the felt, kWatchOut beyond its edges: past where anyone stands to shoot (the cue's length and more)
-		const double hx = s.spec.length * 0.5 + kWatchOut;
-		const double hy = s.spec.width * 0.5 + kWatchOut;
+		// round the felt, [Opponent] fWatchDistance beyond its edges: past where anyone stands to shoot
+		const double hx = s.spec.length * 0.5 + Settings::Get().watchDistance;
+		const double hy = s.spec.width * 0.5 + Settings::Get().watchDistance;
 		std::vector<pool::Vec2> spots{ { -hx, -hy }, { hx, -hy }, { hx, hy }, { -hx, hy }, { 0.0, -hy }, { 0.0, hy }, { -hx, 0.0 }, { hx, 0.0 },
 			{ -hx * 0.5, -hy }, { hx * 0.5, -hy }, { -hx * 0.5, hy }, { hx * 0.5, hy } };
 		RE::NiPoint3 best{};
