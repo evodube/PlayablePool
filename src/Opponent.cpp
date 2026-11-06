@@ -53,6 +53,7 @@ namespace fp
 		// Walks go to a spot this far outside the felt (clear of the table, which blocks the navmesh around it: a
 		// walk to the shot spot itself, right by the rail, fails), and they step from there onto the spot
 		constexpr float kApproachBeyondFelt = 55.0f;
+		constexpr float kPartnerAfter = 10.0f;  // one waiting at a free table this long: someone comes over to play them
 		constexpr float kWatchOut = 100.0f;   // watchers stand this far out from the felt's edge (and step aside from a shot)
 		constexpr float kStepAside = 90.0f;  // a watcher (or the NPC waiting their turn) this close to where a shot's taken from moves
 		constexpr float kStepIn = 75.0f;         // the last hop onto the spot can't be walked: this close, they're set on it
@@ -1649,6 +1650,36 @@ namespace fp
 			}
 		}
 
+		// one waiting at a free table on their own: after kPartnerAfter seconds someone comes over to play them
+		if (s.npcGames && !_pick && RunningGames() < kMaxTables) {
+			for (const auto& handle : _watchTables) {
+				auto       table = handle.get();
+				const auto atTable = std::ranges::count_if(_watchers, [&](const Watcher& w) { return w.table == handle; });
+				const auto waiting = std::ranges::count_if(_watchers, [&](const Watcher& w) { return w.table == handle && arrived(w) && _offerID != w.id; });
+				auto       alone = std::ranges::find_if(_aloneSince, [&](const auto& p) { return p.first == handle; });
+				if (!table || !TableFree(table.get()) || atTable != 1 || waiting != 1) {
+					if (alone != _aloneSince.end()) {
+						_aloneSince.erase(alone);
+					}
+					continue;
+				}
+				if (alone == _aloneSince.end()) {
+					_aloneSince.emplace_back(handle, now);
+					continue;
+				}
+				if (now - alone->second < std::chrono::duration<float>(kPartnerAfter)) {
+					continue;
+				}
+				_aloneSince.erase(alone);
+				for (auto& w : _watchers) {
+					if (w.table == handle) {
+						w.left = std::max(w.left, 90.0f);  // they wait for the one coming over
+					}
+				}
+				SendWatcher(handle, "comes over to play the one waiting");
+			}
+		}
+
 		if (_watchTables.empty() || std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
 			return;
 		}
@@ -1666,6 +1697,19 @@ namespace fp
 		const auto tableHandle = room[std::uniform_int_distribution<std::size_t>(0, room.size() - 1)(rng)];
 		auto       table = tableHandle.get();
 
+		SendWatcher(tableHandle, "wanders over");
+	}
+
+	bool Game::SendWatcher(const RE::ObjectRefHandle& a_table, const char* a_why)
+	{
+		const auto& s = Settings::Get();
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		auto        table = a_table.get();
+		const auto& tableHandle = a_table;
+		static std::mt19937 rng{ std::random_device{}() };
+		if (!table || !player) {
+			return false;
+		}
 		// someone: a grown-up NPC near the table who isn't fighting, following you, playing or already watching
 		static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);    // ActorTypeNPC
 		static auto* companions = RE::TESForm::GetFormByID<RE::TESFaction>(0x00023C01);  // CurrentCompanionFaction
@@ -1685,7 +1729,7 @@ namespace fp
 			});
 		});
 		if (candidates.empty()) {
-			return;
+			return false;
 		}
 		auto* who = candidates[std::uniform_int_distribution<std::size_t>(0, candidates.size() - 1)(rng)];
 		const float stay = s.wanderStay * std::uniform_real_distribution<float>(0.8f, 1.3f)(rng);
@@ -1693,14 +1737,15 @@ namespace fp
 		auto spotRef = spot.get();
 		if (!spotRef) {
 			log::info("no spot to watch from round this table (navmesh?)");
-			return;
+			return false;
 		}
 		Watcher w{ who->GetFormID(), stay };
 		w.spot = spot;
 		w.table = tableHandle;
 		_watchers.push_back(w);
-		log::info("{} ({:08X}) wanders over to watch from {} for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(),
+		log::info("{} ({:08X}) {} to the table, spot {}, for {:.0f} s ({} could)", who->GetDisplayFullName(), who->GetFormID(), a_why,
 			NavmeshAt(spotRef->data.location), stay, candidates.size());
 		Anim::AddWatcher(who, spotRef.get());
+		return true;
 	}
 }
