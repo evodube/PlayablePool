@@ -485,7 +485,7 @@ namespace fp::SettingsMenu
 		}
 		installed = true;
 		Settings::Get().Load();  // the menu shows the INI's values from the start
-		F4SEMenuFramework::SetSection("fo4pool");
+		F4SEMenuFramework::SetSection("Playable Pool");
 		AddPages(std::make_index_sequence<9>{});
 		log::info("settings pages registered in F4SE Menu Framework ({} pages)", Pages().size());
 	}
