@@ -107,20 +107,6 @@ namespace fp::Anim
 			return idle;
 		}
 
-		bool Play(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)
-		{
-			if (!Settings::Get().anim || !a_actor || !a_actor->currentProcess) {
-				return false;
-			}
-			auto* idle = Idle(a_rawID);
-			if (!idle) {
-				return false;
-			}
-			const bool ok = a_actor->currentProcess->PlayIdle(*a_actor, idle, nullptr);
-			log::info("{} ({:08X}): play idle {}: {}", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_name, ok ? "started" : "refused");
-			return ok;
-		}
-
 		// Calls a Papyrus function on an actor's script object; the call runs on the script thread, later.
 		template <class... Args>
 		bool CallActorWith(RE::Actor* a_actor, const char* a_function, const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>& a_callback, Args... a_args)
@@ -298,6 +284,27 @@ namespace fp::Anim
 		{
 			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(What(a_actor, a_function)) };
 			return CallActorWith(a_actor, a_function, callback, a_args...);
+		}
+
+		bool Play(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)
+		{
+			if (!Settings::Get().anim || !a_actor || !a_actor->currentProcess) {
+				return false;
+			}
+			auto* idle = Idle(a_rawID);
+			if (!idle) {
+				return false;
+			}
+			if (a_actor->currentProcess->PlayIdle(*a_actor, idle, nullptr)) {
+				log::info("{} ({:08X}): play idle {}: started", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_name);
+				return true;
+			}
+			// Refused natively: on Next-Gen / Anniversary the engine call CommonLibF4 makes doesn't take our idles (every
+			// one came back refused there), so ask Papyrus's Actor.PlayIdle instead, which goes through the game's own
+			// path on every runtime. Its answer is logged when the script thread gets to it.
+			log::info("{} ({:08X}): play idle {}: refused, trying Papyrus PlayIdle", a_actor->GetDisplayFullName(), a_actor->GetFormID(), a_name);
+			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(What(a_actor, "PlayIdle") + " " + a_name) };
+			return CallActorWith(a_actor, "PlayIdle", callback, idle);
 		}
 	}
 
