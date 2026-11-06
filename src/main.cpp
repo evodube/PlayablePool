@@ -24,6 +24,7 @@ namespace
 			fp::Hook::Install();
 			fp::CameraHook::Install();
 			fp::Audio::Init();
+			fp::Game::ListenForLoading();
 			break;
 		case F4SE::MessagingInterface::kPreLoadGame:
 			fp::Game::Get().Forget();

@@ -582,41 +582,48 @@ namespace fp
 		g_records.clear();
 	}
 
-	// ---------------------------------------------------------------- refs we removed
+	// ---------------------------------------------------------------- loading screens
 
 	namespace
 	{
-		std::mutex                       g_graveMutex;
-		std::vector<RE::ObjectRefHandle> g_graveyard;
+		// (CommonLibF4 only declares it) the game's own layout: the menu's name, and whether it's opening
+		struct MenuOpenCloseEventData
+		{
+			RE::BSFixedString menuName;
+			bool              opening;
+		};
+
+		struct LoadingSink final : RE::BSTEventSink<RE::MenuOpenCloseEvent>
+		{
+			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent& a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+			{
+				const auto& e = reinterpret_cast<const MenuOpenCloseEventData&>(a_event);
+				if (e.opening && e.menuName.c_str() && std::string_view(e.menuName.c_str()) == "LoadingMenu") {
+					Game::Get().OnLoadingStarts();
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
+		};
 	}
 
-	void Game::Bury(RE::TESObjectREFR* a_ref)
+	void Game::ListenForLoading()
 	{
-		if (!a_ref) {
+		static LoadingSink sink;
+		static bool        registered = false;
+		if (auto* ui = RE::UI::GetSingleton(); ui && !registered) {
+			ui->RegisterSink<RE::MenuOpenCloseEvent>(&sink);
+			registered = true;
+			log::info("listening for loading screens (games end on fast travel)");
+		}
+	}
+
+	void Game::OnLoadingStarts()
+	{
+		if (!_sim && !_opponent && _others.empty()) {
 			return;
 		}
-		std::scoped_lock lock(g_graveMutex);
-		if (g_graveyard.size() > 4000) {
-			g_graveyard.erase(g_graveyard.begin(), g_graveyard.begin() + 1000);
-		}
-		g_graveyard.push_back(a_ref->GetHandle());
-	}
-
-	void Game::TickGraveyard()
-	{
-		std::scoped_lock lock(g_graveMutex);
-		std::erase_if(g_graveyard, [](const RE::ObjectRefHandle& a_handle) {
-			auto ref = a_handle.get();
-			if (!ref) {
-				return true;  // gone for good
-			}
-			if (!ref->IsDisabled()) {
-				log::info("{:08X}: a removed pool object came back with its cell; removed again", ref->GetFormID());
-				ref->Disable();
-				ref->SetWantsDelete(true);
-			}
-			return false;
-		});
+		log::info("loading screen: every game ends, its table cleared");
+		EndGamesAway(true);
 	}
 
 	void Game::EndThisGameAway(const char* a_why)
@@ -641,7 +648,7 @@ namespace fp
 		if (!player) {
 			return;
 		}
-		constexpr float kAwayDistance = 17500.0f;  // 250 m
+		constexpr float kAwayDistance = 8750.0f;  // 125 m
 		auto away = [&]() {
 			auto table = _table.get();
 			if (!table) {
@@ -657,7 +664,7 @@ namespace fp
 			}
 			return Distance(table->data.location, player->data.location) > kAwayDistance;
 		};
-		const char* why = a_travelled ? "you travelled" : "you're 250 m away";
+		const char* why = a_travelled ? "you travelled" : "you're 125 m away";
 		if ((_sim || _opponent) && away()) {
 			ExitAim();
 			EndThisGameAway(why);
@@ -1175,19 +1182,16 @@ namespace fp
 			if (auto marker = _npcMarker.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
-				Game::Bury(marker.get());
 			}
 			_npcMarker = {};
 			if (auto marker = _npcApproach.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
-				Game::Bury(marker.get());
 			}
 			_npcApproach = {};
 			if (auto marker = _npcWaitMarker.get()) {
 				marker->Disable();
 				marker->SetWantsDelete(true);
-				Game::Bury(marker.get());
 			}
 			_npcWaitMarker = {};
 		});
@@ -1198,7 +1202,6 @@ namespace fp
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
-				Game::Bury(ref.get());
 			}
 			a_handle = {};
 		};
@@ -1229,7 +1232,6 @@ namespace fp
 			if (auto ref = m.ref.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
-				Game::Bury(ref.get());
 			}
 		}
 		_markers.clear();
@@ -1315,7 +1317,7 @@ namespace fp
 			_watchScan = 0.0f;  // and the tables are looked for again (some may have been placed or moved)
 			log::info("build mode closed: pool carries on");
 		}
-		// fast travel (or any jump across the map): every game ends; and those you've walked 250 m from
+		// fast travel (or any jump across the map): every game ends; and those you've walked 125 m from
 		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
 			const bool jumped = _haveLastPlayerPos && Distance(player->data.location, _lastPlayerPos) > 3000.0f;
 			_lastPlayerPos = player->data.location;
@@ -1330,11 +1332,6 @@ namespace fp
 					Tell("Pool: stopped watching");
 				}
 			}
-		}
-		_graveTimer += 1.0f / 60.0f;
-		if (_graveTimer >= 1.0f) {
-			_graveTimer = 0.0f;
-			TickGraveyard();
 		}
 		TickWatchers();
 		TickTable();

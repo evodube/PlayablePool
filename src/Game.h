@@ -136,9 +136,10 @@ namespace fp
 		Record      RecordOf(RE::TESFormID a_id) const;
 		void        CountResult(int a_winner);  // the game in play just ended: a win and a loss on the record
 
-		// Refs we spawned and took away (balls, cues, markers): disabled again if they come back (a cell that was
-		// unloaded when they were removed brings them back with it, e.g. after fast travel)
-		static void Bury(RE::TESObjectREFR* a_ref);
+		// A loading screen is starting (fast travel, a door, a save loading): every game ends now, while their tables
+		// (and the balls, cues and markers on them) are still loaded and can be taken away
+		void OnLoadingStarts();
+		static void ListenForLoading();
 
 		static Game& Get()
 		{
@@ -423,9 +424,7 @@ namespace fp
 		bool                   _inWorkshop{ false };  // build mode is open: everything holds still
 		RE::NiPoint3           _lastPlayerPos;
 		bool                   _haveLastPlayerPos{ false };
-		float                  _graveTimer{ 0.0f };
-		void                   TickGraveyard();
-		void                   EndGamesAway(bool a_travelled);  // games you've travelled from or gone 250 m from end (NPC games: a random winner)
+		void                   EndGamesAway(bool a_travelled);  // games you've travelled from or gone 125 m from end (NPC games: a random winner)
 		void                   EndThisGameAway(const char* a_why);
 		bool                   _quietStart{ false };      // a rack that's about to be done again (Challenge): no start sound  // the NPC game ended mid-tick: the table clears once it's done
 		void                   LoadSeat(int a_seat);

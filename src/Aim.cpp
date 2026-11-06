@@ -803,7 +803,6 @@ namespace fp
 			if (auto ref = a_handle.get()) {
 				ref->Disable();
 				ref->SetWantsDelete(true);
-				Game::Bury(ref.get());
 			}
 			a_handle = {};
 		};
