@@ -355,6 +355,8 @@ namespace fp
 		void  EnterAim();
 		void  ExitAim();
 		void  ToggleOverhead();
+		void  QuietNpcs(bool a_quiet);  // while you're playing: NPCs don't come up to say hello or comment
+		bool  _npcsQuiet{ false };
 		float CeilingAbove(const Frame& a_frame, float a_upTo) const;
 		void  SetTableCollision(bool a_on);
 		// a point in table space (felt units) and whether it's within a_beyond of the felt; and the nearest point

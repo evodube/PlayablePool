@@ -309,6 +309,39 @@ namespace fp
 		}
 	}
 
+	void Game::QuietNpcs(bool a_quiet)
+	{
+		if (a_quiet == _npcsQuiet) {
+			return;
+		}
+		_npcsQuiet = a_quiet;
+		// the game's own settings for greetings and comments: turned off while you play, back as they were after
+		static std::unordered_map<std::string, float> was;
+		auto* settings = RE::GameSettingCollection::GetSingleton();
+		if (!settings) {
+			return;
+		}
+		static constexpr std::pair<const char*, float> kQuiet[] = {
+			{ "fAIMinGreetingDistance", 0.0f },         // how close they have to be to say hello: never
+			{ "fAIGreetingTimer", 100000.0f },          // ...and how long between hellos
+			{ "fAIHelloTimer", 100000.0f },
+			{ "fCommentOnPlayerActionsTimer", 100000.0f },  // remarks on what you're doing
+		};
+		for (const auto& [name, quiet] : kQuiet) {
+			auto* setting = settings->GetSetting(name);
+			if (!setting) {
+				continue;
+			}
+			if (a_quiet) {
+				was[name] = setting->GetFloat();
+				setting->SetFloat(quiet);
+			} else if (auto it = was.find(name); it != was.end()) {
+				setting->SetFloat(it->second);
+			}
+		}
+		log::info("NPC greetings {}", a_quiet ? "off while you play" : "back on");
+	}
+
 	void Game::OnActivate(bool a_hold)
 	{
 		if (IsGamePaused()) {
@@ -1418,6 +1451,8 @@ namespace fp
 		if (_kitPlacing) {
 			TickKitPlacement();
 		}
+		// your game on (Solo, or against someone): nobody comes up to say hello or comment while you play
+		QuietNpcs(_aiming || (_sim && !_npcGame && !_rules.Over()));
 		TickWatchers();
 		TickTable();
 		TickOthers();
