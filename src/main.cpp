@@ -3,6 +3,7 @@
 #include "Game.h"
 #include "Hook.h"
 #include "Hud.h"
+#include "MenuWatch.h"
 #include "Settings.h"
 
 namespace
@@ -16,6 +17,7 @@ namespace
 		}
 		switch (a_msg->type) {
 		case F4SE::MessagingInterface::kPostPostLoad:
+			fp::menus::Watch();  // (the UI may not exist yet: then at game data ready)
 			fp::Hud::Install();  // F4SE Menu Framework is loaded by now, if it's installed
 			break;
 		case F4SE::MessagingInterface::kGameDataReady:
@@ -24,6 +26,7 @@ namespace
 			fp::Hook::Install();
 			fp::CameraHook::Install();
 			fp::Audio::Init();
+			fp::menus::Watch();
 			fp::Game::ListenForLoading();
 			fp::Game::SetUpKit();
 			break;

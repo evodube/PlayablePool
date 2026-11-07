@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "MenuWatch.h"
 
 #include "Anim.h"
 #include "Audio.h"
@@ -535,11 +536,7 @@ namespace fp
 		if (ui->menuMode != 0 || ui->freezeFramePause != 0) {
 			return true;
 		}
-		static const std::array<RE::BSFixedString, 6> menus{
-			RE::BSFixedString("PauseMenu"), RE::BSFixedString("PipboyMenu"), RE::BSFixedString("LoadingMenu"),
-			RE::BSFixedString("MainMenu"), RE::BSFixedString("Console"), RE::BSFixedString("WorkshopMenu")
-		};
-		return std::ranges::any_of(menus, [&](const RE::BSFixedString& a_name) { return ui->GetMenuOpen(a_name); });
+		return menus::AnyBlocking();  // (from the menu events: asking the UI holds the menus, see MenuWatch.h)
 	}
 
 	void Game::Notify(const std::string& a_message)
@@ -1490,8 +1487,7 @@ namespace fp
 	{
 		// build mode (the workshop menu): everything of ours stands still, so nothing (no NPC walk, no Papyrus call,
 		// no ball moved or spawned) happens while you build
-		auto*      ui = RE::UI::GetSingleton();
-		const bool building = ui && ui->GetMenuOpen(RE::BSFixedString("WorkshopMenu"));
+		const bool building = menus::Open(menus::kWorkshop);
 		if (building != _building.load()) {
 			_building = building;
 			log::info("build mode {}: pool {}", building ? "open" : "closed", building ? "paused" : "carries on");
@@ -1508,7 +1504,7 @@ namespace fp
 		UpdateLook();
 		// build mode: hands off the world. Every game (balls, NPCs, watchers) holds still until you leave it, so
 		// nothing of ours moves 3D or sends AI calls while the workshop is placing things
-		if (auto* ui = RE::UI::GetSingleton(); ui && ui->GetMenuOpen(RE::BSFixedString("WorkshopMenu"))) {
+		if (building) {
 			if (!_inWorkshop) {
 				_inWorkshop = true;
 				log::info("build mode: pool paused");
