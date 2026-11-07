@@ -3,7 +3,7 @@
 includes("lib/commonlibf4")
 
 set_project("fo4pool")
-set_version("0.27.7")
+set_version("0.28.0")
 set_license("GPL-3.0")
 set_languages("c++23")
 set_warnings("allextra")
