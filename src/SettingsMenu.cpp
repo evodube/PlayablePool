@@ -186,13 +186,23 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iForfeit", "Forfeit (press twice)", Kind::kKey, &s.keyForfeit },
 						{ L"Keys", L"iStopAll", "Stop every game", Kind::kKey, &s.keyStopAll },
 					} },
+				{ "Controller", "Xbox-style controllers. A plays (hold for an opponent), B leaves the table, the right stick aims, Y is the overhead view, D-pad left/right the called pocket, hold Back to forfeit. Ball in hand: the left stick moves the cue ball, A sets it down.",
+					{
+						{ L"Controller", L"bEnabled", "Use the controller", Kind::kBool, &s.padEnabled, 0, 0, nullptr, "read an Xbox-style (XInput) controller at the table" },
+						{ L"Controller", L"iPowerMode", "Power", Kind::kChoice, &s.padPowerMode, 0, 0, nullptr, "how you set the power of a shot",
+							{ { "Hold RT, pull the right stick back", 0 }, { "Squeeze RT", 1 } } },
+						{ L"Controller", L"fFullPull", "Full power at", Kind::kFloat, &s.padFullPull, 0.2f, 1.0f, "%.2f", "how far the stick or trigger goes for full power (1.00 = all the way)" },
+						{ L"Controller", L"bInvertPull", "Push forward for power", Kind::kBool, &s.padInvertPull, 0, 0, nullptr, "instead of pulling the right stick back" },
+						{ L"Controller", L"fPlaceSpeed", "Ball in hand speed", Kind::kFloat, &s.padPlaceSpeed, 50.0f, 5000.0f, "%.0f", "how fast the left stick moves the cue ball" },
+						{ L"Controller", L"bRumble", "Rumble", Kind::kBool, &s.padRumble, 0, 0, nullptr, "a short rumble when the cue strikes" },
+					} },
 			};
 			static bool added = false;
 			if (!added) {
 				added = true;
 				// per-ball form overrides
 				static std::array<std::string, 16> labels;
-				auto&                               balls = pages[7].entries;
+				auto&                               balls = pages[8].entries;
 				static std::array<std::wstring, 16> keys;
 				for (int n = 1; n < 16; ++n) {
 					labels[n] = std::format("Ball {} form ID", n);
@@ -486,7 +496,7 @@ namespace fp::SettingsMenu
 		installed = true;
 		Settings::Get().Load();  // the menu shows the INI's values from the start
 		F4SEMenuFramework::SetSection("Playable Pool");
-		AddPages(std::make_index_sequence<9>{});
+		AddPages(std::make_index_sequence<11>{});
 		log::info("settings pages registered in F4SE Menu Framework ({} pages)", Pages().size());
 	}
 }

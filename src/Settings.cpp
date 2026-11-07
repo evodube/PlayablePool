@@ -99,6 +99,12 @@ namespace fp
 		maxSpeed = std::max(minSpeed, ReadFloat(L"Shot", L"fMaxSpeed", maxSpeed));
 		pullPerDegree = std::max(0.001f, ReadFloat(L"Shot", L"fPullPerDegree", pullPerDegree));
 		invertPull = ReadBool(L"Shot", L"bInvertPull", invertPull);
+		padEnabled = ReadBool(L"Controller", L"bEnabled", padEnabled);
+		padPowerMode = static_cast<int>(std::clamp<long long>(ReadInt(L"Controller", L"iPowerMode", padPowerMode), 0, 1));
+		padFullPull = std::clamp(ReadFloat(L"Controller", L"fFullPull", padFullPull), 0.2f, 1.0f);
+		padInvertPull = ReadBool(L"Controller", L"bInvertPull", padInvertPull);
+		padPlaceSpeed = std::clamp(ReadFloat(L"Controller", L"fPlaceSpeed", padPlaceSpeed), 50.0f, 5000.0f);
+		padRumble = ReadBool(L"Controller", L"bRumble", padRumble);
 
 		camDistance = std::max(10.0f, ReadFloat(L"Camera", L"fDistance", camDistance));
 		camPitch = ReadFloat(L"Camera", L"fPitch", camPitch);

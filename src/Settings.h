@@ -68,6 +68,14 @@ namespace fp
 		float pullPerDegree{ 0.04f }; // power gained per degree the mouse tries to tilt the view (0.04 = full at 25)
 		bool  invertPull{ false };    // true: push the mouse forward for power instead
 
+		// [Controller]
+		bool  padEnabled{ true };      // read an Xbox-style controller (XInput)
+		int   padPowerMode{ 0 };       // 0: hold RT and pull the right stick back; 1: squeeze RT
+		float padFullPull{ 0.9f };     // how far the stick (or trigger) goes for full power, 0..1
+		bool  padInvertPull{ false };  // true: push the right stick forward for power instead
+		float padPlaceSpeed{ 900.0f }; // ball in hand: how fast the left stick moves the cue ball
+		bool  padRumble{ true };       // a short rumble when the cue strikes
+
 		// [Camera] the shot camera orbits the cue ball
 		float camDistance{ 75.0f };
 		float camPitch{ 20.0f };      // degrees below horizontal when aiming starts

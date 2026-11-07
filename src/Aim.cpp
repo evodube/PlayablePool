@@ -61,6 +61,7 @@ namespace fp
 			h = _hud;
 		}
 		h.aiming = _aiming;
+		h.pad = _padActive;
 		h.watching = _watching && !_aiming;
 		h.charging = _charging;
 		h.rolling = _rolling;
@@ -84,6 +85,9 @@ namespace fp
 		const bool rmb = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 		auto*      tasks = F4SE::GetTaskInterface();
 
+		if ((lmb && !_lmbWasDown) || (rmb && !_rmbWasDown)) {
+			_padActive = false;  // the mouse: prompts go back to the mouse's
+		}
 		if (lmb && !_lmbWasDown && _placing) {
 			if (tasks) {
 				tasks->AddTask([this]() { ConfirmPlacement(); });
@@ -220,9 +224,15 @@ namespace fp
 		_aiming = true;
 		BlockControls(true);
 		log::info("aim mode on (player yaw {:.3f}, pitch {:.3f}){}{}", _entryYaw, _entryPitch, _noOverhead ? "; no top view" : "", _noGuide ? "; no guide" : "");
-		Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot.{} {}: stop",
-			_noOverhead ? (_ceilingTooLow ? " The ceiling's too low here for the overhead view." : "") : " Right button: overhead.",
-			Settings::Key(Settings::Get().keyShoot)));
+		const char* ceiling = _ceilingTooLow ? " The ceiling's too low here for the overhead view." : "";
+		if (_padActive) {
+			Tell(std::format("Pool: aim with the right stick. {}{} B: leave the table",
+				Settings::Get().padPowerMode == 1 ? "Squeeze RT for power, let go to shoot." : "Hold RT and pull the right stick back for power, let go of RT to shoot.",
+				_noOverhead ? ceiling : " Y: overhead."));
+		} else {
+			Tell(std::format("Pool: aim with the mouse. Hold left button and pull the mouse back for power, release to shoot.{} {}: stop",
+				_noOverhead ? ceiling : " Right button: overhead.", Settings::Key(Settings::Get().keyShoot)));
+		}
 		if (_rules.BallInHand() && !_rules.Over()) {
 			StartPlacement();
 		}
@@ -416,6 +426,9 @@ namespace fp
 		}
 		// the same event can reach both handlers; count it once
 		const bool repeat = a_event == _lastMouseEvent && a_event->timeCode == _lastMouseTime;
+		if (!repeat && std::abs(a_event->mouseInputX) + std::abs(a_event->mouseInputY) > 3) {
+			_padActive = false;
+		}
 		_lastMouseEvent = a_event;
 		_lastMouseTime = a_event->timeCode;
 
@@ -480,7 +493,8 @@ namespace fp
 		if (_charging) {
 			// If the mouse never reached a handler we could catch, the turn that got through is the pull instead
 			// (how 0.2 did it). Either way the view goes back to where it was.
-			if (_chargeMouseEvents == 0 && tilted != 0.0 && std::abs(tilted) < 30.0) {
+			// (Not for the controller's charge: its power is the stick, and the stick's turn is just undone.)
+			if (!_padCharge && _chargeMouseEvents == 0 && tilted != 0.0 && std::abs(tilted) < 30.0) {
 				++_chargeInputs;
 				AddPull(tilted);
 			}

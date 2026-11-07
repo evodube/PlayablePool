@@ -125,9 +125,10 @@ namespace fp
 
 	std::string Game::KitPrompt() const
 	{
-		const std::string key = Settings::Key(_activateVk.load());
-		const std::string cancel = Settings::Key(Settings::Get().keyForfeit);
-		return _kitOk ? std::format("{}) SET UP THE TABLE  ·  LEFT/RIGHT TURN  ·  {}) CANCEL", key, cancel)
+		const bool        pad = _padActive.load();
+		const std::string key = pad ? std::string("A") : Settings::Key(_activateVk.load());
+		const std::string cancel = pad ? std::string("B") : Settings::Key(Settings::Get().keyForfeit);
+		return _kitOk ? std::format("{}) SET UP THE TABLE  ·  {} TURN  ·  {}) CANCEL", key, pad ? "D-PAD LEFT/RIGHT" : "LEFT/RIGHT", cancel)
 		              : std::format("TOO CLOSE TO ANOTHER TABLE  ·  {}) CANCEL", cancel);
 	}
 

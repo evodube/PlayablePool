@@ -120,7 +120,7 @@ namespace fp
 		return player && table && (player->data.location - table->data.location).Length() < Settings::Get().soundMaxDistance;
 	}
 
-	void Game::Forfeit()
+	void Game::Forfeit(bool a_confirmed)
 	{
 		if (!_sim || _rules.Over() || _npcGame) {
 			return;
@@ -136,7 +136,7 @@ namespace fp
 		}
 		const auto now = std::chrono::steady_clock::now();
 		const auto key = Settings::Key(Settings::Get().keyForfeit);
-		if (now - _forfeitAsked > std::chrono::seconds(3)) {
+		if (!a_confirmed && now - _forfeitAsked > std::chrono::seconds(3)) {
 			_forfeitAsked = now;
 			Say(std::format("press {} again to forfeit", key));
 			return;

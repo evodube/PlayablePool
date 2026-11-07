@@ -201,6 +201,7 @@ namespace fp
 		struct HudState
 		{
 			bool  aiming{ false };
+			bool  pad{ false };       // the controller was used last: prompts show its buttons
 			bool  watching{ false };  // playing an NPC and near the table, not aiming: the HUD shows anyway
 			bool  charging{ false };
 			bool  rolling{ false };
@@ -275,6 +276,11 @@ namespace fp
 
 		void PollKeys();
 		void PollMouse();
+		void PollPad();       // render thread: the controller (Pad.cpp reads it)
+		void UpdatePadBlock(); // main thread: the game's menu buttons off while the controller works the table
+		void PadStartCharge();
+		void PadEndCharge(bool a_shoot);
+		float PadPullNow(float a_rt, float a_ry) const;
 		void Tick();
 		// Several tables at once: the one in Game is "loaded" (yours, or the one you're watching); the others are in
 		// _others and each gets its tick swapped in (TickOthers). A background tick must leave you alone: _bgTick
@@ -304,7 +310,7 @@ namespace fp
 		void CyclePocket();
 		// X twice: you give up the game in play. Against an NPC it's their win (and, later, a loss on your record);
 		// Solo Play just ends
-		void Forfeit();
+		void                Forfeit(bool a_confirmed = false);  // a_confirmed: no "press again" first (the controller holds Back)
 		void StopAllGames();
 		bool WithinEarshot() const;  // you're near enough the loaded table to hear its turn and rack sounds  // [Keys] iStopAll: every table's game ends (nothing counted), watchers sent home
 		std::chrono::steady_clock::time_point _forfeitAsked{};
@@ -569,6 +575,22 @@ namespace fp
 		void                OnActivate(bool a_hold);  // main thread: the activate key tapped (on letting go) or held
 		bool                ActorInView(const RE::NiPoint3& a_origin, const RE::NiPoint3& a_dir, float a_upTo) const;
 		bool                _lmbWasDown{ false };
+		// the controller
+		std::atomic<bool>   _padActive{ false };     // used last (not the mouse or keyboard)
+		std::uint16_t       _padWas{ 0 };            // buttons down last frame
+		float               _padRtWas{ 0.0f };
+		bool                _padCharge{ false };     // this charge is the controller's (the right stick or RT is the power)
+		std::array<std::pair<std::chrono::steady_clock::time_point, float>, 16> _padRecent{};  // the last moments' power
+		std::size_t         _padRecentAt{ 0 };
+		std::chrono::steady_clock::time_point _padLast{};
+		std::chrono::steady_clock::time_point _padADownAt{};
+		bool                _padAHeld{ false };
+		std::chrono::steady_clock::time_point _padBackDownAt{};
+		bool                _padBackDone{ false };
+		std::chrono::steady_clock::time_point _padRumbleUntil{};
+		bool                _padRumbling{ false };
+		RE::BSTSmartPointer<RE::BSInputEnableLayer> _padLayer;
+		bool                _padBlocked{ false };
 		bool                _rmbWasDown{ false };
 		std::atomic<bool>   _tickPending{ false };
 	};

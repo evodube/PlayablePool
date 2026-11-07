@@ -56,6 +56,7 @@ namespace fp
 	{
 		PollKeys();
 		PollMouse();
+		PollPad();
 		if (_tickPending.exchange(true)) {
 			return;
 		}
@@ -87,6 +88,7 @@ namespace fp
 			}
 			const bool down = (::GetAsyncKeyState(keys[i]) & 0x8000) != 0;
 			if (down && !_keyWasDown[i]) {
+				_padActive = false;  // the keyboard: prompts go back to keys
 				if (auto* tasks = F4SE::GetTaskInterface()) {
 					tasks->AddTask([this, i]() {
 						if (IsGamePaused()) {
@@ -225,7 +227,8 @@ namespace fp
 				const RE::NiPoint3 dir{ std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), -std::sin(pitch) };
 				if (!ActorInView(origin, dir, Distance(table->data.location, origin))) {
 					_lookTable = table->GetHandle();
-					const std::string key = Settings::Key(_activateVk.load());
+					const bool        pad = _padActive.load();
+					const std::string key = pad ? std::string("A") : Settings::Key(_activateVk.load());
 					const bool        here = _sim && _table.get().get() == table;
 					const int         slot = SlotOf(table);
 					const TableSlot*  away = slot > 0 ? &_others[static_cast<std::size_t>(slot - 1)] : nullptr;
@@ -245,7 +248,9 @@ namespace fp
 							std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 							prompt = std::format("{}) PLAY {} · {}", key, name, WantType() == 1 ? "9-BALL" : "8-BALL");
 						} else {
-							prompt = std::format("< {} >  {}) SOLO  ·  HOLD {}) {}", WantType() == 1 ? "9-BALL" : "8-BALL", key, key,
+							// (the controller's D-pad is the game's favourites here: 8- or 9-ball is picked in the held list)
+							const char* game = WantType() == 1 ? "9-BALL" : "8-BALL";
+							prompt = std::format("{}  {}) SOLO  ·  HOLD {}) {}", pad ? std::string(game) : std::format("< {} >", game), key, key,
 								IsKitTable(table) ? "2 PLAYER / PACK UP" : "2 PLAYER");
 						}
 						canSwitch = true;  // left/right: the other game
@@ -303,7 +308,8 @@ namespace fp
 			_hud.pickHint.clear();
 		} else {
 			const auto mine = RecordOf(0x14);
-			_hud.pickHint = std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
+			_hud.pickHint = _padActive ? std::format("D-PAD UP/DOWN PICK · LEFT/RIGHT GAME · A PLAY · B CLOSE · YOU {}-{}", mine.wins, mine.losses) :
+			                             std::format("UP/DOWN PICK · LEFT/RIGHT GAME · {} PLAY · YOU {}-{}", Settings::Key(_activateVk.load()), mine.wins,
 				mine.losses);
 			_hud.pickTitle = WantType() == 1 ? "WHO PLAYS? · 9-BALL" : "WHO PLAYS? · 8-BALL";
 		}
@@ -1495,6 +1501,7 @@ namespace fp
 				_hud.pick.clear();
 			}
 		}
+		UpdatePadBlock();
 		if (building) {
 			return;
 		}

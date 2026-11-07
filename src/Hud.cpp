@@ -477,7 +477,26 @@ namespace fp::Hud
 			const std::string rack = KeyLabel(set.keyRack), clear = KeyLabel(set.keyClear), call = KeyLabel(a_st.activateVk),
 							  forfeit = KeyLabel(set.keyForfeit);
 			std::vector<std::pair<std::string, std::string>> keys;
-			if (a_st.placing) {
+			if (a_st.pad) {
+				// the controller's buttons
+				const bool squeeze = set.padPowerMode == 1;
+				const char* power = squeeze ? "SQUEEZE FOR POWER · LET GO" : "HOLD · PULL R-STICK BACK";
+				if (a_st.placing) {
+					keys = { { "L-STICK", "MOVE CUE BALL" }, { "A", "SET IT DOWN" }, { "B", "LEAVE TABLE" } };
+				} else if (a_st.over) {
+					keys = { { "D-UP", "RACK AGAIN" }, { "D-DOWN", "CLEAR TABLE" }, { "B", "LEAVE TABLE" } };
+				} else if (a_st.calling) {
+					keys = { { "RT", power }, { "D-PAD", "CALL THE POCKET" }, { "Y", "OVERHEAD" }, { "B", "LEAVE TABLE" } };
+				} else {
+					keys = { { "RT", power }, { "Y", a_st.overhead ? "CUE BALL VIEW" : "OVERHEAD" }, { "B", "LEAVE TABLE" } };
+				}
+				if (a_st.noOverhead && !a_st.overhead) {
+					std::erase_if(keys, [](const auto& k) { return k.first == "Y"; });
+				}
+				if (!a_st.over) {
+					keys.push_back({ "HOLD BACK", "FORFEIT" });
+				}
+			} else if (a_st.placing) {
 				keys = { { "MOUSE", "MOVE CUE BALL" }, { "LMB", "SET IT DOWN" }, { call, "LEAVE TABLE" } };
 			} else if (a_st.over) {
 				keys = { { rack, "RACK AGAIN" }, { clear, "CLEAR TABLE" }, { call, "LEAVE TABLE" } };
@@ -489,7 +508,7 @@ namespace fp::Hud
 			if (a_st.noOverhead && !a_st.overhead) {
 				std::erase_if(keys, [](const auto& k) { return std::string_view(k.first) == "RMB"; });  // no top view against this one
 			}
-			if (!a_st.over && set.keyForfeit > 0) {
+			if (!a_st.pad && !a_st.over && set.keyForfeit > 0) {
 				keys.push_back({ forfeit, "FORFEIT" });
 			}
 			// measure, then centre the row
