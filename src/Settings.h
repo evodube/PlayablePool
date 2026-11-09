@@ -32,6 +32,7 @@ namespace fp
 		int keyCallPocket{ 0x65 }; // Numpad 5: pick the pocket for the 8
 		int keyChallenge{ 0x66 };  // Numpad 6: challenge the NPC you're looking at (again: they stop playing)
 		int keyForfeit{ 0x58 };    // X (twice): give up the game in play
+		int keyTables{ 0x6F };     // Numpad /: Playable Pool off at every table (no prompts, F is the game's), or back on
 		int keyStopAll{ 0x60 };    // Numpad 0: every game at every table stops (no results), watchers go home
 
 		// [Rules] 8-ball

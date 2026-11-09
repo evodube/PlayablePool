@@ -81,8 +81,8 @@ namespace fp
 			return;
 		}
 		const auto&              s = Settings::Get();
-		const std::array<int, 9> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay, s.keyForfeit,
-			s.keyStopAll };
+		const std::array<int, 10> keys{ s.keyRack, s.keyShoot, s.keyClear, s.keyCalibrate, s.keyCallPocket, s.keyChallenge, s.keyPlay, s.keyForfeit,
+			s.keyStopAll, s.keyTables };
 		for (std::size_t i = 0; i < keys.size(); ++i) {
 			if (keys[i] <= 0) {
 				continue;
@@ -114,6 +114,11 @@ namespace fp
 							}
 							break;
 						case 8: StopAllGames(); break;
+						case 9:
+							if (!_aiming && !_picking && !_kitPlacing) {
+								ToggleTables();
+							}
+							break;
 						case 6:
 							// the NPC by a table under the crosshair (the prompt's), or nothing
 							if (auto actor = _lookActor.get()) {
@@ -1104,7 +1109,77 @@ namespace fp
 		}
 		auto path = ModelPath(a_ref);
 		std::ranges::transform(path, path.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
-		return path.find("pooltable") != std::string::npos && path.find("rack") == std::string::npos;
+		return path.find("pooltable") != std::string::npos && path.find("rack") == std::string::npos && !TakenOver(a_ref);
+	}
+
+	bool Game::TakenOver(const RE::TESObjectREFR* a_table)
+	{
+		// Another mod's game using a pool table as its prop (Barstool Games' blackjack: its card table is a scripted
+		// activator laid on the felt): that table is theirs, so no prompt, no rack, no NPCs walking up to play on it.
+		// Found by an activator standing on the table's top, or a table from Barstool Games itself. Worked out once a
+		// table (per where it stands: a table moved in the workshop is looked at again).
+		static std::mutex                              lock;
+		static std::unordered_map<std::uint64_t, bool> known;
+		const auto&                                    at = a_table->data.location;
+		const std::uint64_t key = (static_cast<std::uint64_t>(a_table->GetFormID()) << 32) ^
+		                          (static_cast<std::uint64_t>(static_cast<std::int64_t>(at.x / 16.0f)) * 73856093u) ^
+		                          (static_cast<std::uint64_t>(static_cast<std::int64_t>(at.y / 16.0f)) * 19349663u);
+		{
+			std::scoped_lock guard(lock);
+			if (auto it = known.find(key); it != known.end()) {
+				return it->second;
+			}
+		}
+		bool        taken = false;
+		std::string why;
+		auto*       base = a_table->GetBaseObject();
+		if (auto* file = base ? base->GetFile(0) : nullptr) {
+			const std::string name(file->GetFilename());
+			if (_stricmp(name.c_str(), "Games.esm") == 0 || _stricmp(name.c_str(), "BarstoolGames.esm") == 0) {
+				taken = true;
+				why = std::format("a Barstool Games table ({})", name);
+			}
+		}
+		if (auto* cell = !taken ? a_table->GetParentCell() : nullptr) {
+			cell->ForEachReferenceInRange(at, 140.0f, [&](RE::TESObjectREFR* a_ref) {
+				auto* refBase = a_ref && a_ref != a_table && !a_ref->IsDisabled() ? a_ref->GetBaseObject() : nullptr;
+				if (!refBase || !refBase->As<RE::TESObjectACTI>() || Get().IsOurs(a_ref)) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				const auto& p = a_ref->data.location;
+				const float dz = p.z - at.z;
+				const float flat = std::hypot(p.x - at.x, p.y - at.y);
+				if (flat < 110.0f && dz > 20.0f && dz < 140.0f) {  // on (or just over) the table top, not beside it
+					taken = true;
+					auto* file = refBase->GetFile(0);
+					why = std::format("an activator on it ({:08X} from {})", refBase->GetFormID(), file ? std::string(file->GetFilename()) : std::string("?"));
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		}
+		if (taken) {
+			log::info("table {:08X}: {}: another mod's game, left alone", a_table->GetFormID(), why);
+		}
+		std::scoped_lock guard(lock);
+		known[key] = taken;
+		return taken;
+	}
+
+	void Game::ToggleTables()
+	{
+		// Playable Pool's hands off every table (no prompt, F does the game's own thing), or back on. Kept in the INI.
+		auto& s = Settings::Get();
+		s.activateTable = !s.activateTable;
+		::WritePrivateProfileStringW(L"Keys", L"bActivateTable", s.activateTable ? L"1" : L"0", L"Data\\F4SE\\Plugins\\fo4pool.ini");
+		{
+			std::scoped_lock lock(_hudMutex);
+			_hud.prompt.clear();
+		}
+		_lookTable = {};
+		const std::string key = s.keyTables > 0 ? Settings::Key(s.keyTables) : std::string("the settings menu");
+		Notify(s.activateTable ? std::string("Pool: pool tables on") :
+		                         std::format("Pool: pool tables off: no prompts, F does what the game does ({} turns them back on)", key));
 	}
 
 	RE::TESBoundObject* Game::BallForm(int a_number) const

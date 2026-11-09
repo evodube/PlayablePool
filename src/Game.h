@@ -421,6 +421,8 @@ namespace fp
 		static std::string  ModelPath(const RE::TESObjectREFR* a_ref);
 		static void         LogTable(RE::TESObjectREFR* a_table, const Frame& a_frame);
 		static bool         IsPoolTable(const RE::TESObjectREFR* a_ref);
+		static bool         TakenOver(const RE::TESObjectREFR* a_table);  // another mod's game uses this table (Barstool Games)
+		void                ToggleTables();                              // [Keys] iTables: hands off every table, or back on
 		static bool         IsGamePaused();
 		static void         Notify(const std::string& a_message);  // always: problems and instructions
 		static void         Tell(const std::string& a_message);    // only without the HUD, or with bNotifications=1
@@ -517,7 +519,7 @@ namespace fp
 		std::atomic<bool>          _placing{ false };  // ball in hand: the mouse moves the cue ball
 
 		// render thread
-		std::array<bool, 9> _keyWasDown{};
+		std::array<bool, 10> _keyWasDown{};
 		RE::ObjectRefHandle _lookActor;            // an NPC by a pool table under the crosshair: the play key challenges them
 		RE::ObjectRefHandle _lookActorTable;       // ...at this table
 		// The activate key (F by default; read from the game's controls): on a pool table it racks or takes your shot

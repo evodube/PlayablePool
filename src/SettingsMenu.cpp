@@ -185,6 +185,7 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iChallenge", "Challenge an NPC", Kind::kKey, &s.keyChallenge },
 						{ L"Keys", L"iForfeit", "Forfeit (press twice)", Kind::kKey, &s.keyForfeit },
 						{ L"Keys", L"iStopAll", "Stop every game", Kind::kKey, &s.keyStopAll },
+						{ L"Keys", L"iTables", "Pool tables on/off", Kind::kKey, &s.keyTables },
 					} },
 				{ "Controller", "Xbox-style controllers. A plays (hold for an opponent), B leaves the table, the right stick aims, Y is the overhead view, D-pad left/right the called pocket, hold Back to forfeit. Ball in hand: the left stick moves the cue ball, A sets it down.",
 					{
