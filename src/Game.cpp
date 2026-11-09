@@ -1132,7 +1132,7 @@ namespace fp
 		}
 		bool        taken = false;
 		std::string why;
-		auto*       base = a_table->GetBaseObject();
+		auto*       base = a_table->GetObjectReference();
 		if (auto* file = base ? base->GetFile(0) : nullptr) {
 			const std::string name(file->GetFilename());
 			if (_stricmp(name.c_str(), "Games.esm") == 0 || _stricmp(name.c_str(), "BarstoolGames.esm") == 0) {
@@ -1142,7 +1142,7 @@ namespace fp
 		}
 		if (auto* cell = !taken ? a_table->GetParentCell() : nullptr) {
 			cell->ForEachReferenceInRange(at, 140.0f, [&](RE::TESObjectREFR* a_ref) {
-				auto* refBase = a_ref && a_ref != a_table && !a_ref->IsDisabled() ? a_ref->GetBaseObject() : nullptr;
+				auto* refBase = a_ref && a_ref != a_table && !a_ref->IsDisabled() ? a_ref->GetObjectReference() : nullptr;
 				if (!refBase || !refBase->As<RE::TESObjectACTI>() || Get().IsOurs(a_ref)) {
 					return RE::BSContainer::ForEachResult::kContinue;
 				}
