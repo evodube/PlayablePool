@@ -111,7 +111,12 @@ namespace fp
 
 	bool Game::WithinEarshot() const
 	{
-		// the turn and rack sounds aren't placed in the world: heard only at the table (or aiming at it)
+		// the turn and rack sounds aren't placed in the world: heard only for your own game (at the table, or aiming at
+		// it), or an NPC game you're watching (F on their table). Other NPC games are only heard through the table's
+		// own sounds, which fade with distance.
+		if (_npcGame) {
+			return _spectating;
+		}
 		if (_aiming) {
 			return true;
 		}
