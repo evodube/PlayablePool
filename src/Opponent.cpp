@@ -1712,6 +1712,9 @@ namespace fp
 			if (actor && IsPlaying(actor)) {
 				log::info("{}: playing now, not just watching", actor->GetDisplayFullName());
 				DropWatcher(w.id);  // their walks are the Players collection's now
+			} else if (actor && !gone && OnTheJob(actor)) {
+				log::info("{}: back to work", actor->GetDisplayFullName());
+				DropWatcher(w.id);
 			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
 				if (actor) {
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
@@ -1881,6 +1884,42 @@ namespace fp
 		SendWatcher(tableHandle, "wanders over");
 	}
 
+	bool Game::OnTheJob(RE::Actor* a_actor) const
+	{
+		// A settler with a settlement job (WorkshopNPCScript: bIsWorker for farms, shops, stations..., bIsGuard,
+		// bIsScavenger) doesn't leave it for a game: never (iWanderWorkers 0), or only off duty (1: the evening and night,
+		// and never those set to work round the clock, bWork24Hours). Settlers without a job, and NPCs who aren't
+		// settlers at all, are free any time. Only who wanders over: you can still pick anyone to play yourself.
+		const int mode = Settings::Get().wanderWorkers;
+		if (mode >= 2 || !a_actor) {
+			return false;
+		}
+		auto* game = RE::GameVM::GetSingleton();
+		auto  vm = game ? game->GetVM() : nullptr;
+		if (!vm) {
+			return false;
+		}
+		auto&                                     handles = vm->GetObjectHandlePolicy();
+		const auto                                handle = handles.GetHandleForObject(RE::BSScript::GetVMTypeID<RE::Actor>(), a_actor);
+		RE::BSTSmartPointer<RE::BSScript::Object> object;
+		if (!vm->FindBoundObject(handle, "WorkshopNPCScript", false, object, false) || !object) {
+			return false;  // not a settler
+		}
+		auto flag = [&](const char* a_name) {
+			const auto* v = object->GetProperty(RE::BSFixedString{ a_name });
+			return v && v->is<bool>() && RE::BSScript::get<bool>(*v);
+		};
+		if (!flag("bIsWorker") && !flag("bIsGuard") && !flag("bIsScavenger")) {
+			return false;  // no job
+		}
+		if (mode == 0 || flag("bWork24Hours")) {
+			return true;
+		}
+		auto*       calendar = RE::Calendar::GetSingleton();
+		const float hour = calendar && calendar->gameHour ? std::fmod(calendar->gameHour->value, 24.0f) : 12.0f;
+		return hour >= 7.0f && hour < 19.0f;  // on duty through the day
+	}
+
 	bool Game::SendWatcher(const RE::ObjectRefHandle& a_table, const char* a_why)
 	{
 		const auto& s = Settings::Get();
@@ -1900,7 +1939,7 @@ namespace fp
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
 					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
-					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) ||
+					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) || OnTheJob(actor) ||
 					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); }) ||
 					std::ranges::any_of(candidates, [&](RE::Actor* c) { return c == actor; })) {
 					return RE::BSContainer::ForEachResult::kContinue;

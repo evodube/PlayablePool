@@ -124,6 +124,7 @@ namespace fp
 		bool  wander{ true };               // settlers wander over to a pool table near you now and then
 		float wanderEvery{ 45.0f };         // about this often (seconds)
 		int   wanderMax{ 3 };               // at most this many at once
+		int   wanderWorkers{ 1 };           // settlers with a settlement job: 0 never come over, 1 only off duty, 2 any time
 		float wanderStay{ 180.0f };         // each hangs round about this long
 		float wanderRange{ 2500.0f };       // from this far from the table
 		bool  opponentOwnPackage{ true };   // walk them with fo4pool.esl's own AI package (outranks settler sandboxes); off = PathToReference

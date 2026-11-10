@@ -568,6 +568,7 @@ namespace fp
 		std::vector<RE::ObjectRefHandle> _watchTables;  // the pool tables near you (TickWatchers), nearest first
 		std::vector<std::pair<RE::ObjectRefHandle, std::chrono::steady_clock::time_point>> _pairSince;  // tables with two watchers there, since when
 		std::vector<std::pair<RE::ObjectRefHandle, std::chrono::steady_clock::time_point>> _aloneSince;  // ...with one, since when
+		bool OnTheJob(RE::Actor* a_actor) const;  // a settler whose settlement job keeps them from the table now
 		bool SendWatcher(const RE::ObjectRefHandle& a_table, const char* a_why);  // someone near comes over to a_table
 		RE::ObjectRefHandle  _watchNavTable;           // _watchNavmeshes are round this one
 		std::vector<RE::TESFormID> _watchNavmeshes;
