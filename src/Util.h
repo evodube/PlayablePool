@@ -66,7 +66,6 @@ namespace fp::util
 		return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
 	}
 
-	// Smallest difference between two angles in radians, in [-pi, pi].
 	// at another game: held by Real Roulette (fo4roulette.esl's quest: playing roulette or poker, or on the way), so
 	// not to be called over to the pool table
 	inline bool AtAnotherGame(RE::Actor* a_actor)
@@ -85,6 +84,7 @@ namespace fp::util
 		return false;
 	}
 
+	// Smallest difference between two angles in radians, in [-pi, pi].
 	inline float AngleDiff(float a_a, float a_b)
 	{
 		constexpr float kPi = 3.14159265358979f;
