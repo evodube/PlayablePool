@@ -67,6 +67,24 @@ namespace fp::util
 	}
 
 	// Smallest difference between two angles in radians, in [-pi, pi].
+	// at another game: held by Real Roulette (fo4roulette.esl's quest: playing roulette or poker, or on the way), so
+	// not to be called over to the pool table
+	inline bool AtAnotherGame(RE::Actor* a_actor)
+	{
+		auto* extra = a_actor ? a_actor->extraList.get() : nullptr;
+		auto* aliases = extra ? extra->GetByType<RE::ExtraAliasInstanceArray>() : nullptr;
+		if (!aliases) {
+			return false;
+		}
+		for (const auto& a : aliases->aliasArray) {
+			auto* file = a.quest ? a.quest->GetFile(0) : nullptr;
+			if (file && _stricmp(std::string(file->GetFilename()).c_str(), "fo4roulette.esl") == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	inline float AngleDiff(float a_a, float a_b)
 	{
 		constexpr float kPi = 3.14159265358979f;

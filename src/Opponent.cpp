@@ -1715,6 +1715,9 @@ namespace fp
 			} else if (actor && !gone && OnTheJob(actor)) {
 				log::info("{}: back to work", actor->GetDisplayFullName());
 				DropWatcher(w.id);
+			} else if (actor && util::AtAnotherGame(actor)) {
+				log::info("{}: playing roulette or poker now", actor->GetDisplayFullName());
+				DropWatcher(w.id);
 			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
 				if (actor) {
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
@@ -1939,7 +1942,7 @@ namespace fp
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
 					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
-					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) || OnTheJob(actor) ||
+					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) || OnTheJob(actor) || util::AtAnotherGame(actor) ||
 					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); }) ||
 					std::ranges::any_of(candidates, [&](RE::Actor* c) { return c == actor; })) {
 					return RE::BSContainer::ForEachResult::kContinue;

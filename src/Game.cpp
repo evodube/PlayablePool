@@ -513,7 +513,7 @@ namespace fp
 			a_cell->ForEachReferenceInRange(a_table->data.location, within, [&](RE::TESObjectREFR* a_ref) {
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() || actor->IsChild() ||
-					actor->IsInCombat() || (player && actor->GetHostileToActor(player)) ||
+					actor->IsInCombat() || (player && actor->GetHostileToActor(player)) || util::AtAnotherGame(actor) ||
 					(npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
 					std::ranges::any_of(found, [&](const auto& f) { return f.second == actor; })) {
 					return RE::BSContainer::ForEachResult::kContinue;
