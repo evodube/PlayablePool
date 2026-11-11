@@ -1,6 +1,7 @@
 // People watching a game react to it now and then, with the game's own idles (Fallout4.esm, the same ones the
 // Combat Zone crowd and the settlers use): a clap or a cheer for a pot, a cheer for a win, a laugh at a scratch, a
-// boo or a laugh when someone throws the game away, a shake of the head from an opponent who just lost.
+// boo or a laugh when someone throws the game away, a shake of the head from an opponent who just lost, a cheer
+// from one who just won.
 //
 // Only the settlers hanging round the table (the watchers) react, one at a time (two for a win), not too often
 // ([Opponent] fReactionChance, at least 4 s between reactions, 20 s for the same person), and never someone playing.
@@ -119,10 +120,17 @@ namespace fp
 
 		bool reacted = false;
 
-		// the NPC who just lost to you: a shake of the head
-		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner == 0 && Roll(0.5f)) {
-			if (auto* loser = Opponent(); loser && !loser->IsDead(false) && Anim::PlayGame(loser, kShakeNo, "HeadShakeNo")) {
-				reacted = true;
+		// your opponent at the end of the game: a shake of the head if they lost to you, a cheer if they beat you
+		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner >= 0 && Roll(0.5f)) {
+			if (auto* npc = Opponent(); npc && !npc->IsDead(false)) {
+				const Choice idle = a_result.winner == 0 ? Choice{ kShakeNo, "HeadShakeNo", false } :
+				                                           Pick({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
+				if (Anim::PlayGame(npc, idle.id, idle.name)) {
+					reacted = true;
+					if (idle.loops) {
+						_reactStops.emplace_back(npc->GetFormID(), now + std::chrono::milliseconds(3500));
+					}
+				}
 			}
 		}
 
