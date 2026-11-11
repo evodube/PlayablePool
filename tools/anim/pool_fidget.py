@@ -9,8 +9,10 @@ fidget takes it). The frames are worked out with no action on the rig, then keye
     build("PoolFidgetLean", 120, lean)        # leaning on the cue, weight over to it, and back
     build("PoolFidgetStretch", 150, stretch)  # two shoulder rolls, the neck stretched side to side
     build("PoolFidgetTap", 90, tap)           # lifting the cue and tapping its butt on the floor twice
-    build("PoolFidgetTable", 150, over_table) # leaning over the table on the left hand, looking the balls over
-    build("PoolFidgetChalk", 150, chalk)      # chalking the cue's tip with the chalk pinched in the left hand
+    build("PoolFidgetChalk", 150, chalk)      # the cue tipped to their left, its tip chalked with the chalk pinched
+                                              # in the left hand
+
+(over_table, a lean over the table on the left hand, was PoolFidgetTable: dropped from the game.)
 
 Where they look is never set straight on the head. Each fidget says where it wants them looking (yaw, pitch, roll),
 and that goes through springs: the head gets there first, the neck a moment later and the chest last, each easing in
@@ -279,27 +281,33 @@ def over_table(t, keep):
     return {"hand_l_at": (hand, rot), "look": (yaw, pitch * w, yaw * 0.12)}
 
 
+CHALK_TILT = Vector((-18.0, 6.0, -2.0))  # the right hand's move while chalking: the cue tipped over to their left
+
+
 def chalk(t, keep):
-    """the left hand comes off the hip with the chalk, chalks the tip (rubbing it round and twisting), and goes back"""
+    """the cue tipped over to their left, the left hand comes off the hip with the chalk, chalks the tip (rubbing it
+    round and twisting) out in front of them, not across their body, and goes back"""
     tip, d = keep["tip"]
-    reach = smooth((t - 0.06) / 0.22) * smooth((0.94 - t) / 0.22)  # up to the tip and back down
-    # palm down over the tip, fingers forward and a little in, the thumb towards the right
+    tilt = smooth((t - 0.03) / 0.22) * smooth((0.97 - t) / 0.22)  # the cue over a moment before the hand gets there
+    reach = smooth((t - 0.08) / 0.22) * smooth((0.92 - t) / 0.22)  # up to the tip and back down
+    # palm down over the tip, fingers forward and a little in, the thumb towards the right (turned with the cue)
     over = hand_rot("L", Vector((0.3, 1.0, -0.35)), Vector((1.0, -0.25, 0.05)))
-    on = smooth((t - 0.26) / 0.05) * smooth((0.72 - t) / 0.05)  # the chalk on the tip
+    on = smooth((t - 0.28) / 0.05) * smooth((0.72 - t) / 0.05)  # the chalk on the tip
     rub, twist = Vector(), 0.0
     if 0.0 < on:
-        s = (t - 0.26) / 0.46
+        s = (t - 0.28) / 0.44
         a = s * 3 * 2 * math.pi  # three rubs round the tip
         side = d.cross(Vector(X)).normalized()
         fwd = d.cross(side).normalized()
         rub = (side * math.cos(a) + fwd * math.sin(a)) * 0.45 * on
         twist = math.sin(a) * 30.0 * on  # and the wrist twisting back and forth with them
-    point = tip + d * (CHALK * 0.5 + 0.3 * (1 - on)) + rub  # the chalk's centre, just over the tip till it goes on
+    along = CHALK * 0.5 + 0.3 * (1 - on)  # the chalk's centre, just over the tip till it goes on
     look = smooth((t - 0.04) / 0.2) * smooth((0.96 - t) / 0.18)
     return {
-        "chalk_on": (point, over, d, twist, reach),
+        "hand_r": CHALK_TILT * tilt,
+        "chalk_on": (along, rub, over, twist, reach),  # on the tip wherever the right hand has put the cue
         "pinch": 1.0,
-        "look": (-16 * look, -12 * look, -3 * look),  # eyes on the tip
+        "look": (-10 * look, -12 * look, -3 * look),  # eyes on the tip
     }
 
 
@@ -400,14 +408,17 @@ def frames(n, fn):
         # the left hand: on the hip, on the rail, or chalking
         pos, rot = keep["hand_l"]
         if "chalk_on" in extra:
-            point, over, axis, twist, reach = extra["chalk_on"]
+            along, rub, over, twist, reach = extra["chalk_on"]
+            tip, axis = cue_tip()  # the cue as the right hand holds it now (tipped over)
+            point = tip + axis * along + rub
+            over = keep["tip"][1].rotation_difference(axis).to_matrix() @ over  # the hand turned with the cue
             q = Quaternion(axis, math.radians(twist))
             want_rot = q.to_matrix() @ over
             # where the wrist goes so that the chalk (in the hand) is on `point`
             wrist_on = point - want_rot @ (in_hand.translation)
             hand_pos = (pos + hip).lerp(wrist_on, reach)
             hand_rot_ = rot.to_quaternion().slerp(want_rot.to_quaternion(), reach).to_matrix()
-            pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", hand_pos, hand_rot_, Vector((-1.0, -0.8, -0.6)))
+            pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", hand_pos, hand_rot_, Vector((-1.0, -0.35, -0.7)))  # the elbow out and down, clear of the body
         elif "hand_l_at" in extra:
             at, r = extra["hand_l_at"]
             pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", at, r, Vector((-1.0, -0.6, -0.4)))
