@@ -111,10 +111,9 @@ on the hip unless the fidget takes it somewhere. Where they look goes through sp
 | PoolFidgetLean | PoolFidgetLean.hkx | 120 | weight over on to the cue and back |
 | PoolFidgetStretch | PoolFidgetStretch.hkx | 150 | two shoulder rolls, the neck stretched to each side |
 | PoolFidgetTap | PoolFidgetTap.hkx | 90 | the cue lifted and its butt tapped on the floor twice (in game the butt follows the grip up) |
-| PoolFidgetTable | PoolFidgetTable.hkx | 150 | bent over the table on the left hand, looking the balls over |
-| PoolFidgetChalk | PoolFidgetChalk.hkx | 150 | the chalk brought up between the left thumb and fingertips, rubbed and twisted on the tip, taken back |
+| PoolFidgetChalk | PoolFidgetChalk.hkx | 150 | the cue tipped over to their left, the chalk brought up between the left thumb and fingertips, rubbed and twisted on the tip, taken back |
 
 Exported with PyNifly (FO4, 30 fps, reference_skel the vanilla skeleton.hkx); re-imported within 0.03 units.
-fo4pool.esl idles 0x839-0x83D. The chalk is our own: `Meshes\fo4pool\PoolChalk.nif` (a 1.8 cube with a worn cup in its
+fo4pool.esl idles 0x839-0x83D (0x83C, a lean over the table, was dropped). The chalk is our own: `Meshes\fo4pool\PoolChalk.nif` (a 1.8 cube with a worn cup in its
 -Z face) and `Textures\fo4pool\PoolChalk_d.dds` / `_n.dds`, a static at 0x83E, placed by the plugin from the left
 fingertips (Game::PlaceChalk).

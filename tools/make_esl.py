@@ -295,7 +295,7 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 57), "fo4poolFidgetLean", ANIM_DIR + "PoolFidgetLean.hkx"),
         idle(own | (FIRST_ID + 58), "fo4poolFidgetStretch", ANIM_DIR + "PoolFidgetStretch.hkx"),
         idle(own | (FIRST_ID + 59), "fo4poolFidgetTap", ANIM_DIR + "PoolFidgetTap.hkx"),
-        idle(own | (FIRST_ID + 60), "fo4poolFidgetTable", ANIM_DIR + "PoolFidgetTable.hkx"),
+        # (FIRST_ID + 60, 0x83C, was fo4poolFidgetTable: dropped)
         idle(own | (FIRST_ID + 61), "fo4poolFidgetChalk", ANIM_DIR + "PoolFidgetChalk.hkx"),
     ]
     stats.append(stat(own | (FIRST_ID + 62), "fo4poolChalk", "fo4pool\\PoolChalk.nif", bound=2))

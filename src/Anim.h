@@ -7,10 +7,12 @@ namespace fp::Anim
 	bool PlayAim(RE::Actor* a_actor, int a_variant = 0);   // PoolAim (1: PoolAim2, 2: PoolAim3): lined up over the table, loops
 	bool PlayStrike(RE::Actor* a_actor, int a_variant = 0);  // PoolStrike (1: PoolStrike2, after PoolAim2)  // PoolStrike: the cue reaches the ball on frame 35
 	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);
-	// the waiting fidgets (fo4pool.esl 0x839..): 0 lean on the cue, 1 stretch, 2 tap the cue's butt, 3 lean over the
-	// table, 4 chalk the cue. Each starts and ends on PoolWait's first frame; FidgetSeconds is how long it runs
+	// the waiting fidgets (fo4pool.esl 0x839..): 0 lean on the cue, 1 stretch, 2 tap the cue's butt, (3 was the lean
+	// over the table: dropped, its form ID left unused), 4 chalk the cue. Each starts and ends on PoolWait's first frame;
+	// FidgetSeconds is how long it runs
 	constexpr int kFidgets = 5;
 	constexpr int kFidgetTap = 2;
+	constexpr int kFidgetTable = 3;  // not played
 	constexpr int kFidgetChalk = 4;
 	bool  PlayFidget(RE::Actor* a_actor, int a_which);
 	float FidgetSeconds(int a_which);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops

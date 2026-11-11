@@ -67,7 +67,7 @@ namespace fp
 		int                 _npcWaitVariant{ 0 }; // 0 PoolWait, 1 PoolWait2
 		bool                _npcInTableLogged{ false };
 		int                 _npcAimVariant{ 1 };  // this shot's aim (1 PoolAim2, 2 PoolAim3; 0 PoolAim no longer picked): its strike follows it
-		// a fidget while they wait (Anim::Fidget: lean on the cue, stretch, tap the cue, lean over the table, chalk)
+		// a fidget while they wait (Anim::Fidget: lean on the cue, stretch, tap the cue, chalk)
 		int                 _npcFidget{ -1 };       // the one playing (-1: none, PoolWait itself)
 		float               _npcFidgetTime{ 0.0f }; // seconds into it
 		float               _npcFidgetNext{ 0.0f }; // seconds till the next one

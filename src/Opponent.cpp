@@ -1025,7 +1025,8 @@ namespace fp
 		if (_npcFidgetNext > 0.0f) {
 			return;
 		}
-		const int which = std::uniform_int_distribution<int>(0, Anim::kFidgets - 1)(_npcRng);
+		static constexpr std::array<int, 4> kPlayed{ 0, 1, Anim::kFidgetTap, Anim::kFidgetChalk };  // not kFidgetTable
+		const int which = kPlayed[std::uniform_int_distribution<std::size_t>(0, kPlayed.size() - 1)(_npcRng)];
 		_npcFidgetNext = std::uniform_real_distribution<float>(s.fidgetMin, s.fidgetMax)(_npcRng);
 		if (!Anim::PlayFidget(a_actor, which)) {
 			return;

@@ -112,7 +112,7 @@ namespace fp::SettingsMenu
 							"a line about them in fo4pool.log every second: where they are, what they're doing, their AI package" },
 						{ L"Opponent", L"fWalkTimeout", "Walk time limit", Kind::kFloat, &s.opponentWalkTimeout, 10.0f, 180.0f, "%.0f", "a last resort: seconds of walking that isn't getting them there before they're put at the shot" },
 						{ L"Opponent", L"fPickDistance", "Challenge distance", Kind::kFloat, &s.opponentPickDistance, 50.0f, 3000.0f, "%.0f", "how far away the NPC can be" },
-						{ L"Anim", L"bFidgets", "Fidgets while waiting", Kind::kBool, &s.fidgets, 0, 0, nullptr, "an NPC waiting their turn leans on the cue, stretches, taps it, leans over the table or chalks the cue now and then" },
+						{ L"Anim", L"bFidgets", "Fidgets while waiting", Kind::kBool, &s.fidgets, 0, 0, nullptr, "an NPC waiting their turn leans on the cue, stretches, taps it or chalks the cue now and then" },
 						{ L"Opponent", L"bReactions", "Watchers react", Kind::kBool, &s.reactions, 0, 0, nullptr, "people watching clap, cheer, laugh or boo now and then" },
 						{ L"Opponent", L"bReactionVoices", "Reaction voices", Kind::kBool, &s.reactionVoices, 0, 0, nullptr, "cheers, boos and laughs heard (the game's own crowd voices, no words); after a restart" },
 						{ L"Opponent", L"fReactionChance", "Reaction chance", Kind::kFloat, &s.reactionChance, 0.0f, 1.0f, "%.2f", "how often a pot gets a reaction; bigger moments more" },
