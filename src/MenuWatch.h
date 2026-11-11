@@ -17,6 +17,7 @@ namespace fp::menus
 		kConsole,
 		kWorkshop,
 		kDialogue,
+		kLooks,  // LooksMenu (the face and body editor, and its tattoos): Playable Pool stands completely still while it's up
 		kCount
 	};
 
@@ -25,6 +26,6 @@ namespace fp::menus
 
 	[[nodiscard]] bool Open(Id a_id) noexcept;
 
-	// the pause, Pip-Boy, loading, main menu, console or workshop menu
+	// the pause, Pip-Boy, loading, main menu, console, workshop or LooksMenu
 	[[nodiscard]] bool AnyBlocking() noexcept;
 }

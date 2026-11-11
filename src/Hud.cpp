@@ -11,6 +11,7 @@
 #include "F4SEMenuFramework.h"
 #include "Game.h"
 #include "HudAtlas.h"
+#include "MenuWatch.h"
 #include "Settings.h"
 #include "SettingsMenu.h"
 
@@ -676,6 +677,9 @@ namespace fp::Hud
 
 		void __stdcall Draw()
 		{
+			if (menus::Open(menus::kLooks)) {
+				return;  // nothing of ours on screen in the face and body editor
+			}
 			const auto st = Game::Get().Hud();
 			auto*      viewport = GetMainViewport();
 			if (viewport && !st.prompt.empty() && !st.aiming && !g_artMissing) {

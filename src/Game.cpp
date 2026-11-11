@@ -55,6 +55,11 @@ namespace fp
 
 	void Game::OnPresent()
 	{
+		if (menus::Open(menus::kLooks)) {
+			// The face and body editor (LooksMenu) rebuilds the player as you change things: nothing of ours runs while
+			// it's up (no keys, no controller, no game tick), so none of it can get in the way.
+			return;
+		}
 		PollKeys();
 		PollMouse();
 		PollPad();

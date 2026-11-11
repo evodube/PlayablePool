@@ -5,7 +5,7 @@ namespace fp::menus
 	namespace
 	{
 		constexpr std::array<std::string_view, kCount> kNames{ "PauseMenu", "PipboyMenu", "LoadingMenu", "MainMenu", "Console",
-			"WorkshopMenu", "DialogueMenu" };
+			"WorkshopMenu", "DialogueMenu", "LooksMenu" };
 
 		std::array<std::atomic<bool>, kCount> g_open{};
 
@@ -28,6 +28,9 @@ namespace fp::menus
 				for (std::size_t i = 0; i < kCount; ++i) {
 					if (kNames[i] == name) {
 						g_open[i] = e.opening;
+						if (i == kLooks) {
+							log::info("LooksMenu {}: Playable Pool {}", e.opening ? "opened" : "closed", e.opening ? "stands still" : "carries on");
+						}
 						break;
 					}
 				}
@@ -60,7 +63,7 @@ namespace fp::menus
 
 	bool AnyBlocking() noexcept
 	{
-		for (const auto id : { kPause, kPipboy, kLoading, kMain, kConsole, kWorkshop }) {
+		for (const auto id : { kPause, kPipboy, kLoading, kMain, kConsole, kWorkshop, kLooks }) {
 			if (Open(id)) {
 				return true;
 			}
