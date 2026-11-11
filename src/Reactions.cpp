@@ -1,7 +1,7 @@
 // People watching a game react to it now and then, with the game's own idles (Fallout4.esm, the same ones the
 // Combat Zone crowd and the settlers use): a clap or a cheer for a pot, a cheer for a win, a laugh at a scratch, a
-// boo or a laugh when someone throws the game away, a shake of the head from an opponent who just lost, a cheer
-// from one who just won.
+// boo or a laugh when someone throws the game away. The NPCs playing react with their voice only (PlayersReact):
+// they're holding a cue in their pool pose, which an animation would break.
 //
 // Only the settlers hanging round the table (the watchers) react, one at a time (two for a win), not too often
 // ([Opponent] fReactionChance, at least 4 s between reactions, 20 s for the same person), and never someone playing.
@@ -61,27 +61,17 @@ namespace fp
 		// The voice that goes with an idle: the crowd's cheer, boo or laugh, a woman's for a woman and a man's for a man,
 		// pitched a little to suit their own voice (as recorded for the rough voices the crowd was recorded in, lower for
 		// the old ones, a touch either way for the rest so two people don't sound the same).
-		void Voice(RE::Actor* a_actor, RE::TESFormID a_idle)
+		bool SayCrowd(RE::Actor* a_actor, CrowdVoices::Kind kind)
 		{
 			const auto& s = Settings::Get();
-			if (!s.reactionVoices || !a_actor) {
-				return;
-			}
-			CrowdVoices::Kind kind;
-			if (a_idle == kCheer || a_idle == kCheerA || a_idle == kCheerB) {
-				kind = CrowdVoices::Kind::kCheer;
-			} else if (a_idle == kBoo || a_idle == kBooA) {
-				kind = CrowdVoices::Kind::kBoo;
-			} else if (a_idle == kLaugh) {
-				kind = CrowdVoices::Kind::kLaugh;
-			} else {
-				return;  // clapping makes its own sound; nods and head shakes none
+			if (!s.reactionVoices || !a_actor || a_actor->IsDead(false) || !a_actor->Get3D()) {
+				return false;
 			}
 			auto*      npc = a_actor->GetNPC();
 			const bool female = npc && npc->IsFemale();
 			const auto* clip = CrowdVoices::Pick(kind, female);
 			if (!clip) {
-				return;
+				return false;
 			}
 			const RE::TESFormID voice = npc && npc->voiceType ? npc->voiceType->GetFormID() : 0;
 			float               pitch = 1.0f;
@@ -95,6 +85,19 @@ namespace fp
 			RE::NiPoint3 at = a_actor->data.location;
 			at.z += 110.0f;  // about head height
 			Audio::PlayCrowd(*clip, at, 0.9f, pitch);
+			return true;
+		}
+
+		void Voice(RE::Actor* a_actor, RE::TESFormID a_idle)
+		{
+			if (a_idle == kCheer || a_idle == kCheerA || a_idle == kCheerB) {
+				SayCrowd(a_actor, CrowdVoices::Kind::kCheer);
+			} else if (a_idle == kBoo || a_idle == kBooA) {
+				SayCrowd(a_actor, CrowdVoices::Kind::kBoo);
+			} else if (a_idle == kLaugh) {
+				SayCrowd(a_actor, CrowdVoices::Kind::kLaugh);
+			}
+			// clapping makes its own sound; nods and head shakes none
 		}
 
 		Choice ChooseIdle(Moment a_moment, bool a_sitting)
@@ -125,7 +128,11 @@ namespace fp
 	void Game::React(const pool::ShotResult& a_result)
 	{
 		const auto& s = Settings::Get();
-		if (!s.reactions || !s.anim || s.reactionChance <= 0.0f) {
+		if (!s.reactions) {
+			return;
+		}
+		PlayersReact(a_result);  // the NPCs playing: their voices only
+		if (!s.anim || s.reactionChance <= 0.0f) {
 			return;
 		}
 		const auto now = std::chrono::steady_clock::now();
@@ -161,21 +168,6 @@ namespace fp
 
 		bool reacted = false;
 
-		// your opponent at the end of the game: a shake of the head if they lost to you, a cheer if they beat you
-		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner >= 0 && Roll(0.5f)) {
-			if (auto* npc = Opponent(); npc && !npc->IsDead(false)) {
-				const Choice idle = a_result.winner == 0 ? Choice{ kShakeNo, "HeadShakeNo", false } :
-				                                           PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
-				if (Anim::PlayGame(npc, idle.id, idle.name)) {
-					reacted = true;
-					Voice(npc, idle.id);
-					if (idle.loops) {
-						_reactStops.emplace_back(npc->GetFormID(), now + std::chrono::milliseconds(3500));
-					}
-				}
-			}
-		}
-
 		if (Roll(chance)) {
 			// who's watching this table, near enough, free to react
 			std::vector<RE::Actor*> crowd;
@@ -208,6 +200,54 @@ namespace fp
 		}
 		if (reacted) {
 			_lastReaction = now;
+		}
+	}
+
+	void Game::PlayersReact(const pool::ShotResult& a_result)
+	{
+		// The NPCs playing (your opponent, or both in a game between NPCs) react with their voice only, no animation:
+		// they're holding a cue and their pool pose. A whoop now and then at their own pot, more for two at once; a laugh
+		// at the other one's scratch, a groan at their own; at the end a cheer from the winner (a laugh if the other one
+		// threw it away) and a groan from the loser. The same person not more than once every 6 s.
+		const auto& s = Settings::Get();
+		if (!s.reactionVoices) {
+			return;
+		}
+		auto  table = _table.get();
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!table || !player || (player->data.location - table->data.location).Length() > s.soundMaxDistance) {
+			return;  // out of earshot anyway
+		}
+		const auto now = std::chrono::steady_clock::now();
+		auto       say = [&](int a_seat, CrowdVoices::Kind a_kind, float a_chance) {
+            auto* actor = a_seat >= 0 && a_seat < 2 ? SeatActor(a_seat) : nullptr;
+            if (!actor || !Roll(std::min(1.0f, a_chance))) {
+                return;
+            }
+            if (auto it = _reactedAt.find(actor->GetFormID()); it != _reactedAt.end() && now - it->second < std::chrono::seconds(6)) {
+                return;
+            }
+            if (SayCrowd(actor, a_kind)) {
+                _reactedAt[actor->GetFormID()] = now;
+            }
+		};
+		const int   shooter = a_result.shooter;
+		const int   other = 1 - shooter;
+		const float chance = s.reactionChance;
+		using K = CrowdVoices::Kind;
+		if (a_result.end == pool::GameEnd::kWon) {
+			say(a_result.winner, K::kCheer, 0.9f);
+			say(1 - a_result.winner, K::kBoo, 0.6f);
+		} else if (a_result.end != pool::GameEnd::kNone) {
+			say(a_result.winner, Roll(0.5f) ? K::kLaugh : K::kCheer, 0.8f);  // won on the other one's mistake
+			say(shooter, K::kBoo, 0.7f);
+		} else if (a_result.foul == pool::Foul::kScratch) {
+			say(other, K::kLaugh, chance * 0.7f);
+			say(shooter, K::kBoo, chance * 0.4f);
+		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted >= 2) {
+			say(shooter, K::kCheer, chance * 0.8f);
+		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted == 1) {
+			say(shooter, K::kCheer, chance * 0.25f);
 		}
 	}
 
