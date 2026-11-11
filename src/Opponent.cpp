@@ -297,6 +297,11 @@ namespace fp
 	void Game::Challenge(RE::Actor* a_actor, RE::TESObjectREFR* a_table)
 	{
 		const auto& s = Settings::Get();
+		if (a_actor && a_actor != Opponent() && IsPlaying(a_actor)) {
+			// in a game of their own (against another NPC, at this table or another): not to be pulled out of it
+			Notify(std::format("Pool: {} is in the middle of a game", a_actor->GetDisplayFullName()));
+			return;
+		}
 		if (a_actor && PlayerCaps() < StakeOf(a_actor)) {
 			// not enough caps for their stake: nothing racked, nothing changed
 			Notify(std::format("Pool: {} plays for {} caps. You've got {}", a_actor->GetDisplayFullName(), StakeOf(a_actor), PlayerCaps()));
@@ -325,6 +330,10 @@ namespace fp
 		}
 		auto* actor = a_actor ? a_actor : PickActor();
 		auto* current = Opponent();
+		if (actor && actor != current && IsPlaying(actor)) {
+			Notify(std::format("Pool: {} is in the middle of a game", actor->GetDisplayFullName()));
+			return;
+		}
 		if (!actor || actor == current) {
 			if (current) {
 				EndChallenge(std::format("{} stops playing", _opponentName));
