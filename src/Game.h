@@ -563,6 +563,12 @@ namespace fp
 		void                       MovePick(int a_by);
 		void                       ClosePick();
 		std::vector<Watcher> _watchers;
+		// reactions to a shot (Reactions.cpp): who reacted when, and the reactions to stop once they've had their moment
+		void React(const pool::ShotResult& a_result);
+		void TickReactions();
+		std::unordered_map<RE::TESFormID, std::chrono::steady_clock::time_point> _reactedAt;
+		std::vector<std::pair<RE::TESFormID, std::chrono::steady_clock::time_point>> _reactStops;
+		std::chrono::steady_clock::time_point _lastReaction{};
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
 		std::vector<RE::ObjectRefHandle> _watchTables;  // the pool tables near you (TickWatchers), nearest first

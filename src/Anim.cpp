@@ -286,13 +286,9 @@ namespace fp::Anim
 			return CallActorWith(a_actor, a_function, callback, a_args...);
 		}
 
-		bool Play(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)
+		bool PlayForm(RE::Actor* a_actor, RE::TESIdleForm* idle, const char* a_name)
 		{
-			if (!Settings::Get().anim || !a_actor || !a_actor->currentProcess) {
-				return false;
-			}
-			auto* idle = Idle(a_rawID);
-			if (!idle) {
+			if (!a_actor || !a_actor->currentProcess || !idle) {
 				return false;
 			}
 			if (a_actor->currentProcess->PlayIdle(*a_actor, idle, nullptr)) {
@@ -306,6 +302,20 @@ namespace fp::Anim
 			const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new LogResult(What(a_actor, "PlayIdle") + " " + a_name) };
 			return CallActorWith(a_actor, "PlayIdle", callback, idle);
 		}
+
+		bool Play(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)
+		{
+			if (!Settings::Get().anim || !a_actor || !a_actor->currentProcess) {
+				return false;
+			}
+			return PlayForm(a_actor, Idle(a_rawID), a_name);
+		}
+	}
+
+	bool PlayGame(RE::Actor* a_actor, RE::TESFormID a_formID, const char* a_name)
+	{
+		auto* form = RE::TESForm::GetFormByID(a_formID);
+		return PlayForm(a_actor, form ? form->As<RE::TESIdleForm>() : nullptr, a_name);
 	}
 
 	bool PlayIdleID(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name)

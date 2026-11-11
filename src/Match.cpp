@@ -267,6 +267,7 @@ namespace fp
 			}
 			Say(std::format("{}. {} racks again", line, rack));
 			log::info("game over: {}", line);
+			React(r);
 			return;
 		}
 
@@ -332,6 +333,7 @@ namespace fp
 		}
 		log::info("shot judged: foul {} continues {} groups {} potted {} -> {}", static_cast<int>(r.foul), r.turnContinues, r.groupsSet,
 			r.pocketed.size(), line);
+		React(r);
 
 		if (OpponentsTurn() && _aiming) {
 			ExitAim();  // their shot: the table's theirs until the balls stop

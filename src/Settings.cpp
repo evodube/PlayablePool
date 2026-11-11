@@ -153,6 +153,8 @@ namespace fp
 		wander = ReadBool(L"Opponent", L"bWander", wander);
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));
+		reactions = ReadBool(L"Opponent", L"bReactions", reactions);
+		reactionChance = std::clamp(ReadFloat(L"Opponent", L"fReactionChance", reactionChance), 0.0f, 1.0f);
 		wanderWorkers = static_cast<int>(std::clamp<long long>(ReadInt(L"Opponent", L"iWanderWorkers", wanderWorkers), 0, 2));
 		wanderStay = ReadFloat(L"Opponent", L"fWanderStay", wanderStay);
 		wanderRange = ReadFloat(L"Opponent", L"fWanderRange", wanderRange);

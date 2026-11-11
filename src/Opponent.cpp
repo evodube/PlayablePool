@@ -1662,6 +1662,7 @@ namespace fp
 			return;
 		}
 		_watchTime = now;
+		TickReactions();
 		const auto& s = Settings::Get();
 		if (_watchersStale && Anim::OwnPackageReady()) {
 			_watchersStale = false;
