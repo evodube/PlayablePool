@@ -86,6 +86,7 @@ namespace fp::CrowdVoices
 				log::warn("crowd voices: {} isn't an archive this reads (version {})", a_path.filename().string(), version);
 				return;
 			}
+#pragma pack(push, 1)
 			struct Entry
 			{
 				std::uint32_t nameHash;
@@ -97,6 +98,7 @@ namespace fp::CrowdVoices
 				std::uint32_t size;
 				std::uint32_t align;
 			};
+#pragma pack(pop)
 			static_assert(sizeof(Entry) == 36);
 			std::vector<Entry> entries(count);
 			file.read(reinterpret_cast<char*>(entries.data()), static_cast<std::streamsize>(count) * sizeof(Entry));
