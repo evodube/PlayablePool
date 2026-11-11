@@ -9,6 +9,8 @@ frames are worked out with no action on the rig, then keyed into a new action:
     build("PoolFidgetLean", 120, lean)       # leaning on the cue, weight over to it, and back
     build("PoolFidgetStretch", 150, stretch) # two shoulder rolls, the neck stretched side to side
     build("PoolFidgetTap", 90, tap)          # lifting the cue and tapping its butt on the floor twice
+    build("PoolFidgetTable", 150, over_table) # leaning over the table on the left hand, looking the balls over
+    build("PoolFidgetChalk", 150, chalk)     # chalking the cue's tip: the left hand brings the chalk up, twists it, back
 
 Export each with export_scene.pynifly_hkx (FO4, 30 fps) inside a 3D-viewport temp_override, as for the other clips.
 In game the cue's butt follows the grip up off the floor while the tap plays (see Game::PlaceStickUpright).
@@ -154,6 +156,88 @@ def tap(t, keep):
     return {"hand_r": Vector((0, 0, up)), "lift": up}
 
 
+# The table in front of them while they wait (Opponent.cpp: the wait spot is kWaitBeyondRail 55 outside the felt,
+# facing it): the rail's outer edge about 40 ahead, its top at about 75.
+RAIL_Y = 44.0
+RAIL_Z = 75.5
+CUE_LEN = 94.0
+BUTT = Vector((14.5, 30.5, 0.6))  # where the cue's butt rests while they wait (Game::PlaceStickUpright)
+
+
+def grip_point():
+    """the grip in the right hand (the same point the game holds the cue at): wrist frame, see tools/anim/README.md"""
+    w = P["Arm_Hand.R"].head
+    fb = (P["Arm_Finger21.R"].head + P["Arm_Finger31.R"].head + P["Arm_Finger41.R"].head + P["Arm_Finger51.R"].head) / 4
+    e1 = (fb - w).normalized()
+    e2 = P["Arm_Finger21.R"].head - P["Arm_Finger51.R"].head
+    e2 = (e2 - e1 * e2.dot(e1)).normalized()
+    e3 = e1.cross(e2)
+    return w + 6.478 * e1 + 0.133 * e2 - 1.488 * e3
+
+
+def cue_tip():
+    d = (grip_point() - BUTT).normalized()
+    return BUTT + d * CUE_LEN, d
+
+
+def frame3(a, b):
+    a = a.normalized()
+    c = a.cross(b).normalized()
+    b = c.cross(a).normalized()
+    return Matrix((a, b, c)).transposed()
+
+
+def hand_rot(side, fingers, thumbward):
+    """the hand's world rotation with the middle finger along `fingers` and the little finger -> thumb line along
+    `thumbward`"""
+    name = "Arm_Hand." + side
+    f_rest = B["Arm_Finger31." + side].head_local - B[name].head_local
+    t_rest = B["Arm_Finger11." + side].head_local - B["Arm_Finger51." + side].head_local
+    q = frame3(fingers, thumbward) @ frame3(f_rest, t_rest).inverted()
+    return q @ B[name].matrix_local.to_3x3()
+
+
+def over_table(t, keep):
+    """bending over the table, the left hand on the rail, looking the balls over left and right"""
+    w = env(t, 0.22, 0.24)
+    move("COM", (0.0, -2.5 * w, -2.0 * w))  # the hips go back as they bend
+    rot_world("Spine1", X, -14 * w)  # bending forward over the rail
+    rot_world("Spine2", X, -12 * w)
+    rot_world("Chest", X, -8 * w)
+    rot_world("Neck", X, 12 * w)  # the head up, to see across the table
+    look = math.sin((t - 0.25) / 0.5 * 2 * math.pi) if 0.25 < t < 0.75 else 0.0
+    rot_world("Head", Z, 22 * look * w)  # looking along the table one way and the other
+    rot_world("Neck", Z, 8 * look * w)
+    hand = keep["hand_l"][0].lerp(Vector((-13.0, RAIL_Y, RAIL_Z + 2.6)), smooth((w - 0.15) / 0.85))
+    rot = keep["hand_l"][1]
+    flat = hand_rot("L", Vector((0.35, 1.0, -0.15)), Vector((1.0, -0.3, 0.0)))  # palm down on the rail, fingers forward
+    k = smooth((w - 0.3) / 0.7)
+    rot = rot.to_quaternion().slerp(flat.to_quaternion(), k).to_matrix()
+    return {"hand_l_at": (hand, rot)}
+
+
+def chalk(t, keep):
+    """the left hand leaves the hip with the chalk, chalks the tip with three twists, and goes back"""
+    tip, d = keep["tip"]
+    reach = smooth((t - 0.08) / 0.22) * smooth((0.92 - t) / 0.22)  # to the tip and back
+    # palm down over the tip: fingers pointing forward and in, the thumb towards the right
+    over = hand_rot("L", Vector((0.25, 1.0, -0.2)), Vector((1.0, -0.2, 0.0)))
+    on = tip + Vector((-3.2, -4.6, 3.4))  # the wrist, so the chalk under the fingers sits on the tip
+    hand = keep["hand_l"][0].lerp(on, reach)
+    rot = keep["hand_l"][1].to_quaternion().slerp(over.to_quaternion(), reach).to_matrix()
+    # three twists back and forth round the cue while it's on
+    if 0.32 < t < 0.7:
+        tw = math.sin((t - 0.32) / 0.38 * 3 * 2 * math.pi) * 28.0 * smooth((t - 0.32) / 0.05) * smooth((0.7 - t) / 0.05)
+        q = Quaternion(d, math.radians(tw))
+        hand = tip + q @ (hand - tip)
+        rot = q.to_matrix() @ rot
+    look = env(t, 0.15, 0.2)
+    rot_world("Head", X, 10 * look)  # chin up a little, eyes on the tip
+    rot_world("Head", Z, -10 * look)
+    rot_world("Chest", Z, -4 * look)  # turned a touch towards the cue
+    return {"hand_l_at": (hand, rot)}
+
+
 # ------------------------------------------------------------------ build: frames worked out, then keyed
 def frames(n, fn):
     basis = base_pose()
@@ -169,6 +253,7 @@ def frames(n, fn):
         "knee_l": P["Leg_Calf.L"].head.copy(),
         "com": P["COM"].head.copy(),
     }
+    keep["tip"] = cue_tip()
     out = []
     lifts = []
     for f in range(n):
@@ -187,7 +272,11 @@ def frames(n, fn):
         pin("Arm_Hand.R", "Arm_UpperArm.R", "Arm_ForeArm1.R", pos + extra.get("hand_r", Vector()), rot,
             keep["elbow_r"] - pos + Vector((4, -4, 0)))
         pos, rot = keep["hand_l"]
-        pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", pos + hip, rot, keep["elbow_l"] - pos + Vector((-6, -4, 0)))
+        if "hand_l_at" in extra:
+            at, rot = extra["hand_l_at"]
+            pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", at, rot, Vector((-1.0, -0.6, -0.4)))
+        else:
+            pin("Arm_Hand.L", "Arm_UpperArm.L", "Arm_ForeArm1.L", pos + hip, rot, keep["elbow_l"] - pos + Vector((-6, -4, 0)))
         out.append({pb.name: pb.matrix_basis.copy() for pb in P})
         lifts.append(extra.get("lift", 0.0))
     return out, lifts
