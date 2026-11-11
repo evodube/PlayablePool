@@ -245,10 +245,10 @@ namespace fp
 			say(a_result.winner, Roll(0.5f) ? K::kLaugh : K::kCheer, 1.0f);  // won on the other one's mistake
 			say(shooter, K::kBoo, 0.9f);
 		} else if (a_result.foul == pool::Foul::kScratch) {
-			say(other, K::kLaugh, chance * 1.2f);
-			say(shooter, K::kBoo, chance * 0.8f);
+			say(other, K::kLaugh, 0.9f);
+			say(shooter, K::kBoo, 0.7f);
 		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted >= 2) {
-			say(shooter, K::kCheer, chance * 1.3f);
+			say(shooter, K::kCheer, 1.0f);
 		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted == 1) {
 			say(shooter, K::kCheer, chance * 0.6f);
 		}
