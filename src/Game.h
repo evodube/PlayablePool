@@ -326,7 +326,6 @@ namespace fp
 		void        Challenge(RE::Actor* a_actor = nullptr, RE::TESObjectREFR* a_table = nullptr);  // a_actor at a_table (racked first if need be)
 		void        StartNpcGame(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // two NPCs play each other (at the loaded table)
 		void        StartNpcGameAt(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table);  // ...wherever: the loaded table or one of its own
-		bool        TableInPlay(const RE::TESObjectREFR* a_table) const;  // a game going on there (yours or NPCs')
 		bool        TableFree(const RE::TESObjectREFR* a_table) const;  // no game on there (or only a finished one)
 		void        EndChallenge(const std::string& a_why);
 		RE::Actor*  Opponent() const;

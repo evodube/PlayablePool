@@ -165,17 +165,6 @@ namespace fp
 		return !t._opponent && !t._npcGame && (!t._sim || t._rules.Over());
 	}
 
-	bool Game::TableInPlay(const RE::TESObjectREFR* a_table) const
-	{
-		// a game going on there: yours (solo or against someone) or one between NPCs
-		const int slot = SlotOf(a_table);
-		if (slot < 0) {
-			return false;
-		}
-		const TableSlot& t = slot == 0 ? static_cast<const TableSlot&>(*this) : _others[static_cast<std::size_t>(slot - 1)];
-		return t._npcGame || (t._sim && !t._rules.Over());
-	}
-
 	void Game::StartNpcGameAt(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table)
 	{
 		// at the loaded table if that's free (nothing of yours on), otherwise as a table of its own in the background
@@ -1891,12 +1880,11 @@ namespace fp
 		if (_watchTables.empty() || std::uniform_real_distribution<float>(0.0f, 1.0f)(rng) > dt / std::max(5.0f, s.wanderEvery)) {
 			return;
 		}
-		// a table with a game going on and room for one more (iWanderMax each): nobody wanders over to an empty table
+		// a table with room for one more (iWanderMax each)
 		std::vector<RE::ObjectRefHandle> room;
 		for (const auto& handle : _watchTables) {
 			const auto n = std::ranges::count_if(_watchers, [&](const Watcher& w) { return w.table == handle; });
-			auto       table = handle.get();
-			if (table && TableInPlay(table.get()) && n < s.wanderMax) {
+			if (handle.get() && n < s.wanderMax) {
 				room.push_back(handle);
 			}
 		}
