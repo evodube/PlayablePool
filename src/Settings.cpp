@@ -154,6 +154,7 @@ namespace fp
 		wanderEvery = ReadFloat(L"Opponent", L"fWanderEvery", wanderEvery);
 		wanderMax = static_cast<int>(ReadInt(L"Opponent", L"iWanderMax", wanderMax));
 		reactions = ReadBool(L"Opponent", L"bReactions", reactions);
+		reactionVoices = ReadBool(L"Opponent", L"bReactionVoices", reactionVoices);
 		reactionChance = std::clamp(ReadFloat(L"Opponent", L"fReactionChance", reactionChance), 0.0f, 1.0f);
 		wanderWorkers = static_cast<int>(std::clamp<long long>(ReadInt(L"Opponent", L"iWanderWorkers", wanderWorkers), 0, 2));
 		wanderStay = ReadFloat(L"Opponent", L"fWanderStay", wanderStay);

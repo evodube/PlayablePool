@@ -8,6 +8,8 @@
 // Someone sitting down just nods or shakes their head: the cheering and booing idles are for standing up.
 
 #include "Anim.h"
+#include "Audio.h"
+#include "CrowdVoices.h"
 #include "Game.h"
 #include "Settings.h"
 
@@ -55,6 +57,45 @@ namespace fp
 			const char*   name;
 			bool          loops;  // a crowd idle: stopped after a few seconds, in case it would carry on
 		};
+
+		// The voice that goes with an idle: the crowd's cheer, boo or laugh, a woman's for a woman and a man's for a man,
+		// pitched a little to suit their own voice (as recorded for the rough voices the crowd was recorded in, lower for
+		// the old ones, a touch either way for the rest so two people don't sound the same).
+		void Voice(RE::Actor* a_actor, RE::TESFormID a_idle)
+		{
+			const auto& s = Settings::Get();
+			if (!s.reactionVoices || !a_actor) {
+				return;
+			}
+			CrowdVoices::Kind kind;
+			if (a_idle == kCheer || a_idle == kCheerA || a_idle == kCheerB) {
+				kind = CrowdVoices::Kind::kCheer;
+			} else if (a_idle == kBoo || a_idle == kBooA) {
+				kind = CrowdVoices::Kind::kBoo;
+			} else if (a_idle == kLaugh) {
+				kind = CrowdVoices::Kind::kLaugh;
+			} else {
+				return;  // clapping makes its own sound; nods and head shakes none
+			}
+			auto*      npc = a_actor->GetNPC();
+			const bool female = npc && npc->IsFemale();
+			const auto* clip = CrowdVoices::Pick(kind, female);
+			if (!clip) {
+				return;
+			}
+			const RE::TESFormID voice = npc && npc->voiceType ? npc->voiceType->GetFormID() : 0;
+			float               pitch = 1.0f;
+			if (voice == 0x0000002D || voice == 0x0000002E) {
+				pitch = 1.0f;  // MaleRough, FemaleRough: their own voice
+			} else if (voice == 0x000CEAA3 || voice == 0x000CEAA2) {
+				pitch = 0.9f;  // MaleOld, FemaleOld
+			} else {
+				pitch = 0.96f + static_cast<float>((a_actor->GetFormID() * 2654435761u) >> 24) / 255.0f * 0.08f;  // 0.96..1.04, the same each time
+			}
+			RE::NiPoint3 at = a_actor->data.location;
+			at.z += 110.0f;  // about head height
+			Audio::PlayCrowd(*clip, at, 0.9f, pitch);
+		}
 
 		Choice ChooseIdle(Moment a_moment, bool a_sitting)
 		{
@@ -127,6 +168,7 @@ namespace fp
 				                                           PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
 				if (Anim::PlayGame(npc, idle.id, idle.name)) {
 					reacted = true;
+					Voice(npc, idle.id);
 					if (idle.loops) {
 						_reactStops.emplace_back(npc->GetFormID(), now + std::chrono::milliseconds(3500));
 					}
@@ -156,6 +198,7 @@ namespace fp
 				const Choice idle = ChooseIdle(moment, sitting);
 				if (Anim::PlayGame(actor, idle.id, idle.name)) {
 					reacted = true;
+					Voice(actor, idle.id);
 					_reactedAt[actor->GetFormID()] = now;
 					if (idle.loops) {
 						_reactStops.emplace_back(actor->GetFormID(), now + std::chrono::milliseconds(3500));

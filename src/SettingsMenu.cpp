@@ -113,6 +113,7 @@ namespace fp::SettingsMenu
 						{ L"Opponent", L"fWalkTimeout", "Walk time limit", Kind::kFloat, &s.opponentWalkTimeout, 10.0f, 180.0f, "%.0f", "a last resort: seconds of walking that isn't getting them there before they're put at the shot" },
 						{ L"Opponent", L"fPickDistance", "Challenge distance", Kind::kFloat, &s.opponentPickDistance, 50.0f, 3000.0f, "%.0f", "how far away the NPC can be" },
 						{ L"Opponent", L"bReactions", "Watchers react", Kind::kBool, &s.reactions, 0, 0, nullptr, "people watching clap, cheer, laugh or boo now and then" },
+						{ L"Opponent", L"bReactionVoices", "Reaction voices", Kind::kBool, &s.reactionVoices, 0, 0, nullptr, "cheers, boos and laughs heard (the game's own crowd voices, no words); after a restart" },
 						{ L"Opponent", L"fReactionChance", "Reaction chance", Kind::kFloat, &s.reactionChance, 0.0f, 1.0f, "%.2f", "how often a pot gets a reaction; bigger moments more" },
 						{ L"Opponent", L"iWanderWorkers", "Settlers with jobs", Kind::kChoice, &s.wanderWorkers, 0, 0, nullptr,
 							"whether settlers with a settlement job (farmers, guards, shopkeepers, scavengers) come over to the table",

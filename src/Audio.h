@@ -1,5 +1,10 @@
 #pragma once
 
+namespace fp::CrowdVoices
+{
+	struct Clip;
+}
+
 namespace fp::Audio
 {
 	enum class Bank
@@ -27,4 +32,8 @@ namespace fp::Audio
 
 	// Which way the listener faces (radians, the game's yaw: 0 = north/+Y). Set each frame while aiming.
 	void SetListenerYaw(float a_yaw, bool a_valid);
+
+	// One of the crowd's voices (CrowdVoices.h) from a_pos: fades with distance like the table sounds; a_pitch 1 = as
+	// recorded.
+	void PlayCrowd(const CrowdVoices::Clip& a_clip, const RE::NiPoint3& a_pos, float a_gain, float a_pitch);
 }

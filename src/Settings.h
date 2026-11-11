@@ -125,6 +125,7 @@ namespace fp
 		float wanderEvery{ 45.0f };         // about this often (seconds)
 		int   wanderMax{ 3 };               // at most this many at once
 		bool  reactions{ true };            // people watching react to a shot now and then (clap, cheer, laugh, boo, shake their head)
+		bool  reactionVoices{ true };       // ...with the crowd's cheers, boos and laughs from the game's voice files
 		float reactionChance{ 0.35f };      // the chance a good pot gets a reaction (bigger moments more, see Reactions.cpp)
 		int   wanderWorkers{ 1 };           // settlers with a settlement job: 0 never come over, 1 only off duty, 2 any time
 		float wanderStay{ 180.0f };         // each hangs round about this long

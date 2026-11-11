@@ -6,6 +6,7 @@
 
 #include "Audio.h"
 
+#include "CrowdVoices.h"
 #include "Settings.h"
 
 #include <xaudio2.h>
@@ -39,6 +40,8 @@ namespace fp::Audio
 		std::atomic<float>                                        g_yaw{ 0.0f };
 		std::atomic<bool>                                         g_haveYaw{ false };
 		std::uint32_t                                             g_rng{ 0x9E3779B9u };
+		// the crowd voices (CrowdVoices.h): each its own format, so a voice of their own per sound, let go once done
+		std::vector<IXAudio2SourceVoice*>                         g_crowd;
 
 		float Random01()
 		{
@@ -194,6 +197,9 @@ namespace fp::Audio
 		}
 		if (Start()) {
 			log::info("sound: {} sounds loaded, {} output channels", loaded, g_channels);
+			if (Settings::Get().reactions && Settings::Get().reactionVoices) {
+				CrowdVoices::Load();  // the watchers' cheers, boos and laughs, read from the game's own voice files
+			}
 		}
 	}
 
@@ -213,6 +219,51 @@ namespace fp::Audio
 		Play(a_bank, ear, a_gain);
 	}
 
+	namespace
+	{
+		// How loud a_pos is from the camera, panned: the left and right gains (false: too far to hear). Under g_lock.
+		bool Placement(const RE::NiPoint3& a_pos, float a_gain, float& a_left, float& a_right)
+		{
+			const auto& s = Settings::Get();
+			// where the listener is and which way they face
+			RE::NiPoint3 ear = a_pos;
+			float        yaw = g_yaw;
+			if (auto* camera = RE::PlayerCamera::GetSingleton(); camera && camera->cameraRoot) {
+				ear = camera->cameraRoot->world.translate;
+			}
+			if (!g_haveYaw) {
+				if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+					yaw = player->data.angle.z;
+				}
+			}
+
+			const RE::NiPoint3 to = a_pos - ear;
+			const float        distance = std::sqrt(to.x * to.x + to.y * to.y + to.z * to.z);
+			if (distance >= s.soundMaxDistance) {
+				return false;
+			}
+			float gain = a_gain * s.soundVolume;
+			if (distance > s.soundFullDistance) {
+				gain *= s.soundFullDistance / distance;
+				gain *= 1.0f - (distance - s.soundFullDistance) / (s.soundMaxDistance - s.soundFullDistance);  // reaches 0 at the max
+			}
+			if (gain <= 0.001f) {
+				return false;
+			}
+
+			// -1 left .. 1 right, kept off the extremes; equal-power pan
+			float pan = 0.0f;
+			if (distance > 1.0f) {
+				const float right = (to.x * std::cos(yaw) - to.y * std::sin(yaw)) / distance;
+				pan = std::clamp(right, -1.0f, 1.0f) * 0.7f;
+			}
+			const float angle = (pan + 1.0f) * 0.25f * 3.14159265f;
+			a_left = gain * std::cos(angle);
+			a_right = gain * std::sin(angle);
+			return true;
+		}
+	}
+
 	void Play(Bank a_bank, const RE::NiPoint3& a_pos, float a_gain, float a_seconds)
 	{
 		const auto& s = Settings::Get();
@@ -224,46 +275,16 @@ namespace fp::Audio
 		if (!g_engine || clips.empty()) {
 			return;
 		}
-
-		// where the listener is and which way they face
-		RE::NiPoint3 ear = a_pos;
-		float        yaw = g_yaw;
-		if (auto* camera = RE::PlayerCamera::GetSingleton(); camera && camera->cameraRoot) {
-			ear = camera->cameraRoot->world.translate;
-		}
-		if (!g_haveYaw) {
-			if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-				yaw = player->data.angle.z;
-			}
-		}
-
-		const RE::NiPoint3 to = a_pos - ear;
-		const float        distance = std::sqrt(to.x * to.x + to.y * to.y + to.z * to.z);
-		if (distance >= s.soundMaxDistance) {
+		float left = 0.0f, right = 0.0f;
+		if (!Placement(a_pos, a_gain, left, right)) {
 			return;
 		}
-		float gain = a_gain * s.soundVolume;
-		if (distance > s.soundFullDistance) {
-			gain *= s.soundFullDistance / distance;
-			gain *= 1.0f - (distance - s.soundFullDistance) / (s.soundMaxDistance - s.soundFullDistance);  // reaches 0 at the max
-		}
-		if (gain <= 0.001f) {
-			return;
-		}
-
-		// -1 left .. 1 right, kept off the extremes; equal-power pan
-		float pan = 0.0f;
-		if (distance > 1.0f) {
-			const float right = (to.x * std::cos(yaw) - to.y * std::sin(yaw)) / distance;
-			pan = std::clamp(right, -1.0f, 1.0f) * 0.7f;
-		}
-		const float angle = (pan + 1.0f) * 0.25f * 3.14159265f;
 		std::vector<float> matrix(g_channels, 0.0f);
 		if (g_channels == 1) {
-			matrix[0] = gain;
+			matrix[0] = (left + right) * 0.7071f;
 		} else {
-			matrix[0] = gain * std::cos(angle);  // front left
-			matrix[1] = gain * std::sin(angle);  // front right
+			matrix[0] = left;   // front left
+			matrix[1] = right;  // front right
 		}
 
 		Voice* v = FreeVoice();
@@ -298,5 +319,69 @@ namespace fp::Audio
 			v->voice->Start();
 			v->started = std::chrono::steady_clock::now();
 		}
+	}
+
+	void PlayCrowd(const CrowdVoices::Clip& a_clip, const RE::NiPoint3& a_pos, float a_gain, float a_pitch)
+	{
+		const auto& s = Settings::Get();
+		if (!s.sound || a_gain <= 0.001f) {
+			return;
+		}
+		std::scoped_lock lock(g_lock);
+		if (!g_engine) {
+			return;
+		}
+		// the ones that are done let go
+		std::erase_if(g_crowd, [](IXAudio2SourceVoice* a_voice) {
+			XAUDIO2_VOICE_STATE state{};
+			a_voice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+			if (state.BuffersQueued == 0) {
+				a_voice->DestroyVoice();
+				return true;
+			}
+			return false;
+		});
+		if (g_crowd.size() >= 4) {
+			return;  // a crowd's worth already
+		}
+		float left = 0.0f, right = 0.0f;
+		if (!Placement(a_pos, a_gain, left, right)) {
+			return;
+		}
+		const auto*          format = reinterpret_cast<const WAVEFORMATEX*>(a_clip.format.data());
+		IXAudio2SourceVoice* voice = nullptr;
+		if (FAILED(g_engine->CreateSourceVoice(&voice, format, 0, 2.0f)) || !voice) {
+			static bool warned = false;
+			if (!warned) {
+				warned = true;
+				log::warn("sound: a crowd voice wouldn't play (format {:04X}, {} Hz, {} channels)", format->wFormatTag, format->nSamplesPerSec, format->nChannels);
+			}
+			return;
+		}
+		const std::uint32_t in = std::max<std::uint32_t>(1, format->nChannels);
+		std::vector<float>  matrix(in * g_channels, 0.0f);
+		for (std::uint32_t c = 0; c < in; ++c) {  // each source channel to both sides, panned
+			const float share = 1.0f / static_cast<float>(in);
+			if (g_channels == 1) {
+				matrix[c] = (left + right) * 0.7071f * share;
+			} else {
+				matrix[0 * in + c] = left * share;
+				matrix[1 * in + c] = right * share;
+			}
+		}
+		voice->SetOutputMatrix(g_master, in, g_channels, matrix.data());
+		voice->SetFrequencyRatio(std::clamp(a_pitch, 0.5f, 2.0f));
+		XAUDIO2_BUFFER buffer{};
+		buffer.Flags = XAUDIO2_END_OF_STREAM;
+		buffer.AudioBytes = static_cast<UINT32>(a_clip.data.size());
+		buffer.pAudioData = a_clip.data.data();
+		XAUDIO2_BUFFER_WMA wma{};
+		wma.PacketCount = static_cast<UINT32>(a_clip.dpds.size());
+		wma.pDecodedPacketCumulativeBytes = a_clip.dpds.data();
+		if (FAILED(voice->SubmitSourceBuffer(&buffer, &wma)) || FAILED(voice->Start())) {
+			voice->DestroyVoice();
+			return;
+		}
+		g_crowd.push_back(voice);
 	}
 }
