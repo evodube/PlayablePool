@@ -109,14 +109,17 @@ namespace fp
 			}
 			switch (a_moment) {
 			case Moment::kPot:
-				return Roll(0.6f) ? Choice{ kClap, "IdleClapping", false } : Choice{ kNodYes, "HeadShakeYes", false };
+				// a clap, a cheer (voiced) or a nod
+				return Roll(0.2f) ? Choice{ kClap, "IdleClapping", false } :
+				       Roll(0.55f) ? Choice{ kCheerA, "CheeringStandingA", true } :
+				                     Choice{ kNodYes, "HeadShakeYes", false };
 			case Moment::kGreat:
-				return Roll(0.5f) ? Choice{ kClap, "IdleClapping", false } : PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
+				return Roll(0.25f) ? Choice{ kClap, "IdleClapping", false } : PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
 			case Moment::kWin:
-				return Roll(0.35f) ? Choice{ kClap, "IdleClapping", false } :
+				return Roll(0.2f) ? Choice{ kClap, "IdleClapping", false } :
 				                     PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true }, Choice{ kCheerB, "CheeringStandingB", true } });
 			case Moment::kScratch:
-				return Roll(0.6f) ? Choice{ kLaugh, "LaughingStandingA", true } : Choice{ kShakeNo, "HeadShakeNo", false };
+				return Roll(0.8f) ? Choice{ kLaugh, "LaughingStandingA", true } : Choice{ kShakeNo, "HeadShakeNo", false };
 			case Moment::kThrown:
 			default:
 				return PickOne({ Choice{ kBoo, "IdleBooingStanding", true }, Choice{ kBooA, "BooingStandingA", true }, Choice{ kLaugh, "LaughingStandingA", true },
@@ -208,7 +211,7 @@ namespace fp
 		// The NPCs playing (your opponent, or both in a game between NPCs) react with their voice only, no animation:
 		// they're holding a cue and their pool pose. A whoop now and then at their own pot, more for two at once; a laugh
 		// at the other one's scratch, a groan at their own; at the end a cheer from the winner (a laugh if the other one
-		// threw it away) and a groan from the loser. The same person not more than once every 6 s.
+		// threw it away) and a groan from the loser. The same person not more than once every 4 s.
 		const auto& s = Settings::Get();
 		if (!s.reactionVoices) {
 			return;
@@ -224,7 +227,7 @@ namespace fp
             if (!actor || !Roll(std::min(1.0f, a_chance))) {
                 return;
             }
-            if (auto it = _reactedAt.find(actor->GetFormID()); it != _reactedAt.end() && now - it->second < std::chrono::seconds(6)) {
+            if (auto it = _reactedAt.find(actor->GetFormID()); it != _reactedAt.end() && now - it->second < std::chrono::seconds(4)) {
                 return;
             }
             if (SayCrowd(actor, a_kind)) {
@@ -236,18 +239,18 @@ namespace fp
 		const float chance = s.reactionChance;
 		using K = CrowdVoices::Kind;
 		if (a_result.end == pool::GameEnd::kWon) {
-			say(a_result.winner, K::kCheer, 0.9f);
-			say(1 - a_result.winner, K::kBoo, 0.6f);
+			say(a_result.winner, K::kCheer, 1.0f);
+			say(1 - a_result.winner, K::kBoo, 0.85f);
 		} else if (a_result.end != pool::GameEnd::kNone) {
-			say(a_result.winner, Roll(0.5f) ? K::kLaugh : K::kCheer, 0.8f);  // won on the other one's mistake
-			say(shooter, K::kBoo, 0.7f);
+			say(a_result.winner, Roll(0.5f) ? K::kLaugh : K::kCheer, 1.0f);  // won on the other one's mistake
+			say(shooter, K::kBoo, 0.9f);
 		} else if (a_result.foul == pool::Foul::kScratch) {
-			say(other, K::kLaugh, chance * 0.7f);
-			say(shooter, K::kBoo, chance * 0.4f);
+			say(other, K::kLaugh, chance * 1.2f);
+			say(shooter, K::kBoo, chance * 0.8f);
 		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted >= 2) {
-			say(shooter, K::kCheer, chance * 0.8f);
+			say(shooter, K::kCheer, chance * 1.3f);
 		} else if (a_result.foul == pool::Foul::kNone && a_result.ownPotted == 1) {
-			say(shooter, K::kCheer, chance * 0.25f);
+			say(shooter, K::kCheer, chance * 0.6f);
 		}
 	}
 
