@@ -44,7 +44,7 @@ namespace fp
 		}
 		bool Roll(float a_chance) { return std::uniform_real_distribution<float>(0.0f, 1.0f)(Rng()) < a_chance; }
 		template <class T>
-		T Pick(std::initializer_list<T> a_list)
+		T PickOne(std::initializer_list<T> a_list)
 		{
 			return *(a_list.begin() + std::uniform_int_distribution<std::size_t>(0, a_list.size() - 1)(Rng()));
 		}
@@ -67,15 +67,15 @@ namespace fp
 			case Moment::kPot:
 				return Roll(0.6f) ? Choice{ kClap, "IdleClapping", false } : Choice{ kNodYes, "HeadShakeYes", false };
 			case Moment::kGreat:
-				return Roll(0.5f) ? Choice{ kClap, "IdleClapping", false } : Pick({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
+				return Roll(0.5f) ? Choice{ kClap, "IdleClapping", false } : PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
 			case Moment::kWin:
 				return Roll(0.35f) ? Choice{ kClap, "IdleClapping", false } :
-				                     Pick({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true }, Choice{ kCheerB, "CheeringStandingB", true } });
+				                     PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true }, Choice{ kCheerB, "CheeringStandingB", true } });
 			case Moment::kScratch:
 				return Roll(0.6f) ? Choice{ kLaugh, "LaughingStandingA", true } : Choice{ kShakeNo, "HeadShakeNo", false };
 			case Moment::kThrown:
 			default:
-				return Pick({ Choice{ kBoo, "IdleBooingStanding", true }, Choice{ kBooA, "BooingStandingA", true }, Choice{ kLaugh, "LaughingStandingA", true },
+				return PickOne({ Choice{ kBoo, "IdleBooingStanding", true }, Choice{ kBooA, "BooingStandingA", true }, Choice{ kLaugh, "LaughingStandingA", true },
 					Choice{ kShakeNo, "HeadShakeNo", false } });
 			}
 		}
@@ -124,7 +124,7 @@ namespace fp
 		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner >= 0 && Roll(0.5f)) {
 			if (auto* npc = Opponent(); npc && !npc->IsDead(false)) {
 				const Choice idle = a_result.winner == 0 ? Choice{ kShakeNo, "HeadShakeNo", false } :
-				                                           Pick({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
+				                                           PickOne({ Choice{ kCheer, "IdleCheeringStanding", true }, Choice{ kCheerA, "CheeringStandingA", true } });
 				if (Anim::PlayGame(npc, idle.id, idle.name)) {
 					reacted = true;
 					if (idle.loops) {
