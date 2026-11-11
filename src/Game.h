@@ -569,16 +569,6 @@ namespace fp
 		std::unordered_map<RE::TESFormID, std::chrono::steady_clock::time_point> _reactedAt;
 		std::vector<std::pair<RE::TESFormID, std::chrono::steady_clock::time_point>> _reactStops;
 		std::chrono::steady_clock::time_point _lastReaction{};
-		struct ReactLater
-		{
-			RE::TESFormID                         id;
-			RE::TESFormID                         idle;
-			const char*                           name;
-			bool                                  loops;
-			std::chrono::steady_clock::time_point at;
-			std::chrono::steady_clock::time_point giveUp;
-		};
-		std::vector<ReactLater> _reactLater;  // the opponent's, once they're let go at the end of the game
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
 		std::vector<RE::ObjectRefHandle> _watchTables;  // the pool tables near you (TickWatchers), nearest first

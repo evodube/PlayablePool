@@ -119,15 +119,9 @@ namespace fp
 
 		bool reacted = false;
 
-		// Your opponent, once the game's over: the loser shakes their head, a winner nods or laughs. Not now: they're
-		// still in their pool pose (PoolWait or the strike), which would cover it or be stopped right over it when they're
-		// let go. So it waits until they've been let go (TickReactions).
-		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner >= 0 && Roll(0.6f)) {
-			if (auto* npc = Opponent(); npc && !npc->IsDead(false)) {
-				const Choice idle = a_result.winner == 0 ? Choice{ kShakeNo, "HeadShakeNo", false } :
-				                    Roll(0.5f)           ? Choice{ kLaugh, "LaughingStandingA", true } :
-				                                           Choice{ kNodYes, "HeadShakeYes", false };
-				_reactLater.push_back({ npc->GetFormID(), idle.id, idle.name, idle.loops, now + std::chrono::milliseconds(1200), now + std::chrono::seconds(6) });
+		// the NPC who just lost to you: a shake of the head
+		if (a_result.end != pool::GameEnd::kNone && !_npcGame && a_result.winner == 0 && Roll(0.5f)) {
+			if (auto* loser = Opponent(); loser && !loser->IsDead(false) && Anim::PlayGame(loser, kShakeNo, "HeadShakeNo")) {
 				reacted = true;
 			}
 		}
@@ -168,26 +162,8 @@ namespace fp
 
 	void Game::TickReactions()
 	{
-		const auto now = std::chrono::steady_clock::now();
-		// the opponent's reaction to the end of the game, once they're out of their pool pose
-		std::erase_if(_reactLater, [&](const ReactLater& a_r) {
-			if (now < a_r.at) {
-				return false;
-			}
-			auto* actor = RE::TESForm::GetFormByID<RE::Actor>(a_r.id);
-			if (!actor || actor->IsDead(false) || now > a_r.giveUp) {
-				return true;
-			}
-			const bool stillPosed = actor == Opponent() && (!_npcReleasedForOver || _npcWaitIdle);
-			if (stillPosed || actor->interactingState != RE::INTERACTING_STATE::kNotInteracting) {
-				return false;  // not yet
-			}
-			if (Anim::PlayGame(actor, a_r.idle, a_r.name) && a_r.loops) {
-				_reactStops.emplace_back(a_r.id, now + std::chrono::milliseconds(3500));
-			}
-			return true;
-		});
 		// the crowd idles (cheering, booing, laughing) had their moment: back to hanging round
+		const auto now = std::chrono::steady_clock::now();
 		std::erase_if(_reactStops, [&](const auto& a_stop) {
 			if (now < a_stop.second) {
 				return false;
