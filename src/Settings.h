@@ -143,8 +143,8 @@ namespace fp
 		std::uint32_t animFidgetFormID{ 0x839 };  // the first of the five fidgets (0x839..0x83D), played now and then from PoolWait
 		std::uint32_t chalkFormID{ 0x83E };       // the chalk (fo4pool.esl)
 		bool          fidgets{ true };            // the waiting NPC fidgets now and then
-		float         fidgetMin{ 10.0f };         // ...every this many seconds or so
-		float         fidgetMax{ 30.0f };
+		float         fidgetMin{ 6.0f };         // ...every this many seconds or so
+		float         fidgetMax{ 15.0f };
 		std::uint32_t animStrike2FormID{ 0x81B }; // PoolStrike2: the strike from PoolAim2's stance
 		std::uint32_t animAim3FormID{ 0x81C };    // PoolAim3: a third aim
 		std::uint32_t animStrike3FormID{ 0x81D }; // PoolStrike3: the strike from PoolAim3's stance

@@ -1,5 +1,6 @@
 #include "Anim.h"
 
+#include <deque>
 #include <unordered_set>
 
 #include "Settings.h"
@@ -146,6 +147,7 @@ namespace fp::Anim
 			return g_joined.contains(a_id);
 		}
 		std::atomic<bool>          g_joining{ false };  // a Join is on its way (one at a time: it may restart the quest)
+		std::deque<std::uint32_t>  g_joinQueue;          // the ones asked for while one was on its way (under g_joinedMutex)
 		std::atomic<bool>          g_diagnose{ false };  // a Join didn't take: log what the quest looks like
 		bool                       g_diagnosed{ false };
 
@@ -395,12 +397,38 @@ namespace fp::Anim
 		// fo4poolOpponentQuest.Join: starts the quest if it isn't running, ForceRefTo, EvaluatePackage; says whether
 		// the alias holds them
 		if (g_joining.exchange(true)) {
-			return;  // the last one hasn't answered yet
+			// the last one hasn't answered yet: theirs goes next (PumpJoins). Dropping it left the second player of an
+			// NPC game out of the Players collection until their next walk, and Mini Games took them to its tables
+			std::scoped_lock lock(g_joinedMutex);
+			if (std::ranges::find(g_joinQueue, a_actor->GetFormID()) == g_joinQueue.end()) {
+				g_joinQueue.push_back(a_actor->GetFormID());
+			}
+			return;
 		}
 		const std::string what = What(a_actor, "fo4poolOpponentQuest.JoinPlayer");
 		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> done{ new JoinDone(what, a_actor->GetFormID()) };
 		if (!CallQuest("JoinPlayer", what, done, FormArg(a_actor))) {
 			g_joining = false;
+		}
+	}
+
+	void PumpJoins()
+	{
+		while (!g_joining.load()) {
+			std::uint32_t id = 0;
+			{
+				std::scoped_lock lock(g_joinedMutex);
+				if (g_joinQueue.empty()) {
+					return;
+				}
+				id = g_joinQueue.front();
+				g_joinQueue.pop_front();
+			}
+			auto* form = RE::TESForm::GetFormByID(id);
+			auto* actor = form ? form->As<RE::Actor>() : nullptr;
+			if (actor && !actor->IsDead(false)) {
+				JoinOwnPackage(actor);
+			}
 		}
 	}
 
@@ -458,6 +486,7 @@ namespace fp::Anim
 		}
 		{
 			std::scoped_lock lock(g_joinedMutex);
+			std::erase(g_joinQueue, a_actor->GetFormID());  // not waiting to go in either
 			if (!g_joined.erase(a_actor->GetFormID())) {
 				return;
 			}

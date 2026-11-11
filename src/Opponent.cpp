@@ -712,8 +712,10 @@ namespace fp
 		pos.z = a_frame.origin.z;
 		// facing the middle of the table while they wait
 		_npcWaitHeading = std::atan2(a_frame.origin.x - pos.x, a_frame.origin.y - pos.y);
-		// one of the two waits, at random (both clips face the root's forward, so the same heading for either)
-		_npcWaitVariant = std::uniform_int_distribution<int>(0, 1)(_npcRng);
+		// one of the two waits, at random (both clips face the root's forward, so the same heading for either); with
+		// fidgets on, mostly PoolWait, the one they start from (waits are short: under half of them were PoolWait2's lean
+		// in a typical game, and the fidgets were rarely seen)
+		_npcWaitVariant = std::uniform_real_distribution<float>(0.0f, 1.0f)(_npcRng) < (Settings::Get().fidgets ? 0.2f : 0.5f) ? 1 : 0;
 		_npcWaitMarker = Spawn(bound, table, pos);
 		if (auto marker = _npcWaitMarker.get()) {
 			marker->data.angle = { 0.0f, 0.0f, _npcWaitHeading };
@@ -800,7 +802,8 @@ namespace fp
 			EndFidget(a_actor, false);
 			{
 				const auto& s = Settings::Get();
-				_npcFidgetNext = std::uniform_real_distribution<float>(s.fidgetMin * 0.5f, s.fidgetMax * 0.6f)(_npcRng);  // the first one a little sooner
+				// the first one soon after they settle: a turn's wait is often only 5-15 s
+				_npcFidgetNext = std::uniform_real_distribution<float>(1.5f, std::max(2.0f, std::min(5.0f, s.fidgetMin)))(_npcRng);
 			}
 			log::info("{}: waiting ({}), facing the table: heading {:.0f} deg (now {:.0f})", _opponentName, _npcWaitVariant == 1 ? "PoolWait2" : "PoolWait",
 				_npcWaitHeading * 57.29578f, a_actor->data.angle.z * 57.29578f);
@@ -1775,6 +1778,7 @@ namespace fp
 	{
 		// once a second: watchers whose time is up (or who left, died, or are playing you) go back to their own
 		// business; now and then a settler near the pool table closest to you wanders over
+		Anim::PumpJoins();  // players asked to join while another's join was on its way
 		const auto now = std::chrono::steady_clock::now();
 		const float dt = std::min(5.0f, std::chrono::duration<float>(now - _watchTime).count());
 		if (dt < 1.0f || IsGamePaused()) {
