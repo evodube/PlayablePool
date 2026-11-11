@@ -602,6 +602,8 @@ namespace fp
 		RemoveRef(_npcApproach);
 		RemoveRef(_npcWaitMarker);
 		RemoveRef(_npcStick);
+		RemoveRef(_npcChalk);
+		_npcFidget = -1;
 		_npcStickReady = false;
 		_autoAim = false;
 		_opponent = {};
@@ -795,6 +797,11 @@ namespace fp
 			a_actor->SetHeading(_npcWaitHeading);
 			HoldOpponent(a_actor, true);
 			_npcWaitIdle = Anim::PlayWait(a_actor, _npcWaitVariant);
+			EndFidget(a_actor, false);
+			{
+				const auto& s = Settings::Get();
+				_npcFidgetNext = std::uniform_real_distribution<float>(s.fidgetMin * 0.5f, s.fidgetMax * 0.6f)(_npcRng);  // the first one a little sooner
+			}
 			log::info("{}: waiting ({}), facing the table: heading {:.0f} deg (now {:.0f})", _opponentName, _npcWaitVariant == 1 ? "PoolWait2" : "PoolWait",
 				_npcWaitHeading * 57.29578f, a_actor->data.angle.z * 57.29578f);
 		} else if (_npcWaitIdle) {
@@ -803,6 +810,7 @@ namespace fp
 			if (std::abs(diff) > 0.05f) {
 				a_actor->SetHeading(_npcWaitHeading);
 			}
+			TickFidget(a_actor, a_dt);
 		}
 	}
 
@@ -983,9 +991,107 @@ namespace fp
 		const bool         lean = _npcWaitVariant == 1;
 		RE::NiPoint3       butt = a_actor->data.location + right * (lean ? 36.0f : 14.5f) + fwd * (lean ? 13.0f : 30.5f);
 		butt.z = a_actor->data.location.z + 0.6f;
+		if (_npcFidget == Anim::kFidgetTap) {
+			butt.z += std::max(0.0f, palm.z - _npcFidgetGripZ);  // tapping it on the floor: the butt comes up with the hand
+		}
 		const RE::NiPoint3 dir = util::Normalized(palm - butt);
 		const auto&        s = Settings::Get();
 		PlaceStickAlong(stick.get(), butt + dir * std::abs(s.stickTip - s.stickButt), dir, 1.0f);
+		return true;
+	}
+
+	void Game::TickFidget(RE::Actor* a_actor, float a_dt)
+	{
+		// Now and then, while they wait in PoolWait (not PoolWait2, the lean on the table: the fidgets start from
+		// PoolWait's pose), one of the fidgets, then PoolWait again. Each clip begins and ends on PoolWait's first frame.
+		const auto& s = Settings::Get();
+		if (_npcFidget >= 0) {
+			_npcFidgetTime += a_dt;
+			if (_npcFidget == Anim::kFidgetChalk) {
+				PlaceChalk(a_actor);
+			}
+			if (_npcFidgetTime >= Anim::FidgetSeconds(_npcFidget)) {
+				EndFidget(a_actor, true);
+			}
+			return;
+		}
+		if (!s.fidgets || !s.anim || _npcWaitVariant != 0) {
+			return;
+		}
+		_npcFidgetNext -= a_dt;
+		if (_npcFidgetNext > 0.0f) {
+			return;
+		}
+		const int which = std::uniform_int_distribution<int>(0, Anim::kFidgets - 1)(_npcRng);
+		_npcFidgetNext = std::uniform_real_distribution<float>(s.fidgetMin, s.fidgetMax)(_npcRng);
+		if (!Anim::PlayFidget(a_actor, which)) {
+			return;
+		}
+		_npcFidget = which;
+		_npcFidgetTime = 0.0f;
+		RE::NiPoint3 grip;
+		auto*        root = a_actor->Get3D();
+		_npcFidgetGripZ = root && RightGrip(root, grip) ? grip.z : a_actor->data.location.z + 88.0f;
+		if (which == Anim::kFidgetChalk && !_npcChalk) {
+			auto table = _table.get();
+			if (auto* form = util::ResolveForm(s.stickPlugin, s.chalkFormID); form && table) {
+				_npcChalk = Spawn(form, table.get(), a_actor->data.location);
+			}
+		}
+	}
+
+	void Game::EndFidget(RE::Actor* a_actor, bool a_backToWait)
+	{
+		if (_npcFidget >= 0 && a_backToWait && a_actor && _npcWaitIdle) {
+			Anim::PlayWait(a_actor, _npcWaitVariant);  // the clip ended on PoolWait's first frame: straight back into it
+		}
+		_npcFidget = -1;
+		_npcFidgetTime = 0.0f;
+		RemoveRef(_npcChalk);
+	}
+
+	bool Game::PlaceChalk(RE::Actor* a_actor)
+	{
+		// The chalk between the left thumb and the index and middle fingertips (as in tools/anim/pool_fidget.py): the
+		// fingertips are each finger's last joint carried on along the one before it; the chalk's worn face (its -Z)
+		// away from the hand
+		auto* root = a_actor ? a_actor->Get3D() : nullptr;
+		auto  chalk = _npcChalk.get();
+		if (!root || !chalk || !chalk->Get3D()) {
+			return false;
+		}
+		auto node = [&](const char* a_name) { return root->GetObjectByName(RE::BSFixedString{ a_name }); };
+		auto tip = [&](int a_finger, RE::NiPoint3& a_out) {
+			auto* j2 = node(std::format("LArm_Finger{}2", a_finger).c_str());
+			auto* j3 = node(std::format("LArm_Finger{}3", a_finger).c_str());
+			if (!j2 || !j3) {
+				return false;
+			}
+			a_out = j3->world.translate + (j3->world.translate - j2->world.translate) * 0.85f;
+			return true;
+		};
+		RE::NiPoint3 thumb, index, middle;
+		auto*        hand = node("LArm_Hand");
+		auto*        k2 = node("LArm_Finger21");
+		auto*        k5 = node("LArm_Finger51");
+		if (!hand || !k2 || !k5 || !tip(1, thumb) || !tip(2, index) || !tip(3, middle)) {
+			PlaceNode(chalk.get(), {}, {}, 1.0f, true);
+			return false;
+		}
+		const RE::NiPoint3 pinch = (thumb * 2.0f + index + middle) * 0.25f;
+		RE::NiPoint3       knuckles = k2->world.translate + k5->world.translate;
+		if (auto* k3 = node("LArm_Finger31")) {
+			knuckles += k3->world.translate;
+		}
+		if (auto* k4 = node("LArm_Finger41")) {
+			knuckles += k4->world.translate;
+		}
+		knuckles = knuckles * 0.25f;
+		const RE::NiPoint3 z = util::Normalized(knuckles - pinch);
+		const RE::NiPoint3 across = k2->world.translate - k5->world.translate;
+		const RE::NiPoint3 x = util::Normalized(across - z * across.Dot(z));
+		const RE::NiPoint3 y = z.Cross(x);
+		PlaceNode(chalk.get(), pinch, util::FromAxes(x, y, z), 1.0f, false);
 		return true;
 	}
 
@@ -1626,6 +1732,10 @@ namespace fp
 			break;
 		}
 
+		// a fidget cut short (their turn, a walk, the game's end): no chalk left in the air
+		if (!_npcWaitIdle && (_npcFidget >= 0 || _npcChalk)) {
+			EndFidget(actor, false);
+		}
 		// their cue: made when first needed; upright while PoolWait plays, put away while they walk
 		const bool wantStick = _npcWaitIdle || _npcStep == NpcStep::kAiming || _npcStep == NpcStep::kStriking || _npcStep == NpcStep::kFollow;
 		if (wantStick && !_npcStick && table) {

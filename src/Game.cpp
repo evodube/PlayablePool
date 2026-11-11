@@ -958,6 +958,8 @@ namespace fp
 		_npcHeld = false;
 		_npcLooking = false;
 		_npcStick = {};
+		_npcChalk = {};
+		_npcFidget = -1;
 		_npcStickReady = false;
 		_npcWaitIdle = false;
 		_npcPathTarget = {};

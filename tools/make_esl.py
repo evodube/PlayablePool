@@ -22,6 +22,9 @@ Form IDs (what fo4pool.ini expects by default):
     xx00081B        idle fo4poolStrike2 Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike2.hkx (the strike that follows PoolAim2)
     xx00081C        idle fo4poolAim3    Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolAim3.hkx  (a third aim)
     xx00081D        idle fo4poolStrike3 Meshes\\Actors\\Character\\Animations\\fo4pool\\PoolStrike3.hkx (the strike that follows PoolAim3)
+    xx000839..83D   idles fo4poolFidgetLean / Stretch / Tap / Table / Chalk   PoolFidget*.hkx (the waiting NPC's
+                                                 fidgets, played now and then from PoolWait)
+    xx00083E        chalk      Meshes\\fo4pool\\PoolChalk.nif   (in the left hand while they chalk the cue)
     xx000818        package fo4poolWatchTable    (Travel to that linked ref, facing it: a spot the plugin picks, 100 out
                                                  from the felt, turned to face the table; they stand there watching)
 
@@ -288,7 +291,14 @@ def build(with_stick: bool) -> bytes:
         idle(own | (FIRST_ID + 27), "fo4poolStrike2", ANIM_DIR + "PoolStrike2.hkx"),
         idle(own | (FIRST_ID + 28), "fo4poolAim3", ANIM_DIR + "PoolAim3.hkx"),
         idle(own | (FIRST_ID + 29), "fo4poolStrike3", ANIM_DIR + "PoolStrike3.hkx"),
+        # the fidgets, from PoolWait and back to it (the plugin plays PoolWait again when one's done)
+        idle(own | (FIRST_ID + 57), "fo4poolFidgetLean", ANIM_DIR + "PoolFidgetLean.hkx"),
+        idle(own | (FIRST_ID + 58), "fo4poolFidgetStretch", ANIM_DIR + "PoolFidgetStretch.hkx"),
+        idle(own | (FIRST_ID + 59), "fo4poolFidgetTap", ANIM_DIR + "PoolFidgetTap.hkx"),
+        idle(own | (FIRST_ID + 60), "fo4poolFidgetTable", ANIM_DIR + "PoolFidgetTable.hkx"),
+        idle(own | (FIRST_ID + 61), "fo4poolFidgetChalk", ANIM_DIR + "PoolFidgetChalk.hkx"),
     ]
+    stats.append(stat(own | (FIRST_ID + 62), "fo4poolChalk", "fo4pool\\PoolChalk.nif", bound=2))
     # (0x81E-0x836 were the watchers' smoking / coffee / cheering idles: removed)
 
     link = own | (FIRST_ID + 20)
@@ -316,7 +326,7 @@ def build(with_stick: bool) -> bytes:
         b"TES4",
         FLAG_MASTER | FLAG_LIGHT,
         0,
-        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 57))
+        subrecord(b"HEDR", struct.pack("<fiI", 1.0, count, FIRST_ID + 63))
         + subrecord(b"CNAM", zstring("evodube"))
         + subrecord(b"SNAM", zstring("fo4pool: pool balls"))
         + subrecord(b"MAST", zstring("Fallout4.esm"))

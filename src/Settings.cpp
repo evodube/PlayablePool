@@ -167,6 +167,11 @@ namespace fp
 		animWaitFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iWaitFormID", animWaitFormID));
 		animAim2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAim2FormID", animAim2FormID));
 		animWait2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iWait2FormID", animWait2FormID));
+		animFidgetFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iFidgetFormID", animFidgetFormID));
+		chalkFormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iChalkFormID", chalkFormID));
+		fidgets = ReadBool(L"Anim", L"bFidgets", fidgets);
+		fidgetMin = std::clamp(ReadFloat(L"Anim", L"fFidgetMin", fidgetMin), 2.0f, 600.0f);
+		fidgetMax = std::clamp(ReadFloat(L"Anim", L"fFidgetMax", fidgetMax), fidgetMin, 900.0f);
 		animStrike2FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrike2FormID", animStrike2FormID));
 		animAim3FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iAim3FormID", animAim3FormID));
 		animStrike3FormID = static_cast<std::uint32_t>(ReadInt(L"Anim", L"iStrike3FormID", animStrike3FormID));

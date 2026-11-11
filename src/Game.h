@@ -67,6 +67,12 @@ namespace fp
 		int                 _npcWaitVariant{ 0 }; // 0 PoolWait, 1 PoolWait2
 		bool                _npcInTableLogged{ false };
 		int                 _npcAimVariant{ 1 };  // this shot's aim (1 PoolAim2, 2 PoolAim3; 0 PoolAim no longer picked): its strike follows it
+		// a fidget while they wait (Anim::Fidget: lean on the cue, stretch, tap the cue, lean over the table, chalk)
+		int                 _npcFidget{ -1 };       // the one playing (-1: none, PoolWait itself)
+		float               _npcFidgetTime{ 0.0f }; // seconds into it
+		float               _npcFidgetNext{ 0.0f }; // seconds till the next one
+		float               _npcFidgetGripZ{ 0.0f };// the grip's height when it started (the tap lifts the cue's butt by how far it rises)
+		RE::ObjectRefHandle _npcChalk;             // the chalk in their left hand while they chalk the cue
 	};
 
 	struct Marker  // a calibration marker (Game::ToggleCalibrate)
@@ -395,6 +401,9 @@ namespace fp
 		bool  PlaceStickInHands(RE::Actor* a_actor, float* a_side = nullptr);
 		void  GlideOntoLine(RE::Actor* a_actor, const Frame& a_frame, float a_dt);  // ease them sideways so the cue's on the ball
 		bool  PlaceStickUpright(RE::Actor* a_actor);
+		void  TickFidget(RE::Actor* a_actor, float a_dt);  // now and then a fidget from PoolWait, then back to it
+		void  EndFidget(RE::Actor* a_actor, bool a_backToWait);
+		bool  PlaceChalk(RE::Actor* a_actor);  // the chalk between the left thumb and fingertips
 		bool  PlaceStickCarried(RE::Actor* a_actor);  // walking: in the right hand, nearly upright
 		void  HideOpponentStick();
 		void  HideAimObjects();

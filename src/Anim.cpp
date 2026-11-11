@@ -353,6 +353,22 @@ namespace fp::Anim
 		return Play(a_actor, Settings::Get().animWaitFormID, "PoolWait");
 	}
 
+	bool PlayFidget(RE::Actor* a_actor, int a_which)
+	{
+		static constexpr std::array<const char*, kFidgets> kNames{ "PoolFidgetLean", "PoolFidgetStretch", "PoolFidgetTap", "PoolFidgetTable",
+			"PoolFidgetChalk" };
+		if (a_which < 0 || a_which >= kFidgets) {
+			return false;
+		}
+		return Play(a_actor, Settings::Get().animFidgetFormID + static_cast<std::uint32_t>(a_which), kNames[static_cast<std::size_t>(a_which)]);
+	}
+
+	float FidgetSeconds(int a_which)
+	{
+		static constexpr std::array<float, kFidgets> kSeconds{ 120 / 30.0f, 150 / 30.0f, 90 / 30.0f, 150 / 30.0f, 150 / 30.0f };  // the clips' frames, 30 fps
+		return a_which >= 0 && a_which < kFidgets ? kSeconds[static_cast<std::size_t>(a_which)] : 0.0f;
+	}
+
 	void Stop(RE::Actor* a_actor)
 	{
 		if (a_actor && a_actor->currentProcess) {

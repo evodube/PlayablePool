@@ -6,7 +6,14 @@ namespace fp::Anim
 {
 	bool PlayAim(RE::Actor* a_actor, int a_variant = 0);   // PoolAim (1: PoolAim2, 2: PoolAim3): lined up over the table, loops
 	bool PlayStrike(RE::Actor* a_actor, int a_variant = 0);  // PoolStrike (1: PoolStrike2, after PoolAim2)  // PoolStrike: the cue reaches the ball on frame 35
-	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops
+	bool PlayWait(RE::Actor* a_actor, int a_variant = 0);
+	// the waiting fidgets (fo4pool.esl 0x839..): 0 lean on the cue, 1 stretch, 2 tap the cue's butt, 3 lean over the
+	// table, 4 chalk the cue. Each starts and ends on PoolWait's first frame; FidgetSeconds is how long it runs
+	constexpr int kFidgets = 5;
+	constexpr int kFidgetTap = 2;
+	constexpr int kFidgetChalk = 4;
+	bool  PlayFidget(RE::Actor* a_actor, int a_which);
+	float FidgetSeconds(int a_which);  // PoolWait (1: PoolWait2): standing at the table, cue upright, loops
 	void Stop(RE::Actor* a_actor);        // back to whatever they were doing
 	bool PlayIdleID(RE::Actor* a_actor, std::uint32_t a_rawID, const char* a_name);  // one of fo4pool.esl's idles, by its ID in the plugin
 	bool PlayGame(RE::Actor* a_actor, RE::TESFormID a_formID, const char* a_name);   // one of the game's own idles (Fallout4.esm)
