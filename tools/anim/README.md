@@ -99,3 +99,22 @@ export wrote 1 fps again; patched to 30 like PoolAim2. Each shot picks at random
   orientation) so the upright cue stands in front, clear of the chest and leg. The cue goes through the grip point
   (as when shooting), from the butt at (14.5, 30.5); PoolWait2's butt is at (36, 13).
 - PoolAim / PoolStrike (the first pair) are no longer picked: each shot uses PoolAim2 or PoolAim3.
+
+## The fidgets
+
+Played now and then while an NPC waits in PoolWait (not PoolWait2), then PoolWait again. Built by `pool_fidget.py`
+on PoolWait's first frame, so each starts and ends there: the feet planted, the right hand on the cue, the left hand
+on the hip unless the fidget takes it somewhere. Where they look goes through springs (head, then neck, then chest).
+
+| Clip | File | Frames (30 fps) | What |
+|---|---|---|---|
+| PoolFidgetLean | PoolFidgetLean.hkx | 120 | weight over on to the cue and back |
+| PoolFidgetStretch | PoolFidgetStretch.hkx | 150 | two shoulder rolls, the neck stretched to each side |
+| PoolFidgetTap | PoolFidgetTap.hkx | 90 | the cue lifted and its butt tapped on the floor twice (in game the butt follows the grip up) |
+| PoolFidgetTable | PoolFidgetTable.hkx | 150 | bent over the table on the left hand, looking the balls over |
+| PoolFidgetChalk | PoolFidgetChalk.hkx | 150 | the chalk brought up between the left thumb and fingertips, rubbed and twisted on the tip, taken back |
+
+Exported with PyNifly (FO4, 30 fps, reference_skel the vanilla skeleton.hkx); re-imported within 0.03 units.
+fo4pool.esl idles 0x839-0x83D. The chalk is our own: `Meshes\fo4pool\PoolChalk.nif` (a 1.8 cube with a worn cup in its
+-Z face) and `Textures\fo4pool\PoolChalk_d.dds` / `_n.dds`, a static at 0x83E, placed by the plugin from the left
+fingertips (Game::PlaceChalk).
