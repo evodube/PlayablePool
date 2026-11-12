@@ -168,6 +168,9 @@ namespace fp
 	void Game::StartNpcGameAt(RE::Actor* a_first, RE::Actor* a_second, RE::TESObjectREFR* a_table)
 	{
 		// at the loaded table if that's free (nothing of yours on), otherwise as a table of its own in the background
+		if (util::InPowerArmor(a_first) || util::InPowerArmor(a_second)) {
+			return;  // not in power armor
+		}
 		const int slot = SlotOf(a_table);
 		if (slot == 0 || (slot < 0 && !Busy(*this) && !_aiming)) {
 			StartNpcGame(a_first, a_second, a_table);
@@ -302,6 +305,10 @@ namespace fp
 			Notify(std::format("Pool: {} is in the middle of a game", a_actor->GetDisplayFullName()));
 			return;
 		}
+		if (util::InPowerArmor(a_actor)) {
+			Notify(std::format("Pool: {} can't play in power armor", a_actor->GetDisplayFullName()));
+			return;
+		}
 		if (a_actor && PlayerCaps() < StakeOf(a_actor)) {
 			// not enough caps for their stake: nothing racked, nothing changed
 			Notify(std::format("Pool: {} plays for {} caps. You've got {}", a_actor->GetDisplayFullName(), StakeOf(a_actor), PlayerCaps()));
@@ -332,6 +339,10 @@ namespace fp
 		auto* current = Opponent();
 		if (actor && actor != current && IsPlaying(actor)) {
 			Notify(std::format("Pool: {} is in the middle of a game", actor->GetDisplayFullName()));
+			return;
+		}
+		if (actor && actor != current && util::InPowerArmor(actor)) {
+			Notify(std::format("Pool: {} can't play in power armor", actor->GetDisplayFullName()));
 			return;
 		}
 		if (!actor || actor == current) {
@@ -1843,6 +1854,9 @@ namespace fp
 			} else if (actor && util::AtAnotherGame(actor)) {
 				log::info("{}: playing roulette or poker now", actor->GetDisplayFullName());
 				DropWatcher(w.id);
+			} else if (actor && util::InPowerArmor(actor)) {
+				log::info("{}: in power armor now, not watching", actor->GetDisplayFullName());
+				DropWatcher(w.id);
 			} else if (gone || w.left <= 0.0f || actor->IsInCombat()) {
 				if (actor) {
 					log::info("{}: done hanging round the table", actor->GetDisplayFullName());
@@ -2068,6 +2082,7 @@ namespace fp
 				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() ||
 					actor->IsChild() || actor->IsInCombat() || (npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
 					(companions && actor->IsInFaction(companions)) || IsPlaying(actor) || OnTheJob(actor) || util::AtAnotherGame(actor) ||
+					util::InPowerArmor(actor) ||
 					std::ranges::any_of(_watchers, [&](const Watcher& w) { return w.id == actor->GetFormID(); }) ||
 					std::ranges::any_of(candidates, [&](RE::Actor* c) { return c == actor; })) {
 					return RE::BSContainer::ForEachResult::kContinue;

@@ -279,7 +279,7 @@ namespace fp
 		_lookActorTable = {};
 		if (prompt.empty() && s.keyPlay > 0 && !_aiming && !IsGamePaused() && player) {
 			auto* actor = PickActor(true);
-			if (actor && actor != Opponent() && !IsPlaying(actor) && (actor->data.location - player->data.location).Length() < s.playDistance) {
+			if (actor && actor != Opponent() && !IsPlaying(actor) && !util::InPowerArmor(actor) && (actor->data.location - player->data.location).Length() < s.playDistance) {
 				static auto* npcType = RE::TESForm::GetFormByID<RE::BGSKeyword>(0x00013794);  // ActorTypeNPC
 				auto*        table = PoolTableNear(actor->data.location, s.playNearTable);
 				if (table && !actor->IsChild() && !actor->IsInCombat() && !actor->GetHostileToActor(player) &&
@@ -518,7 +518,7 @@ namespace fp
 			a_cell->ForEachReferenceInRange(a_table->data.location, within, [&](RE::TESObjectREFR* a_ref) {
 				auto* actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 				if (!actor || actor == player || actor->IsDisabled() || actor->IsDead(false) || !actor->Get3D() || actor->IsChild() ||
-					actor->IsInCombat() || (player && actor->GetHostileToActor(player)) || util::AtAnotherGame(actor) ||
+					actor->IsInCombat() || (player && actor->GetHostileToActor(player)) || util::AtAnotherGame(actor) || util::InPowerArmor(actor) ||
 					(IsPlaying(actor) && actor != Opponent()) ||  // in an NPC game: not to be picked (your own opponent can be)
 					(npcType && !actor->HasKeywordHelper(npcType, nullptr)) ||
 					std::ranges::any_of(found, [&](const auto& f) { return f.second == actor; })) {

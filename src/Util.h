@@ -66,6 +66,12 @@ namespace fp::util
 		return form && form->IsBoundObject() ? static_cast<RE::TESBoundObject*>(form) : nullptr;
 	}
 
+	// in power armor: not to be called over to the table, to play or to watch (they can't hold a cue or stand at it)
+	inline bool InPowerArmor(RE::Actor* a_actor)
+	{
+		return a_actor && RE::PowerArmor::ActorInPowerArmor(*a_actor);
+	}
+
 	// at another game: held by Real Roulette (fo4roulette.esl's quest: playing roulette or poker, or on the way), so
 	// not to be called over to the pool table
 	inline bool AtAnotherGame(RE::Actor* a_actor)
