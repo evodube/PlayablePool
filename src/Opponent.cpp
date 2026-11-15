@@ -257,9 +257,10 @@ namespace fp
 			}
 			return actor;
 		};
-		if (s.useConsolePick && !a_crosshairOnly) {
+		if (s.useConsolePick && !a_crosshairOnly && player) {
+			// the NPC clicked in the console, only if they're close by (the pick stays set after the console closes)
 			if (auto picked = RE::Console::GetPickRef().get()) {
-				if (auto* actor = usable(picked.get())) {
+				if (auto* actor = usable(picked.get()); actor && (actor->data.location - player->data.location).Length() < s.playDistance) {
 					return actor;
 				}
 			}

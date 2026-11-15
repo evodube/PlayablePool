@@ -1031,14 +1031,18 @@ namespace fp
 	RE::TESObjectREFR* Game::PickTable() const
 	{
 		const auto& s = Settings::Get();
-		if (s.useConsolePick) {
-			if (auto picked = RE::Console::GetPickRef().get(); picked && !IsOurs(picked.get()) && picked->Get3D()) {
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		// the object clicked in the console, only if it's a pool table within reach. The pick stays set after the
+		// console closes, so taking whatever it was (an NPC, a chair, something across the cell) left every table
+		// you looked at afterwards with no prompt and no way to play
+		if (s.useConsolePick && player) {
+			if (auto picked = RE::Console::GetPickRef().get(); picked && !picked->IsActor() && !IsOurs(picked.get()) && picked->Get3D() &&
+				IsPoolTable(picked.get()) && (picked->data.location - player->data.location).Length() < s.aimDistance + 300.0f) {
 				return picked.get();
 			}
 		}
 
 		// what the crosshair points at: the nearest table-sized object along the view line
-		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* camera = RE::PlayerCamera::GetSingleton();
 		if (!player || !camera || !camera->cameraRoot) {
 			return nullptr;
