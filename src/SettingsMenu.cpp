@@ -182,7 +182,7 @@ namespace fp::SettingsMenu
 						{ L"Ball", L"fScale", "Mesh scale", Kind::kFloat, &s.ballScale, 0.1f, 5.0f, "%.2f", "used when the above is off", {}, true },
 						{ L"Ball", L"fZOffset", "Height offset", Kind::kFloat, &s.ballZOffset, -5.0f, 5.0f, "%.2f", "if the mesh's centre isn't the ball's centre", {}, true },
 					} },
-				{ "Keys", "Click a key's button, then press the key you want.",
+				{ "Keys", "Click a key's button, then press the key you want. Unbind turns a key off (it does nothing and isn't shown on the HUD).",
 					{
 						{ L"Keys", L"iRack", "Rack", Kind::kKey, &s.keyRack },
 						{ L"Keys", L"iShoot", "Aim / stop aiming", Kind::kKey, &s.keyShoot },
@@ -193,6 +193,9 @@ namespace fp::SettingsMenu
 						{ L"Keys", L"iForfeit", "Forfeit (press twice)", Kind::kKey, &s.keyForfeit },
 						{ L"Keys", L"iStopAll", "Stop every game", Kind::kKey, &s.keyStopAll },
 						{ L"Keys", L"iTables", "Pool tables on/off", Kind::kKey, &s.keyTables },
+						{ L"Keys", L"iPlay", "Play the NPC you're looking at", Kind::kKey, &s.keyPlay },
+						{ L"Keys", L"bActivateTable", "Use the activate key (F) at pool tables", Kind::kBool, &s.activateTable, 0, 0, nullptr,
+							"off: F does the game's own thing at pool tables; the keys above still work" },
 					} },
 				{ "Controller", "Xbox-style controllers. A plays (hold for an opponent), B leaves the table, the right stick aims, Y is the overhead view, D-pad left/right the called pocket, hold Back to forfeit. Ball in hand: the left stick moves the cue ball, A sets it down.",
 					{
@@ -408,6 +411,17 @@ namespace fp::SettingsMenu
 					if (Button(std::format("{}##key", caption).c_str(), ImVec2{ 260.0f, 0.0f }) && !waiting) {
 						g_rebinding = &a_e;
 						NewKeyPress();  // forget whatever is held now
+					}
+					SameLine();
+					if (SmallButton("unbind")) {
+						v = 0;  // off: the key does nothing (0 in the INI)
+						g_rebinding = nullptr;
+						save = true;
+					}
+					SameLine();
+					if (SmallButton("default")) {
+						g_rebinding = nullptr;
+						Reset(a_e);
 					}
 					SameLine();
 					Text("%s", a_e.label);

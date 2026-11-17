@@ -512,6 +512,7 @@ namespace fp::Hud
 			if (!a_st.pad && !a_st.over && set.keyForfeit > 0) {
 				keys.push_back({ forfeit, "FORFEIT" });
 			}
+			std::erase_if(keys, [](const auto& k) { return std::string_view(k.first) == "NONE"; });  // unbound keys: no prompt
 			// measure, then centre the row
 			float total = 0.0f;
 			std::vector<float> capW;
