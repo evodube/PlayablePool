@@ -1170,7 +1170,12 @@ namespace fp
 		const auto&    s = Settings::Get();
 		pool::AiParams p;
 		// their own skill (0-100, from how much they've played): a beginner misses a lot, a pro hardly ever
-		p.skill = std::clamp(0.2 + 0.78 * SkillOf(Opponent() ? Opponent()->GetFormID() : 0) / 100.0, 0.0, 1.0);
+		double own = 0.35 + 0.65 * SkillOf(Opponent() ? Opponent()->GetFormID() : 0) / 100.0;
+		// then [Opponent] fSkill, the difficulty: 0.5 leaves it at their own; above, everyone closer to never missing
+		// (1: all of them); below, everyone worse (0: hopeless). It used to be read and then never used
+		const double d = std::clamp((static_cast<double>(s.opponentSkill) - 0.5) * 2.0, -1.0, 1.0);
+		own = d >= 0.0 ? own + (1.0 - own) * d : own * (1.0 + d);
+		p.skill = std::clamp(own, 0.0, 1.0);
 		p.style = StyleOf(Opponent() ? Opponent()->GetFormID() : 0);  // safe / balanced / aggressive
 		p.minSpeed = s.minSpeed;
 		p.maxSpeed = s.maxSpeed;

@@ -105,7 +105,7 @@ namespace fp::SettingsMenu
 					} },
 				{ "Opponent", "Look at a settler or companion near a racked table and press the challenge key to play them at 8-ball.",
 					{
-						{ L"Opponent", L"fSkill", "Skill", Kind::kFloat, &s.opponentSkill, 0.0f, 1.0f, "%.2f", "0 = hopeless, 1 = never misses its aim" },
+						{ L"Opponent", L"fSkill", "Difficulty", Kind::kFloat, &s.opponentSkill, 0.0f, 1.0f, "%.2f", "on top of each NPC's own skill: 0.5 = their own, 1 = every NPC hardly ever misses, 0 = hopeless" },
 						{ L"Opponent", L"fAimSeconds", "Time to line up", Kind::kFloat, &s.opponentAimSeconds, 0.0f, 10.0f, "%.1f", "seconds they aim before striking" },
 						{ L"Opponent", L"bRun", "Run to the shot", Kind::kBool, &s.opponentRun, 0, 0, nullptr, "off = walk" },
 						{ L"Opponent", L"bLog", "Status log", Kind::kBool, &s.opponentLog, 0, 0, nullptr,

@@ -404,9 +404,9 @@ namespace pool
 	{
 		AiShot       s = BestShot(a_sim, a_rules, a_player, a_params);
 		const double skill = std::clamp(a_params.skill, 0.0, 1.0);
-		// aim error: about 2.5 degrees (1 sigma) for a beginner, 0.15 for the best
-		const double aimSigma = (0.15 + 2.35 * (1.0 - skill)) * kPi / 180.0;
-		const double speedSigma = 0.02 + 0.13 * (1.0 - skill);
+		// aim error: about 2 degrees (1 sigma) for a beginner, 0.05 for the best
+		const double aimSigma = (0.05 + 1.95 * (1.0 - skill)) * kPi / 180.0;
+		const double speedSigma = 0.01 + 0.12 * (1.0 - skill);
 		std::normal_distribution<double> aimErr(0.0, aimSigma);
 		std::normal_distribution<double> speedErr(0.0, speedSigma);
 		if (!a_rules.IsBreak()) {
