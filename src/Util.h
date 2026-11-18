@@ -72,8 +72,8 @@ namespace fp::util
 		return a_actor && RE::PowerArmor::ActorInPowerArmor(*a_actor);
 	}
 
-	// at another game: held by Real Roulette (fo4roulette.esl's quest: playing roulette or poker, or on the way), so
-	// not to be called over to the pool table
+	// at another game: held by Wasteland Wagers (WastelandWagers.esl's quest, fo4roulette.esl before its rename:
+	// playing or dealing at a table or a slot machine, or on the way), so not to be called over to the pool table
 	inline bool AtAnotherGame(RE::Actor* a_actor)
 	{
 		auto* extra = a_actor ? a_actor->extraList.get() : nullptr;
@@ -83,7 +83,8 @@ namespace fp::util
 		}
 		for (const auto& a : aliases->aliasArray) {
 			auto* file = a.quest ? a.quest->GetFile(0) : nullptr;
-			if (file && _stricmp(std::string(file->GetFilename()).c_str(), "fo4roulette.esl") == 0) {
+			const std::string name = file ? std::string(file->GetFilename()) : std::string();
+			if (_stricmp(name.c_str(), "WastelandWagers.esl") == 0 || _stricmp(name.c_str(), "fo4roulette.esl") == 0) {
 				return true;
 			}
 		}
