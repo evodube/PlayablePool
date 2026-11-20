@@ -1,0 +1,4 @@
+Sounds in Data\Sound\fo4pool are from "Pool and Billiards" by Suraj Kispotta (papapleygames),
+https://papapleygames.itch.io/pool-and-billiards, released under CC0 1.0 (public domain).
+The turn and game-start sounds (turn_1, start_1) are from the same pack. They were all converted to mono
+and trimmed for the mod.
