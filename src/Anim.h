@@ -42,6 +42,9 @@ namespace fp::Anim
 	void AddWatcher(RE::Actor* a_actor, RE::TESObjectREFR* a_table);
 	void RemoveWatcher(RE::Actor* a_actor);
 	void ClearWatchers();
+	// a pool table built in a settlement: a_happiness of its workshop's happiness rating (the script leaves anything
+	// that isn't a settlement object alone)
+	void TableHappiness(RE::TESObjectREFR* a_table, int a_happiness);
 	bool OwnPackageReady();  // fo4pool.esl has the quest and keywords
 	bool RunningOwnPackage(RE::Actor* a_actor);  // ...and fo4poolWalkToSpot is the package they're on
 	// Papyrus ObjectReference.MoveTo: puts a_actor exactly on a_target, facing the same way.

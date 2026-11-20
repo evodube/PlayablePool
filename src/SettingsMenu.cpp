@@ -119,6 +119,8 @@ namespace fp::SettingsMenu
 						{ L"Opponent", L"iWanderWorkers", "Settlers with jobs", Kind::kChoice, &s.wanderWorkers, 0, 0, nullptr,
 							"whether settlers with a settlement job (farmers, guards, shopkeepers, scavengers) come over to the table",
 							{ { "Never", 0 }, { "Only off duty (7 pm - 7 am)", 1 }, { "Any time", 2 } } },
+						{ L"Settlement", L"iHappiness", "Settlement happiness per table", Kind::kInt, &s.settlementHappiness, 0.0f, 50.0f, nullptr,
+							"a pool table built in a settlement's workshop adds this to its happiness, like a bar or a decoration (0: none). Kit tables don't count" },
 						{ L"Anim", L"bEnabled", "Pool animations", Kind::kBool, &s.anim, 0, 0, nullptr, "they lean over the table and strike" },
 						{ L"Anim", L"sPlugin", "Idle plugin", Kind::kText, &s.animPlugin, 0, 0, nullptr, nullptr, {}, true },
 						{ L"Anim", L"iAimFormID", "Aim idle form ID", Kind::kHex, &s.animAimFormID, 0, 0, nullptr, nullptr, {}, true },

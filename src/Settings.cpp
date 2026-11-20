@@ -156,6 +156,7 @@ namespace fp
 		reactions = ReadBool(L"Opponent", L"bReactions", reactions);
 		reactionVoices = ReadBool(L"Opponent", L"bReactionVoices", reactionVoices);
 		reactionChance = std::clamp(ReadFloat(L"Opponent", L"fReactionChance", reactionChance), 0.0f, 1.0f);
+		settlementHappiness = static_cast<int>(std::clamp<long long>(ReadInt(L"Settlement", L"iHappiness", settlementHappiness), 0, 100));
 		wanderWorkers = static_cast<int>(std::clamp<long long>(ReadInt(L"Opponent", L"iWanderWorkers", wanderWorkers), 0, 2));
 		wanderStay = ReadFloat(L"Opponent", L"fWanderStay", wanderStay);
 		wanderRange = ReadFloat(L"Opponent", L"fWanderRange", wanderRange);

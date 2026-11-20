@@ -713,6 +713,16 @@ namespace fp
 		}
 	}
 
+	namespace
+	{
+		std::atomic<std::uint32_t> g_loadCount{ 1 };
+	}
+
+	std::uint32_t Game::LoadCount()
+	{
+		return g_loadCount.load();
+	}
+
 	void Game::SaveRecords(const F4SE::SerializationInterface* a_intfc)
 	{
 		std::scoped_lock lock(g_recordsMutex);
@@ -732,6 +742,7 @@ namespace fp
 
 	void Game::LoadRecords(const F4SE::SerializationInterface* a_intfc)
 	{
+		++g_loadCount;
 		std::scoped_lock lock(g_recordsMutex);
 		g_records.clear();
 		RevertKit();
@@ -765,6 +776,7 @@ namespace fp
 
 	void Game::RevertRecords(const F4SE::SerializationInterface*)
 	{
+		++g_loadCount;
 		std::scoped_lock lock(g_recordsMutex);
 		g_records.clear();
 		RevertKit();

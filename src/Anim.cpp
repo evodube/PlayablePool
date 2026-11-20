@@ -467,6 +467,13 @@ namespace fp::Anim
 		CallQuest("ClearWatchers", what, logged, FormArg(keyword));
 	}
 
+	void TableHappiness(RE::TESObjectREFR* a_table, int a_happiness)
+	{
+		const std::string what = std::format("fo4poolOpponentQuest.TableHappiness({:08X})", a_table ? a_table->GetFormID() : 0);
+		const RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> logged{ new LogResult(what) };
+		CallQuest("TableHappiness", what, logged, FormArg(a_table), static_cast<float>(a_happiness));
+	}
+
 	bool InOwnPackage(RE::Actor* a_actor)
 	{
 		return a_actor && Settings::Get().opponentOwnPackage && Joined(a_actor->GetFormID());

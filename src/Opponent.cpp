@@ -1792,6 +1792,39 @@ namespace fp
 		});
 	}
 
+	void Game::TickHappiness(float a_dt)
+	{
+		// settlement happiness: every 10 s, the pool tables in the loaded cells, each told once per loaded save (and
+		// again if the setting changes). The script only touches tables built in a settlement's workshop (linked to
+		// its workbench); kit tables aren't even asked
+		_happinessScan -= a_dt;
+		if (_happinessScan > 0.0f || !Anim::OwnPackageReady()) {
+			return;
+		}
+		_happinessScan = 10.0f;
+		if (_happinessLoad != LoadCount()) {
+			_happinessLoad = LoadCount();
+			_happinessSent.clear();
+		}
+		const int want = Settings::Get().settlementHappiness;
+		std::vector<RE::TESObjectREFR*> tables;
+		util::ForEachLoadedCell([&](RE::TESObjectCELL* a_cell) {
+			a_cell->ForEachReference([&](RE::TESObjectREFR* a_ref) {
+				if (a_ref && !a_ref->IsActor() && !a_ref->IsDisabled() && !a_ref->IsDeleted() && IsPoolTable(a_ref) && !IsKitTable(a_ref)) {
+					tables.push_back(a_ref);
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+		});
+		for (auto* table : tables) {
+			auto it = _happinessSent.find(table->GetFormID());
+			if (it == _happinessSent.end() || it->second != want) {
+				_happinessSent[table->GetFormID()] = want;
+				Anim::TableHappiness(table, want);
+			}
+		}
+	}
+
 	void Game::TickWatchers()
 	{
 		// once a second: watchers whose time is up (or who left, died, or are playing you) go back to their own
@@ -1805,6 +1838,7 @@ namespace fp
 		_watchTime = now;
 		TickReactions();
 		const auto& s = Settings::Get();
+		TickHappiness(dt);
 		if (_watchersStale && Anim::OwnPackageReady()) {
 			_watchersStale = false;
 			Anim::ClearWatchers();

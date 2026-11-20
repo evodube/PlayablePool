@@ -223,3 +223,26 @@ Function ClearWatchers(Int aiLink)
 		endif
 	endwhile
 EndFunction
+
+; Settlement happiness: a pool table built in a settlement (linked to its workbench by WorkshopItemKeyword) gets
+; afHappiness of the workshop's item happiness rating, the same rating decorations and bars give; anything else (a
+; kit table, a table in a bar) isn't a settlement object and is left alone. Says what it did, for the log.
+String Function TableHappiness(Int aiTable, Float afHappiness)
+	ObjectReference akTable = Game.GetForm(aiTable) as ObjectReference
+	WorkshopParentScript wp = Game.GetFormFromFile(0x0002058E, "Fallout4.esm") as WorkshopParentScript
+	if !akTable || !wp
+		return "no table or no WorkshopParent"
+	endif
+	WorkshopScript ws = akTable.GetLinkedRef(wp.WorkshopItemKeyword) as WorkshopScript
+	if !ws
+		return "not a settlement object"
+	endif
+	ActorValue av = wp.WorkshopRatings[wp.WorkshopRatingBonusHappiness].resourceValue
+	Float before = ws.GetValue(av)
+	if akTable.GetValue(av) == afHappiness
+		return "already " + afHappiness + " (workshop " + ws + " item happiness " + before + ")"
+	endif
+	akTable.SetValue(av, afHappiness)
+	ws.RecalculateWorkshopResources()
+	return "set to " + afHappiness + "; workshop " + ws + " item happiness " + before + " -> " + ws.GetValue(av)
+EndFunction

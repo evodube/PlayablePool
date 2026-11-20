@@ -581,7 +581,12 @@ namespace fp
 		std::chrono::steady_clock::time_point _lastReaction{};
 		bool                 _watchersStale{ true };  // a load: whoever the collection holds, the plugin doesn't know
 		std::chrono::steady_clock::time_point _watchTime{};
-		std::vector<RE::ObjectRefHandle> _watchTables;  // the pool tables near you (TickWatchers), nearest first
+		std::vector<RE::ObjectRefHandle> _watchTables;
+		std::unordered_map<RE::TESFormID, int> _happinessSent;  // tables given their settlement happiness this load
+		std::uint32_t                          _happinessLoad{ 0 };
+		float                                  _happinessScan{ 3.0f };
+		void                                   TickHappiness(float a_dt);
+		static std::uint32_t                   LoadCount();  // goes up with every save loaded or new game  // the pool tables near you (TickWatchers), nearest first
 		std::vector<std::pair<RE::ObjectRefHandle, std::chrono::steady_clock::time_point>> _pairSince;  // tables with two watchers there, since when
 		std::vector<std::pair<RE::ObjectRefHandle, std::chrono::steady_clock::time_point>> _aloneSince;  // ...with one, since when
 		bool OnTheJob(RE::Actor* a_actor) const;  // a settler whose settlement job keeps them from the table now

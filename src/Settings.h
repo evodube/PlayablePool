@@ -127,6 +127,7 @@ namespace fp
 		bool  reactions{ true };            // people watching react to a shot now and then (clap, cheer, laugh, boo, shake their head)
 		bool  reactionVoices{ true };       // ...with the crowd's cheers, boos and laughs from the game's voice files
 		float reactionChance{ 0.6f };      // the chance a good pot gets a reaction (bigger moments more, see Reactions.cpp)
+		int   settlementHappiness{ 10 };    // a pool table built in a settlement adds this to its happiness rating (0: none)
 		int   wanderWorkers{ 1 };           // settlers with a settlement job: 0 never come over, 1 only off duty, 2 any time
 		float wanderStay{ 180.0f };         // each hangs round about this long
 		float wanderRange{ 2500.0f };       // from this far from the table
